@@ -340,7 +340,7 @@ func (s *PresenceService) UpsertNode(ctx context.Context, server types.Server) (
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	lease, err := s.Put(ctx, backend.Item{
+	_, err = s.Put(ctx, backend.Item{
 		Key:     backend.Key(nodesPrefix, server.GetNamespace(), server.GetName()),
 		Value:   value,
 		Expires: server.Expiry(),
@@ -353,9 +353,8 @@ func (s *PresenceService) UpsertNode(ctx context.Context, server types.Server) (
 		return &types.KeepAlive{}, nil
 	}
 	return &types.KeepAlive{
-		Type:    types.KeepAlive_NODE,
-		LeaseID: lease.ID,
-		Name:    server.GetName(),
+		Type: types.KeepAlive_NODE,
+		Name: server.GetName(),
 	}, nil
 }
 
@@ -1086,7 +1085,7 @@ func (s *PresenceService) UpsertKubernetesServer(ctx context.Context, server typ
 	// be multiple kubernetes servers on a single host, so they are stored under
 	// the following path in the backend:
 	//   /kubeServers/<host-uuid>/<name>
-	lease, err := s.Put(ctx, backend.Item{
+	_, err = s.Put(ctx, backend.Item{
 		Key: backend.Key(kubeServersPrefix,
 			server.GetHostID(),
 			server.GetName()),
@@ -1102,7 +1101,6 @@ func (s *PresenceService) UpsertKubernetesServer(ctx context.Context, server typ
 	}
 	return &types.KeepAlive{
 		Type:      types.KeepAlive_KUBERNETES,
-		LeaseID:   lease.ID,
 		Name:      server.GetName(),
 		Namespace: server.GetNamespace(),
 		HostID:    server.GetHostID(),
@@ -1191,7 +1189,7 @@ func (s *PresenceService) UpsertDatabaseServer(ctx context.Context, server types
 	// Because there may be multiple database servers on a single host,
 	// they are stored under the following path in the backend:
 	//   /databaseServers/<namespace>/<host-uuid>/<name>
-	lease, err := s.Put(ctx, backend.Item{
+	_, err = s.Put(ctx, backend.Item{
 		Key: backend.Key(dbServersPrefix,
 			server.GetNamespace(),
 			server.GetHostID(),
@@ -1208,7 +1206,6 @@ func (s *PresenceService) UpsertDatabaseServer(ctx context.Context, server types
 	}
 	return &types.KeepAlive{
 		Type:      types.KeepAlive_DATABASE,
-		LeaseID:   lease.ID,
 		Name:      server.GetName(),
 		Namespace: server.GetNamespace(),
 		HostID:    server.GetHostID(),
@@ -1285,7 +1282,7 @@ func (s *PresenceService) UpsertApplicationServer(ctx context.Context, server ty
 	// be multiple database servers on a single host, so they are stored under
 	// the following path in the backend:
 	//   /appServers/<namespace>/<host-uuid>/<name>
-	lease, err := s.Put(ctx, backend.Item{
+	_, err = s.Put(ctx, backend.Item{
 		Key: backend.Key(appServersPrefix,
 			server.GetNamespace(),
 			server.GetHostID(),
@@ -1302,7 +1299,6 @@ func (s *PresenceService) UpsertApplicationServer(ctx context.Context, server ty
 	}
 	return &types.KeepAlive{
 		Type:      types.KeepAlive_APP,
-		LeaseID:   lease.ID,
 		Name:      server.GetName(),
 		Namespace: server.GetNamespace(),
 		HostID:    server.GetHostID(),
@@ -1352,7 +1348,6 @@ func (s *PresenceService) KeepAliveServer(ctx context.Context, h types.KeepAlive
 	}
 
 	err := s.KeepAlive(ctx, backend.Lease{
-		ID:  h.LeaseID,
 		Key: key,
 	}, h.Expires)
 	return trace.Wrap(err)
@@ -1405,7 +1400,7 @@ func (s *PresenceService) UpsertWindowsDesktopService(ctx context.Context, srv t
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	lease, err := s.Put(ctx, backend.Item{
+	_, err = s.Put(ctx, backend.Item{
 		Key:     backend.Key(windowsDesktopServicesPrefix, srv.GetName()),
 		Value:   value,
 		Expires: srv.Expiry(),
@@ -1419,7 +1414,6 @@ func (s *PresenceService) UpsertWindowsDesktopService(ctx context.Context, srv t
 	}
 	return &types.KeepAlive{
 		Type:      types.KeepAlive_WINDOWS_DESKTOP,
-		LeaseID:   lease.ID,
 		Name:      srv.GetName(),
 		Namespace: apidefaults.Namespace,
 		Expires:   srv.Expiry(),
