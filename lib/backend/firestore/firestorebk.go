@@ -112,6 +112,7 @@ type record struct {
 	Expires   int64  `firestore:"expires,omitempty"`
 	ID        int64  `firestore:"id,omitempty"`
 	Value     []byte `firestore:"value,omitempty"`
+	Revision  string `firestore:"revision,omitempty"`
 }
 
 // legacyRecord is an older version of record used to marshal backend.Items.
@@ -136,6 +137,7 @@ func newRecord(from backend.Item, clock clockwork.Clock) record {
 		Value:     from.Value,
 		Timestamp: clock.Now().UTC().Unix(),
 		ID:        id(clock.Now()),
+		Revision:  from.Revision,
 	}
 	if !from.Expires.IsZero() {
 		r.Expires = from.Expires.UTC().Unix()
@@ -153,13 +155,13 @@ func newRecordFromDoc(doc *firestore.DocumentSnapshot) (*record, error) {
 		if doc.DataTo(&rl) != nil {
 			return nil, ConvertGRPCError(err)
 		}
-		r = record{
+		return &record{
 			Key:       []byte(rl.Key),
 			Value:     []byte(rl.Value),
 			Timestamp: rl.Timestamp,
 			Expires:   rl.Expires,
 			ID:        rl.ID,
-		}
+		}, nil
 	}
 	return &r, nil
 }
@@ -175,9 +177,10 @@ func (r *record) isExpired(now time.Time) bool {
 
 func (r *record) backendItem() backend.Item {
 	bi := backend.Item{
-		Key:   r.Key,
-		Value: r.Value,
-		ID:    r.ID,
+		Key:      r.Key,
+		Value:    r.Value,
+		ID:       r.ID,
+		Revision: r.Revision,
 	}
 	if r.Expires != 0 {
 		bi.Expires = time.Unix(r.Expires, 0).UTC()
@@ -344,26 +347,30 @@ func (b *Backend) GetName() string {
 
 // Create creates item if it does not exist
 func (b *Backend) Create(ctx context.Context, item backend.Item) (*backend.Lease, error) {
+	item.Revision = backend.CreateRevision()
 	r := newRecord(item, b.clock)
 	_, err := b.svc.Collection(b.CollectionName).Doc(b.keyToDocumentID(item.Key)).Create(ctx, r)
 	if err != nil {
 		return nil, ConvertGRPCError(err)
 	}
-	return b.newLease(item), nil
+	return backend.NewLease(item), nil
 }
 
 // Put puts value into backend (creates if it does not exist, updates it otherwise)
 func (b *Backend) Put(ctx context.Context, item backend.Item) (*backend.Lease, error) {
+	item.Revision = backend.CreateRevision()
 	r := newRecord(item, b.clock)
 	_, err := b.svc.Collection(b.CollectionName).Doc(b.keyToDocumentID(item.Key)).Set(ctx, r)
 	if err != nil {
 		return nil, ConvertGRPCError(err)
 	}
-	return b.newLease(item), nil
+
+	return backend.NewLease(item), nil
 }
 
 // Update updates value in the backend
 func (b *Backend) Update(ctx context.Context, item backend.Item) (*backend.Lease, error) {
+	item.Revision = backend.CreateRevision()
 	r := newRecord(item, b.clock)
 
 	updates := []firestore.Update{
@@ -372,6 +379,7 @@ func (b *Backend) Update(ctx context.Context, item backend.Item) (*backend.Lease
 		{Path: expiresDocProperty, Value: r.Expires},
 		{Path: idDocProperty, Value: r.ID},
 		{Path: valueDocProperty, Value: r.Value},
+		{Path:  "revision", Value: r.Revision},
 	}
 
 	_, err := b.svc.Collection(b.CollectionName).Doc(b.keyToDocumentID(item.Key)).Update(ctx, updates)
@@ -379,7 +387,7 @@ func (b *Backend) Update(ctx context.Context, item backend.Item) (*backend.Lease
 		return nil, ConvertGRPCError(err)
 	}
 
-	return b.newLease(item), nil
+	return backend.NewLease(item), nil
 }
 
 func (b *Backend) getRangeDocs(ctx context.Context, startKey []byte, endKey []byte, limit int) ([]*firestore.DocumentSnapshot, error) {
@@ -520,6 +528,7 @@ func (b *Backend) CompareAndSwap(ctx context.Context, expected backend.Item, rep
 		return nil, trace.BadParameter("expected and replaceWith keys should match")
 	}
 
+	replaceWith.Revision = backend.CreateRevision()
 	ref := b.svc.Collection(b.CollectionName).Doc(b.keyToDocumentID(expected.Key))
 	err := b.svc.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		expectedDocSnap, err := tx.Get(ref)
@@ -546,7 +555,7 @@ func (b *Backend) CompareAndSwap(ctx context.Context, expected backend.Item, rep
 		return nil, trace.Wrap(err)
 	}
 
-	return b.newLease(replaceWith), nil
+	return backend.NewLease(replaceWith), nil
 }
 
 // Delete deletes item by key
@@ -565,6 +574,114 @@ func (b *Backend) Delete(ctx context.Context, key []byte) error {
 	}
 
 	return nil
+}
+
+// ConditionalDelete deletes item by key if the revision matches
+func (b *Backend) ConditionalDelete(ctx context.Context, key []byte, rev string) error {
+	if len(key) == 0 {
+		return trace.BadParameter("missing parameter key")
+	}
+
+	ref := b.svc.Collection(b.CollectionName).Doc(b.keyToDocumentID(key))
+	err := b.svc.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		expectedDocSnap, err := tx.Get(ref)
+		if err != nil {
+			return trace.CompareFailed(backend.ErrIncorrectRevision)
+		}
+
+		existingRecord, err := newRecordFromDoc(expectedDocSnap)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		if existingRecord.Revision != rev {
+			return trace.CompareFailed(backend.ErrIncorrectRevision)
+		}
+
+		if err := tx.Delete(ref, firestore.Exists); err != nil {
+			return ConvertGRPCError(err)
+		}
+
+		return nil
+	})
+
+	return trace.Wrap(err)
+}
+
+func (b *Backend) ConditionalPut(ctx context.Context, item backend.Item) (*backend.Lease, error) {
+	rev := item.Revision
+	item.Revision = backend.CreateRevision()
+
+	ref := b.svc.Collection(b.CollectionName).Doc(b.keyToDocumentID(item.Key))
+	err := b.svc.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		expectedDocSnap, err := tx.Get(ref)
+		if err != nil {
+			return trace.CompareFailed(backend.ErrIncorrectRevision)
+		}
+
+		existingRecord, err := newRecordFromDoc(expectedDocSnap)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		if existingRecord.Revision != rev {
+			return trace.CompareFailed(backend.ErrIncorrectRevision)
+		}
+
+		if err := tx.Set(ref, newRecord(item, b.clock)); err != nil {
+			return ConvertGRPCError(err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return backend.NewLease(item), nil
+}
+
+func (b *Backend) ConditionalUpdate(ctx context.Context, item backend.Item) (*backend.Lease, error) {
+	rev := item.Revision
+	item.Revision = backend.CreateRevision()
+
+	r := newRecord(item, b.clock)
+	updates := []firestore.Update{
+		{Path: keyDocProperty, Value: r.Key},
+		{Path: timestampDocProperty, Value: r.Timestamp},
+		{Path: expiresDocProperty, Value: r.Expires},
+		{Path: idDocProperty, Value: r.ID},
+		{Path: valueDocProperty, Value: r.Value},
+		{Path:  "revision", Value: r.Revision},
+	}
+
+	ref := b.svc.Collection(b.CollectionName).Doc(b.keyToDocumentID(item.Key))
+	err := b.svc.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		expectedDocSnap, err := tx.Get(ref)
+		if err != nil {
+			return trace.CompareFailed(backend.ErrIncorrectRevision)
+		}
+
+		existingRecord, err := newRecordFromDoc(expectedDocSnap)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		if existingRecord.Revision != rev {
+			return trace.CompareFailed(backend.ErrIncorrectRevision)
+		}
+
+		if err := tx.Update(ref, updates); err != nil {
+			return ConvertGRPCError(err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return backend.NewLease(item), nil
 }
 
 // NewWatcher returns a new event watcher
@@ -628,10 +745,6 @@ func (b *Backend) CloseWatchers() {
 // Clock returns wall clock
 func (b *Backend) Clock() clockwork.Clock {
 	return b.clock
-}
-
-func (b *Backend) newLease(item backend.Item) *backend.Lease {
-	return &backend.Lease{Key: item.Key}
 }
 
 // keyToDocumentID converts key to a format supported by Firestore for document
