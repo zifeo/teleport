@@ -328,12 +328,7 @@ func runAssistant(h *Handler, w http.ResponseWriter, r *http.Request,
 		return trace.Wrap(err)
 	}
 
-	identity, err := createIdentityContext(sctx.GetUser(), sctx)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	ctx, err := h.cfg.SessionControl.AcquireSessionContext(r.Context(), identity, h.cfg.ProxyWebAddr.Addr, r.RemoteAddr)
+	ctx, err := h.cfg.SessionControl.AcquireSessionContext(r.Context(), sctx, site, sctx.GetUser(), h.cfg.ProxyWebAddr.Addr, r.RemoteAddr)
 	if err != nil {
 		return trace.Wrap(err)
 	}

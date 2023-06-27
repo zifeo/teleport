@@ -16,18 +16,27 @@ package benchmark
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
+	"github.com/gravitational/roundtrip"
 	"github.com/gravitational/trace"
 
 	apiclient "github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/client"
+	"github.com/gravitational/teleport/lib/session"
+	"github.com/gravitational/teleport/lib/utils"
+	"github.com/gravitational/teleport/lib/web"
 )
 
 // WebSSHBenchmark is a benchmark suite that connects to the configured
@@ -130,6 +139,58 @@ func (s WebSSHBenchmark) runCommand(ctx context.Context, tc *client.TeleportClie
 	}
 
 	return nil
+}
+
+// connectToHost opens an SSH session to the target host via the Proxy web api.
+func connectToHost(ctx context.Context, tc *client.TeleportClient, webSession *webSession, host string) (io.ReadWriteCloser, error) {
+	req := web.TerminalRequest{
+		Server: host,
+		Login:  tc.HostLogin,
+		Term: session.TerminalParams{
+			W: 100,
+			H: 100,
+		},
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	u := url.URL{
+		Host:   tc.WebProxyAddr,
+		Scheme: client.WSS,
+		Path:   fmt.Sprintf("/v1/webapi/sites/%v/connect", tc.SiteName),
+		RawQuery: url.Values{
+			"params":                        []string{string(data)},
+			roundtrip.AccessTokenQueryParam: []string{webSession.getToken()},
+		}.Encode(),
+	}
+
+	dialer := websocket.Dialer{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: tc.InsecureSkipVerify},
+		Jar:             webSession.getCookieJar(),
+	}
+
+	ws, resp, err := dialer.DialContext(ctx, u.String(), http.Header{
+		"Origin": []string{"http://localhost"},
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	defer resp.Body.Close()
+
+	ty, _, err := ws.ReadMessage()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	if ty != websocket.BinaryMessage {
+		return nil, trace.BadParameter("unexpected websocket message received %d", ty)
+	}
+
+	stream := web.NewTerminalStream(ctx, ws, utils.NewLogger())
+	return stream, trace.Wrap(err)
 }
 
 // getServers returns all [types.Server] that the authenticated user has

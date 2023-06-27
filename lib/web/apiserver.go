@@ -84,7 +84,6 @@ import (
 	"github.com/gravitational/teleport/lib/secret"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/session"
-	"github.com/gravitational/teleport/lib/srv"
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/teleport/lib/web/app"
 	websession "github.com/gravitational/teleport/lib/web/session"
@@ -243,7 +242,7 @@ type Config struct {
 
 	// SessionControl is used to determine if users are
 	// allowed to spawn new sessions
-	SessionControl *srv.SessionController
+	SessionControl SessionController
 
 	// PROXYSigner is used to sign PROXY header and securely propagate client IP information
 	PROXYSigner multiplexer.PROXYHeaderSigner
@@ -2491,40 +2490,6 @@ func (h *Handler) clusterLoginAlertsGet(w http.ResponseWriter, r *http.Request, 
 	}, nil
 }
 
-// createIdentityContext creates a srv.IdentityContext from the ssh cert of the user
-// stored within the SessionContext.
-func createIdentityContext(login string, sessionCtx *SessionContext) (srv.IdentityContext, error) {
-	accessChecker, err := sessionCtx.GetUserAccessChecker()
-	if err != nil {
-		return srv.IdentityContext{}, trace.Wrap(err)
-	}
-
-	sshCert, err := sessionCtx.GetSSHCertificate()
-	if err != nil {
-		return srv.IdentityContext{}, trace.Wrap(err)
-	}
-
-	unmappedRoles, err := services.ExtractRolesFromCert(sshCert)
-	if err != nil {
-		return srv.IdentityContext{}, trace.Wrap(err)
-	}
-
-	accessRequestIDs, err := srv.ParseAccessRequestIDs(sshCert.Extensions[teleport.CertExtensionTeleportActiveRequests])
-	if err != nil {
-		return srv.IdentityContext{}, trace.Wrap(err)
-	}
-
-	return srv.IdentityContext{
-		AccessChecker:  accessChecker,
-		TeleportUser:   sessionCtx.GetUser(),
-		Login:          login,
-		Certificate:    sshCert,
-		UnmappedRoles:  unmappedRoles,
-		ActiveRequests: accessRequestIDs,
-		Impersonator:   sshCert.Extensions[teleport.CertExtensionImpersonator],
-	}, nil
-}
-
 func (h *Handler) getClusterLocks(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -2621,6 +2586,18 @@ func (h *Handler) deleteClusterLock(
 	return OK(), nil
 }
 
+type SessionController interface {
+	AcquireSessionContext(ctx context.Context, sctx *SessionContext, login, localAddr, remoteAddr string) (context.Context, error)
+}
+
+type SessionControllerFunc func(ctx context.Context, sctx *SessionContext, login, localAddr, remoteAddr string) (context.Context, error)
+
+// AcquireSessionContext calls f(ctx, sctx, localAddr, remoteAddr).
+func (f SessionControllerFunc) AcquireSessionContext(ctx context.Context, sctx *SessionContext, login, localAddr, remoteAddr string) (context.Context, error) {
+	ctx, err := f(ctx, sctx, login, localAddr, remoteAddr)
+	return ctx, trace.Wrap(err)
+}
+
 // siteNodeConnect connect to the site node
 //
 // GET /v1/webapi/sites/:site/namespaces/:namespace/connect?access_token=bearer_token&params=<urlencoded json-structure>
@@ -2653,12 +2630,7 @@ func (h *Handler) siteNodeConnect(
 		return nil, trace.Wrap(err)
 	}
 
-	identity, err := createIdentityContext(req.Login, sessionCtx)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	ctx, err := h.cfg.SessionControl.AcquireSessionContext(r.Context(), identity, h.cfg.ProxyWebAddr.Addr, r.RemoteAddr)
+	ctx, err := h.cfg.SessionControl.AcquireSessionContext(r.Context(), sessionCtx, req.Login, h.cfg.ProxyWebAddr.Addr, r.RemoteAddr)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
