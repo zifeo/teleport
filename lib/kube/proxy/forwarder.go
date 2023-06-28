@@ -82,7 +82,7 @@ import (
 	"github.com/gravitational/teleport/lib/kube/proxy/streamproto"
 	kubeutils "github.com/gravitational/teleport/lib/kube/utils"
 	"github.com/gravitational/teleport/lib/multiplexer"
-	"github.com/gravitational/teleport/lib/reversetunnel"
+	"github.com/gravitational/teleport/lib/reversetunnelapi"
 	"github.com/gravitational/teleport/lib/reversetunnelclient"
 	"github.com/gravitational/teleport/lib/service/servicecfg"
 	"github.com/gravitational/teleport/lib/services"
@@ -111,7 +111,7 @@ const (
 // ForwarderConfig specifies configuration for proxy forwarder
 type ForwarderConfig struct {
 	// ReverseTunnelSrv is the teleport reverse tunnel server
-	ReverseTunnelSrv reversetunnel.Server
+	ReverseTunnelSrv reversetunnelapi.Server
 	// ClusterName is a local cluster name
 	ClusterName string
 	// Keygen points to a key generator implementation

@@ -110,6 +110,7 @@ import (
 	"github.com/gravitational/teleport/lib/proxy"
 	restricted "github.com/gravitational/teleport/lib/restrictedsession"
 	"github.com/gravitational/teleport/lib/reversetunnel"
+	"github.com/gravitational/teleport/lib/reversetunnelapi"
 	"github.com/gravitational/teleport/lib/secret"
 	"github.com/gravitational/teleport/lib/service/servicecfg"
 	"github.com/gravitational/teleport/lib/services"
@@ -133,7 +134,7 @@ type WebSuite struct {
 
 	node        *regular.Server
 	proxy       *regular.Server
-	proxyTunnel reversetunnel.Server
+	proxyTunnel reversetunnelapi.Server
 	srvID       string
 
 	user       string

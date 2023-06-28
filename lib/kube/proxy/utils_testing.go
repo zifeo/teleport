@@ -54,6 +54,7 @@ import (
 	"github.com/gravitational/teleport/lib/limiter"
 	"github.com/gravitational/teleport/lib/multiplexer"
 	"github.com/gravitational/teleport/lib/reversetunnel"
+	"github.com/gravitational/teleport/lib/reversetunnelapi"
 	"github.com/gravitational/teleport/lib/services"
 	sessPkg "github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/tlsca"
@@ -291,7 +292,7 @@ func SetupTestContext(ctx context.Context, t *testing.T, cfg TestConfig) *TestCo
 	testCtx.KubeProxy, err = NewTLSServer(TLSServerConfig{
 		ForwarderConfig: ForwarderConfig{
 			ReverseTunnelSrv: &reversetunnel.FakeServer{
-				Sites: []reversetunnel.RemoteSite{
+				Sites: []reversetunnelapi.RemoteSite{
 					&fakeRemoteSite{
 						FakeRemoteSite: reversetunnel.NewFakeRemoteSite(testCtx.ClusterName, client),
 						idToAddr: map[string]string{
@@ -591,7 +592,7 @@ type fakeRemoteSite struct {
 	idToAddr map[string]string
 }
 
-func (f *fakeRemoteSite) DialTCP(p reversetunnel.DialParams) (conn net.Conn, err error) {
+func (f *fakeRemoteSite) DialTCP(p reversetunnelapi.DialParams) (conn net.Conn, err error) {
 	// The server ID is the first part of the address.
 	addr, ok := f.idToAddr[strings.Split(p.ServerID, ".")[0]]
 	if !ok {

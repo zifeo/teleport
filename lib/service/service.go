@@ -110,6 +110,7 @@ import (
 	"github.com/gravitational/teleport/lib/proxy/peer"
 	restricted "github.com/gravitational/teleport/lib/restrictedsession"
 	"github.com/gravitational/teleport/lib/reversetunnel"
+	"github.com/gravitational/teleport/lib/reversetunnelapi"
 	"github.com/gravitational/teleport/lib/reversetunnelclient"
 	"github.com/gravitational/teleport/lib/service/servicecfg"
 	"github.com/gravitational/teleport/lib/services"
@@ -3647,7 +3648,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 
 	// register SSH reverse tunnel server that accepts connections
 	// from remote teleport nodes
-	var tsrv reversetunnel.Server
+	var tsrv reversetunnelapi.Server
 	var peerClient *peer.Client
 
 	if !process.Config.Proxy.DisableReverseTunnel {
@@ -4580,7 +4581,7 @@ func kubeDialAddr(config servicecfg.ProxyConfig, mode types.ProxyListenerMode) u
 	return config.Kube.ListenAddr
 }
 
-func (process *TeleportProcess) setupProxyTLSConfig(conn *Connector, tsrv reversetunnel.Server, accessPoint auth.ReadProxyAccessPoint, clusterName string) (*tls.Config, error) {
+func (process *TeleportProcess) setupProxyTLSConfig(conn *Connector, tsrv reversetunnelapi.Server, accessPoint auth.ReadProxyAccessPoint, clusterName string) (*tls.Config, error) {
 	cfg := process.Config
 	var tlsConfig *tls.Config
 	acmeCfg := process.Config.Proxy.ACME

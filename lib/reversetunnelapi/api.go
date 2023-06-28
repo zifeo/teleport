@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reversetunnel
+package reversetunnelapi
 
 import (
 	"context"
@@ -92,32 +92,6 @@ func (params DialParams) String() string {
 		to = params.ServerID
 	}
 	return fmt.Sprintf("from: %q to: %q", params.From, to)
-}
-
-func stringOrEmpty(addr net.Addr) string {
-	if addr == nil {
-		return ""
-	}
-	return addr.String()
-}
-
-// shouldDialAndForward returns whether a connection should be proxied
-// and forwarded or not.
-func shouldDialAndForward(params DialParams, recConfig types.SessionRecordingConfig) bool {
-	// connection is already being tunneled, do not forward
-	if params.FromPeerProxy {
-		return false
-	}
-	// the node is an agentless node, the connection must be forwarded
-	if params.TargetServer != nil && params.TargetServer.GetSubKind() == types.SubKindOpenSSHNode {
-		return true
-	}
-	// proxy session recording mode is being used and an SSH session
-	// is being requested, the connection must be forwarded
-	if params.ConnType == types.NodeTunnel && services.IsRecordAtProxy(recConfig.GetMode()) {
-		return true
-	}
-	return false
 }
 
 // RemoteSite represents remote teleport site that can be accessed via

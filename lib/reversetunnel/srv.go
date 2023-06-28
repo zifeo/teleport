@@ -45,6 +45,7 @@ import (
 	"github.com/gravitational/teleport/lib/multiplexer"
 	"github.com/gravitational/teleport/lib/observability/metrics"
 	"github.com/gravitational/teleport/lib/proxy/peer"
+	"github.com/gravitational/teleport/lib/reversetunnelapi"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/ingress"
 	"github.com/gravitational/teleport/lib/sshca"
@@ -281,7 +282,7 @@ func (cfg *Config) CheckAndSetDefaults() error {
 
 // NewServer creates and returns a reverse tunnel server which is fully
 // initialized but hasn't been started yet
-func NewServer(cfg Config) (Server, error) {
+func NewServer(cfg Config) (reversetunnelapi.Server, error) {
 	err := metrics.RegisterPrometheusCollectors(prometheusCollectors...)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -965,10 +966,10 @@ func (s *server) upsertRemoteCluster(conn net.Conn, sshConn *ssh.ServerConn) (*r
 	return site, remoteConn, nil
 }
 
-func (s *server) GetSites() ([]RemoteSite, error) {
+func (s *server) GetSites() ([]reversetunnelapi.RemoteSite, error) {
 	s.RLock()
 	defer s.RUnlock()
-	out := make([]RemoteSite, 0, len(s.remoteSites)+len(s.clusterPeers)+1)
+	out := make([]reversetunnelapi.RemoteSite, 0, len(s.remoteSites)+len(s.clusterPeers)+1)
 	out = append(out, s.localSite)
 
 	haveLocalConnection := make(map[string]bool)
@@ -1002,7 +1003,7 @@ func (s *server) getRemoteClusters() []*remoteSite {
 // with a cluster peer your best bet is to wait until the agent has discovered
 // all proxies behind a load balancer. Note, the cluster peer is a
 // services.TunnelConnection that was created by another proxy.
-func (s *server) GetSite(name string) (RemoteSite, error) {
+func (s *server) GetSite(name string) (reversetunnelapi.RemoteSite, error) {
 	s.RLock()
 	defer s.RUnlock()
 	if s.localSite.GetName() == name {
@@ -1029,7 +1030,7 @@ func (s *server) GetProxyPeerClient() *peer.Client {
 // alwaysClose forces onSiteTunnelClose to remove and close
 // the site by always returning false from HasValidConnections.
 type alwaysClose struct {
-	RemoteSite
+	reversetunnelapi.RemoteSite
 }
 
 func (a *alwaysClose) HasValidConnections() bool {

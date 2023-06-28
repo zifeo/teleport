@@ -24,22 +24,23 @@ import (
 	"github.com/gravitational/trace"
 
 	"github.com/gravitational/teleport/lib/auth"
+	"github.com/gravitational/teleport/lib/reversetunnelapi"
 )
 
 // FakeServer is a fake reversetunnel.Server implementation used in tests.
 type FakeServer struct {
-	Server
+	reversetunnelapi.Server
 	// Sites is a list of sites registered via this fake reverse tunnel.
-	Sites []RemoteSite
+	Sites []reversetunnelapi.RemoteSite
 }
 
 // GetSites returns all available remote sites.
-func (s *FakeServer) GetSites() ([]RemoteSite, error) {
+func (s *FakeServer) GetSites() ([]reversetunnelapi.RemoteSite, error) {
 	return s.Sites, nil
 }
 
 // GetSite returns the remote site by name.
-func (s *FakeServer) GetSite(name string) (RemoteSite, error) {
+func (s *FakeServer) GetSite(name string) (reversetunnelapi.RemoteSite, error) {
 	for _, site := range s.Sites {
 		if site.GetName() == name {
 			return site, nil
@@ -50,7 +51,7 @@ func (s *FakeServer) GetSite(name string) (RemoteSite, error) {
 
 // FakeRemoteSite is a fake reversetunnel.RemoteSite implementation used in tests.
 type FakeRemoteSite struct {
-	RemoteSite
+	reversetunnelapi.RemoteSite
 	// Name is the remote site name.
 	Name string
 	// AccessPoint is the auth server client.
@@ -92,7 +93,7 @@ func (s *FakeRemoteSite) ProxyConn() <-chan net.Conn {
 }
 
 // Dial returns the connection to the remote site.
-func (s *FakeRemoteSite) Dial(params DialParams) (net.Conn, error) {
+func (s *FakeRemoteSite) Dial(params reversetunnelapi.DialParams) (net.Conn, error) {
 	atomic.AddInt64(&s.connCounter, 1)
 
 	if _, ok := s.OfflineTunnels[params.ServerID]; ok {

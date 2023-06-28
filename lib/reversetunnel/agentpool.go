@@ -42,6 +42,7 @@ import (
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/multiplexer"
 	"github.com/gravitational/teleport/lib/reversetunnel/track"
+	"github.com/gravitational/teleport/lib/reversetunnelapi"
 	"github.com/gravitational/teleport/lib/reversetunnelclient"
 	alpncommon "github.com/gravitational/teleport/lib/srv/alpnproxy/common"
 	"github.com/gravitational/teleport/lib/utils"
@@ -119,7 +120,7 @@ type AgentPoolConfig struct {
 	// either be proxy (trusted clusters) or node (dial back).
 	Component string
 	// ReverseTunnelServer holds all reverse tunnel connections.
-	ReverseTunnelServer Server
+	ReverseTunnelServer reversetunnelapi.Server
 	// Resolver retrieves the reverse tunnel address
 	Resolver reversetunnelclient.Resolver
 	// Cluster is a cluster name of the proxy.

@@ -36,6 +36,7 @@ import (
 	"github.com/gravitational/teleport/api/utils/retryutils"
 	"github.com/gravitational/teleport/api/utils/sshutils"
 	"github.com/gravitational/teleport/lib/auth"
+	"github.com/gravitational/teleport/lib/reversetunnelapi"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/forward"
 	"github.com/gravitational/teleport/lib/teleagent"
@@ -136,7 +137,7 @@ func (s *remoteSite) getRemoteClient() (auth.ClientI, bool, error) {
 }
 
 func (s *remoteSite) authServerContextDialer(ctx context.Context, network, address string) (net.Conn, error) {
-	conn, err := s.DialAuthServer(DialParams{})
+	conn, err := s.DialAuthServer(reversetunnelapi.DialParams{})
 	return conn, err
 }
 
@@ -742,7 +743,7 @@ func (s *remoteSite) watchLocks() error {
 	}
 }
 
-func (s *remoteSite) DialAuthServer(params DialParams) (net.Conn, error) {
+func (s *remoteSite) DialAuthServer(params reversetunnelapi.DialParams) (net.Conn, error) {
 	conn, err := s.connThroughTunnel(&sshutils.DialReq{
 		Address:       constants.RemoteAuthServer,
 		ClientSrcAddr: stringOrEmpty(params.From),
@@ -754,7 +755,7 @@ func (s *remoteSite) DialAuthServer(params DialParams) (net.Conn, error) {
 // Dial is used to connect a requesting client (say, tsh) to an SSH server
 // located in a remote connected site, the connection goes through the
 // reverse proxy tunnel.
-func (s *remoteSite) Dial(params DialParams) (net.Conn, error) {
+func (s *remoteSite) Dial(params reversetunnelapi.DialParams) (net.Conn, error) {
 	recConfig, err := s.localAccessPoint.GetSessionRecordingConfig(s.ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -771,7 +772,7 @@ func (s *remoteSite) Dial(params DialParams) (net.Conn, error) {
 	return s.DialTCP(params)
 }
 
-func (s *remoteSite) DialTCP(params DialParams) (net.Conn, error) {
+func (s *remoteSite) DialTCP(params reversetunnelapi.DialParams) (net.Conn, error) {
 	s.logger.Debugf("Dialing from %v to %v.", params.From, params.To)
 
 	conn, err := s.connThroughTunnel(&sshutils.DialReq{
@@ -789,7 +790,7 @@ func (s *remoteSite) DialTCP(params DialParams) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *remoteSite) dialAndForward(params DialParams) (_ net.Conn, retErr error) {
+func (s *remoteSite) dialAndForward(params reversetunnelapi.DialParams) (_ net.Conn, retErr error) {
 	if params.GetUserAgent == nil && params.AgentlessSigner == nil {
 		return nil, trace.BadParameter("user agent getter and agentless signer both missing")
 	}
