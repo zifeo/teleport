@@ -27,6 +27,7 @@ import (
 	"embed"
 	"encoding/binary"
 	"net"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -246,7 +247,8 @@ func (s *Service) OpenSession(ctx *SessionContext) (uint64, error) {
 		s.conn,
 	} {
 		// Register cgroup in the BPF module.
-		if err := module.startSession(cgroupID); err != nil {
+		if err := module.startSession(cgroupID, filepath.Join(s.cgroup.GetRootPath(), ctx.SessionID)); err != nil {
+			//if err := module.startSession(cgroupID, s.cgroup.GetRootPath()); err != nil {
 			// Clean up all already opened modules.
 			for _, closer := range initializedModClosures {
 				if closeErr := closer.endSession(cgroupID); closeErr != nil {
@@ -260,6 +262,8 @@ func (s *Service) OpenSession(ctx *SessionContext) (uint64, error) {
 
 	// Start watching for any events that come from this cgroup.
 	s.watch.Add(cgroupID, ctx)
+
+	log.Warnf("Opened session %v with cgroupID %v.", ctx.SessionID, cgroupID)
 
 	// Place requested PID into cgroup.
 	err = s.cgroup.Place(ctx.SessionID, ctx.PID)

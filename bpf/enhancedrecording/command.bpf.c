@@ -17,7 +17,7 @@
 // hashmap keeps all cgroups id that should be monitored by Teleport.
 BPF_HASH(monitored_cgroups, u64, int64_t, MAX_MONITORED_SESSIONS);
 
-char LICENSE[] SEC("license") = "Dual BSD/GPL";
+char LICENSE[] SEC("license") = "GPL"; //TODO(jakule): Revert before merge
 
 enum event_type {
     EVENT_ARG,
@@ -39,6 +39,13 @@ struct data_t {
 BPF_RING_BUF(execve_events, EVENTS_BUF_SIZE);
 
 BPF_COUNTER(lost);
+
+struct {
+	__uint(type, BPF_MAP_TYPE_CGROUP_ARRAY);
+	__type(key, u32);
+	__type(value, u32);
+	__uint(max_entries, 1);
+} cgroup_map SEC(".maps");
 
 static int __submit_arg(void *ptr, struct data_t *data)
 {
@@ -67,6 +74,18 @@ static int enter_execve(const char *filename,
     struct task_struct *task;
     u64 cgroup = bpf_get_current_cgroup_id();
     u64 *is_monitored;
+
+    long ret = bpf_current_task_under_cgroup(&cgroup_map, 0);
+    if (ret == 0) {
+    // Not under cgroup, ignore.
+        bpf_printk("not under cgroup");
+    } else if (ret == 1) {
+        bpf_printk("under cgroup");
+    } else {
+        bpf_printk("under cgroup error %d", ret);
+    }
+
+    bpf_printk("cgroup %u", cgroup);
 
     // Check if the cgroup should be monitored.
     is_monitored = bpf_map_lookup_elem(&monitored_cgroups, &cgroup);

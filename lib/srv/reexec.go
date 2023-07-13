@@ -274,6 +274,18 @@ func RunCommand() (errw io.Writer, code int, err error) {
 		}
 	}
 
+	localUser, err := user.Lookup(c.Login)
+	if err != nil {
+		return errorWriter, teleport.RemoteCommandFailure, trace.Wrap(err)
+	}
+
+	// Wait until the continue signal is received from Teleport signaling that
+	// the child process has been placed in a cgroup.
+	err = waitForContinue(contfd)
+	if err != nil {
+		return errorWriter, teleport.RemoteCommandFailure, trace.Wrap(err)
+	}
+
 	// If PAM is enabled, open a PAM context. This has to be done before anything
 	// else because PAM is sometimes used to create the local user used to
 	// launch the shell under.
@@ -311,26 +323,20 @@ func RunCommand() (errw io.Writer, code int, err error) {
 		if err != nil {
 			return errorWriter, teleport.RemoteCommandFailure, trace.Wrap(err)
 		}
-		defer pamContext.Close()
+		defer func() {
+			os.WriteFile("/tmp/pam_close", []byte("closing pam context"), 0644)
+			err := pamContext.Close()
+			if err != nil {
+				os.WriteFile("/tmp/pam_close_error", []byte(err.Error()), 0644)
+			}
+		}()
 
 		// Save off any environment variables that come from PAM.
 		pamEnvironment = pamContext.Environment()
 	}
 
-	localUser, err := user.Lookup(c.Login)
-	if err != nil {
-		return errorWriter, teleport.RemoteCommandFailure, trace.Wrap(err)
-	}
-
 	// Build the actual command that will launch the shell.
 	cmd, err := buildCommand(&c, localUser, tty, pty, pamEnvironment)
-	if err != nil {
-		return errorWriter, teleport.RemoteCommandFailure, trace.Wrap(err)
-	}
-
-	// Wait until the continue signal is received from Teleport signaling that
-	// the child process has been placed in a cgroup.
-	err = waitForContinue(contfd)
 	if err != nil {
 		return errorWriter, teleport.RemoteCommandFailure, trace.Wrap(err)
 	}

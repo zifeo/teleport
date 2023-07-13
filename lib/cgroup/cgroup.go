@@ -123,6 +123,11 @@ func (s *Service) Create(sessionID string) error {
 	return nil
 }
 
+func (s *Service) GetRootPath() string {
+	//return filepath.Join(s.MountPath, teleportRoot)
+	return s.teleportRoot
+}
+
 // Remove will remove the cgroup for a session. An existing processes will be
 // moved to the root controller.
 func (s *Service) Remove(sessionID string) error {

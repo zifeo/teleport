@@ -22,6 +22,7 @@
 package bpf
 
 import (
+	"golang.org/x/sys/unix"
 	"unsafe"
 
 	"github.com/aquasecurity/libbpfgo"
@@ -36,7 +37,7 @@ type session struct {
 
 // startSession registers the given cgroup in the BPF module. Only registered
 // cgroups will return events to the userspace.
-func (s *session) startSession(cgroupID uint64) error {
+func (s *session) startSession(cgroupID uint64, cgroupRoot string) error {
 	cgroupMap, err := s.module.GetMap(monitoredCGroups)
 	if err != nil {
 		return trace.Wrap(err)
@@ -47,6 +48,31 @@ func (s *session) startSession(cgroupID uint64) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
+
+	x, err := s.module.GetMap("cgroup_map")
+	if err != nil {
+		return nil
+		//return trace.Wrap(err)
+	}
+	cgroupRoot = "/sys/fs/cgroup/teleport"
+	//cgroupRoot = "/cgroup2/teleport"
+	//cgroupRoot = "/cgroup2/"
+	//cgroupRoot = "/sys/fs/cgroup/user.slice/user-1000.slice/"
+	//cgroupRoot = "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/my.slice/"
+	//go func() error {
+	//	time.Sleep(5 * time.Second)
+	//cgroupRoot = "/sys/fs/cgroup/user.slice/user-1000.slice/session-4.scope"
+	cgroupRoot = "/sys/fs/cgroup/system.slice/teleport1.scope"
+	aaa, err := unix.Open(cgroupRoot, unix.O_RDONLY, 0600)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	err = x.Update(unsafe.Pointer(&dummyVal), unsafe.Pointer(&aaa))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	//	return nil
+	//}()
 
 	return nil
 }
