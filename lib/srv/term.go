@@ -61,6 +61,8 @@ type Terminal interface {
 	// Wait will block until the terminal is complete.
 	Wait() (*ExecResult, error)
 
+	WaitForPam() error
+
 	// Continue will resume execution of the process after it completes its
 	// pre-processing routine (placed in a cgroup).
 	Continue()
@@ -234,6 +236,11 @@ func (t *terminal) Wait() (*ExecResult, error) {
 		Code:    status.ExitStatus(),
 		Command: t.cmd.Path,
 	}, nil
+}
+
+func (t *terminal) WaitForPam() error {
+	_, err := io.ReadFull(t.serverContext.contr, make([]byte, 1))
+	return trace.Wrap(err)
 }
 
 // Continue will resume execution of the process after it completes its
@@ -590,6 +597,10 @@ func (t *remoteTerminal) Wait() (*ExecResult, error) {
 		Code:    teleport.RemoteCommandSuccess,
 		Command: execRequest.GetCommand(),
 	}, nil
+}
+
+func (t *remoteTerminal) WaitForPam() error {
+	return nil
 }
 
 // Continue does nothing for remote command execution.
