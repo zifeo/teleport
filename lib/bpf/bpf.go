@@ -26,7 +26,9 @@ import (
 	"context"
 	"embed"
 	"encoding/binary"
+	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -238,6 +240,18 @@ func (s *Service) OpenSession(ctx *SessionContext) (uint64, error) {
 		return 0, trace.Wrap(err)
 	}
 
+	psidData, err := os.ReadFile(fmt.Sprintf("/proc/%d/sessionid", ctx.PID))
+	if err != nil {
+		return 0, trace.Wrap(err)
+	}
+
+	psid, err := strconv.Atoi(string(psidData))
+	if err != nil {
+		return 0, trace.Wrap(err)
+	}
+
+	log.Warnf("child SID: %d", psid)
+
 	// initializedModClosures holds all already opened modules closures.
 	initializedModClosures := make([]interface{ endSession(uint64) error }, 0)
 	for _, module := range []cgroupRegister{
@@ -246,7 +260,7 @@ func (s *Service) OpenSession(ctx *SessionContext) (uint64, error) {
 		s.conn,
 	} {
 		// Register cgroup in the BPF module.
-		if err := module.startSession(cgroupID); err != nil {
+		if err := module.startSession(cgroupID, uint64(psid)); err != nil {
 			// Clean up all already opened modules.
 			for _, closer := range initializedModClosures {
 				if closeErr := closer.endSession(cgroupID); closeErr != nil {

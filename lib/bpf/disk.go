@@ -67,7 +67,7 @@ type rawOpenEvent struct {
 }
 
 type cgroupRegister interface {
-	startSession(cgroupID uint64) error
+	startSession(cgroupID uint64, psid uint64) error
 	endSession(cgroupID uint64) error
 }
 

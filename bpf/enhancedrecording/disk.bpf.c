@@ -38,6 +38,8 @@ BPF_HASH(infotmp, u64, struct val_t, INFLIGHT_MAX);
 // hashmap keeps all cgroups id that should be monitored by Teleport.
 BPF_HASH(monitored_cgroups, u64, int64_t, MAX_MONITORED_SESSIONS);
 
+BPF_HASH(monitored_sessions, u64, int64_t, MAX_MONITORED_SESSIONS);
+
 // open_events ring buffer
 BPF_RING_BUF(open_events, EVENTS_BUF_SIZE);
 

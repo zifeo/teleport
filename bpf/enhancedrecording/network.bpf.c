@@ -21,6 +21,8 @@ BPF_HASH(currsock, u32, struct sock *, INFLIGHT_MAX);
 // hashmap keeps all cgroups id that should be monitored by Teleport.
 BPF_HASH(monitored_cgroups, u64, int64_t, MAX_MONITORED_SESSIONS);
 
+BPF_HASH(monitored_sessions, u64, int64_t, MAX_MONITORED_SESSIONS);
+
 // separate data structs for ipv4 and ipv6
 struct ipv4_data_t {
     u64 cgroup;

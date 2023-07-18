@@ -36,14 +36,26 @@ type session struct {
 
 // startSession registers the given cgroup in the BPF module. Only registered
 // cgroups will return events to the userspace.
-func (s *session) startSession(cgroupID uint64) error {
+func (s *session) startSession(cgroupID uint64, psid uint64) error {
 	cgroupMap, err := s.module.GetMap(monitoredCGroups)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
+	cgroupID += 5 // make it fail
+
 	dummyVal := 0
 	err = cgroupMap.Update(unsafe.Pointer(&cgroupID), unsafe.Pointer(&dummyVal))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	sessionsMap, err := s.module.GetMap("monitored_sessions")
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = sessionsMap.Update(unsafe.Pointer(&psid), unsafe.Pointer(&dummyVal))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -52,7 +64,7 @@ func (s *session) startSession(cgroupID uint64) error {
 }
 
 // endSession removes the previously registered cgroup from the BPF module.
-func (s *session) endSession(cgroupID uint64) error {
+func (s *session) endSession(cgroupID uint64) error { // TODO add psid
 	cgroupMap, err := s.module.GetMap(monitoredCGroups)
 	if err != nil {
 		return trace.Wrap(err)

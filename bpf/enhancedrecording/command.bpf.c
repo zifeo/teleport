@@ -17,7 +17,9 @@
 // hashmap keeps all cgroups id that should be monitored by Teleport.
 BPF_HASH(monitored_cgroups, u64, int64_t, MAX_MONITORED_SESSIONS);
 
-char LICENSE[] SEC("license") = "Dual BSD/GPL";
+BPF_HASH(monitored_sessions, u64, int64_t, MAX_MONITORED_SESSIONS);
+
+char LICENSE[] SEC("license") = "GPL"; //TODO(jakule): Revert before merge
 
 enum event_type {
     EVENT_ARG,
@@ -67,18 +69,29 @@ static int enter_execve(const char *filename,
     struct task_struct *task;
     u64 cgroup = bpf_get_current_cgroup_id();
     u64 *is_monitored;
+    u64 sessionid;
+
+    task = (struct task_struct *)bpf_get_current_task();
+    sessionid = BPF_CORE_READ(task, group_leader, sessionid);
+
+    bpf_printk("sessionid %u", sessionid);
 
     // Check if the cgroup should be monitored.
     is_monitored = bpf_map_lookup_elem(&monitored_cgroups, &cgroup);
     if (is_monitored == NULL) {
-        // Missed entry.
-        return 0;
+        // cgroup has not been marked for monitoring, ignore.
+        is_monitored = bpf_map_lookup_elem(&monitored_sessions, &sessionid);
+        if (is_monitored == NULL) {
+            // Missed entry.
+            bpf_printk("not monitored");
+            return 0;
+        }
     }
 
     data.pid = bpf_get_current_pid_tgid() >> 32;
     data.cgroup = cgroup;
 
-    task = (struct task_struct *)bpf_get_current_task();
+//    task = (struct task_struct *)bpf_get_current_task();
     data.ppid = BPF_CORE_READ(task, real_parent, tgid);
 
     bpf_get_current_comm(&data.comm, sizeof(data.comm));
