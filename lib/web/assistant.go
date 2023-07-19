@@ -346,7 +346,7 @@ func (h *Handler) assistant(w http.ResponseWriter, r *http.Request, _ httprouter
 }
 
 func (h *Handler) assistantV2(w http.ResponseWriter, r *http.Request, _ httprouter.Params,
-	sctx *SessionContext, site reversetunnel.RemoteSite, ws *websocket.Conn,
+	sctx *SessionContext, site reversetunnelclient.RemoteSite, ws *websocket.Conn,
 ) (any, error) {
 	if err := runAssistant(h, w, r, sctx, site, ws); err != nil {
 		h.log.Warn(trace.DebugReport(err))

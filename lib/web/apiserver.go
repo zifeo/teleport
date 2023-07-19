@@ -3491,7 +3491,7 @@ type ContextHandler func(w http.ResponseWriter, r *http.Request, p httprouter.Pa
 // ClusterHandler is a authenticated handler that is called for some existing remote cluster
 type ClusterHandler func(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (interface{}, error)
 
-type ClusterWSHandler func(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnel.RemoteSite, ws *websocket.Conn) (any, error)
+type ClusterWSHandler func(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite, ws *websocket.Conn) (any, error)
 
 // WithClusterAuth wraps a ClusterHandler to ensure that a request is authenticated to this proxy
 // (the same as WithAuth), as well as to grab the remoteSite (which can represent this local cluster
@@ -3518,7 +3518,7 @@ func (h *Handler) WithClusterWSAuth(fn ClusterWSHandler) httprouter.Handle {
 	})
 }
 
-func (h *Handler) authenticateWSWithCluster(w http.ResponseWriter, r *http.Request, p httprouter.Params) (*SessionContext, reversetunnel.RemoteSite, *websocket.Conn, error) {
+func (h *Handler) authenticateWSWithCluster(w http.ResponseWriter, r *http.Request, p httprouter.Params) (*SessionContext, reversetunnelclient.RemoteSite, *websocket.Conn, error) {
 	sctx, ws, err := h.AuthenticateWSConnection(w, r)
 	if err != nil {
 		return nil, nil, nil, trace.Wrap(err)
