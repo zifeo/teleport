@@ -2172,7 +2172,12 @@ func (h *Handler) trySettingConnectorNameToPasswordless(ctx context.Context, ses
 		return nil
 	}
 
-	authPreference, err := sessCtx.cfg.RootClient.GetAuthPreference(ctx)
+	authClient, err := sessCtx.GetClient()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	authPreference, err := authClient.GetAuthPreference(ctx)
 	if err != nil {
 		return nil
 	}
@@ -2192,7 +2197,7 @@ func (h *Handler) trySettingConnectorNameToPasswordless(ctx context.Context, ses
 
 	authPreference.SetConnectorName(constants.PasswordlessConnector)
 
-	err = sessCtx.cfg.RootClient.SetAuthPreference(ctx, authPreference)
+	err = authClient.SetAuthPreference(ctx, authPreference)
 	return trace.Wrap(err)
 }
 
@@ -3834,17 +3839,12 @@ func rateLimitRequest(r *http.Request, limiter *limiter.RateLimiter) error {
 	return trace.Wrap(err)
 }
 
-// AuthenticateRequest authenticates request using combination of a session cookie
+// AuthenticateRequest authenticates request using a combination of a session cookie
 // and bearer token
 func (h *Handler) AuthenticateRequest(w http.ResponseWriter, r *http.Request, checkBearerToken bool) (*SessionContext, error) {
-	const missingCookieMsg = "missing session cookie"
-	cookie, err := r.Cookie(websession.CookieName)
-	if err != nil || (cookie != nil && cookie.Value == "") {
-		return nil, trace.AccessDenied(missingCookieMsg)
-	}
-	decodedCookie, err := websession.DecodeCookie(cookie.Value)
+	decodedCookie, err := extractCookie(r)
 	if err != nil {
-		return nil, trace.AccessDenied("failed to decode cookie")
+		return nil, trace.Wrap(err)
 	}
 	ctx, err := h.auth.getOrCreateSession(r.Context(), decodedCookie.User, decodedCookie.SID)
 	if err != nil {
@@ -3863,11 +3863,30 @@ func (h *Handler) AuthenticateRequest(w http.ResponseWriter, r *http.Request, ch
 	return ctx, nil
 }
 
-// AuthenticateWSConnection
+func extractCookie(r *http.Request) (*websession.Cookie, error) {
+	const missingCookieMsg = "missing session cookie"
+	cookie, err := r.Cookie(websession.CookieName)
+	if err != nil || (cookie != nil && cookie.Value == "") {
+		return nil, trace.AccessDenied(missingCookieMsg)
+	}
+	decodedCookie, err := websession.DecodeCookie(cookie.Value)
+	if err != nil {
+		return nil, trace.AccessDenied("failed to decode cookie")
+	}
+	return decodedCookie, nil
+}
+
+// AuthenticateWSConnection authenticates websocket connection using a combination of a session cookie
+// and bearer token.
 func (h *Handler) AuthenticateWSConnection(w http.ResponseWriter, r *http.Request) (*SessionContext, *websocket.Conn, error) {
-	sessionCtx, err := h.AuthenticateRequest(w, r, false)
+	decodedCookie, err := extractCookie(r)
 	if err != nil {
 		return nil, nil, trace.Wrap(err)
+	}
+	sessionCtx, err := h.auth.getOrCreateSession(r.Context(), decodedCookie.User, decodedCookie.SID)
+	if err != nil {
+		websession.ClearCookie(w)
+		return nil, nil, trace.AccessDenied("need auth")
 	}
 
 	upgrader := websocket.Upgrader{
@@ -3876,11 +3895,12 @@ func (h *Handler) AuthenticateWSConnection(w http.ResponseWriter, r *http.Reques
 		CheckOrigin:     func(r *http.Request) bool { return true },
 	}
 
+	// todo close ws in case of error
+	// todo propagate the error using opened WS
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return nil, nil, trace.Errorf("failed to upgrade the connection to websocket: %w", err)
 	}
-	// ws close in case of error
 
 	ws.SetReadLimit(teleport.MaxHTTPRequestSize)
 

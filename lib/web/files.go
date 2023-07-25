@@ -224,8 +224,13 @@ func (f *fileTransfer) issueSingleUseCert(webauthn string, httpReq *http.Request
 		return trace.Wrap(err)
 	}
 
+	authClient, err := f.sctx.GetClient()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	// Always acquire certs from the root cluster, that is where both the user and their devices are registered.
-	cert, err := f.sctx.cfg.RootClient.GenerateUserCerts(httpReq.Context(), proto.UserCertsRequest{
+	cert, err := authClient.GenerateUserCerts(httpReq.Context(), proto.UserCertsRequest{
 		PublicKey: key.MarshalSSHPublicKey(),
 		Username:  f.sctx.GetUser(),
 		Expires:   time.Now().Add(time.Minute).UTC(),

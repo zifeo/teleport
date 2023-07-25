@@ -108,7 +108,7 @@ func TestGetUserClient(t *testing.T) {
 	remoteSite := &mockRemoteSite{name: "remote"}
 
 	// getting a client for the local site should return
-	// the RootClient from SessionContextConfig
+	// the rootClient from SessionContextConfig
 	clt, err := sctx.GetUserClient(ctx, localSite)
 	require.NoError(t, err)
 	require.Nil(t, clt)

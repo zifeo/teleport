@@ -128,7 +128,7 @@ export function AssistContextProvider(props: PropsWithChildren<unknown>) {
       )
     );
 
-    window.clearTimeout(refreshWebSocketTimeout.current);
+    // window.clearTimeout(refreshWebSocketTimeout.current);
 
     const initialPayload = {
       access_token: getAccessToken(),
@@ -137,10 +137,10 @@ export function AssistContextProvider(props: PropsWithChildren<unknown>) {
     initialMessage = JSON.stringify(initialPayload);
 
     // refresh the websocket connection just before the ten-minute timeout of the session
-    refreshWebSocketTimeout.current = window.setTimeout(
-      () => setupWebSocket(conversationId),
-      TEN_MINUTES * 0.8
-    );
+    // refreshWebSocketTimeout.current = window.setTimeout(
+    //   () => setupWebSocket(conversationId),
+    //   TEN_MINUTES * 0.8
+    // );
 
     activeWebSocket.current.onopen = () => {
       if (initialMessage) {

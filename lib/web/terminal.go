@@ -465,10 +465,15 @@ func (t *sshBaseHandler) issueSessionMFACerts(ctx context.Context, tc *client.Te
 	ctx, span := t.tracer.Start(ctx, "terminal/issueSessionMFACerts")
 	defer span.End()
 
-	// Always acquire single-use certificates from the root cluster, that's where
+	authClient, err := t.ctx.GetClient()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// Always acquire single-use certificates from the root cluster; that's where
 	// both the user and their devices are registered.
 	log.Debug("Attempting to issue a single-use user certificate with an MFA check.")
-	stream, err := t.ctx.cfg.RootClient.GenerateUserSingleUseCerts(ctx)
+	stream, err := authClient.GenerateUserSingleUseCerts(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}

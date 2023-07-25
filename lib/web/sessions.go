@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -78,6 +79,32 @@ type SessionContext struct {
 	kubeGRPCServiceConn *grpc.ClientConn
 }
 
+func NewRefCounterCloser[T io.Closer](obj T) *RefCounterCloser[T] {
+	rc := &RefCounterCloser[T]{
+		data:     obj,
+		refCount: atomic.Int32{},
+	}
+	rc.refCount.Store(1)
+	return rc
+}
+
+type RefCounterCloser[T io.Closer] struct {
+	refCount atomic.Int32
+	data     T
+}
+
+func (r *RefCounterCloser[T]) Inc() {
+	r.refCount.Add(1)
+}
+
+func (r *RefCounterCloser[T]) Close() error {
+	if r.refCount.Add(-1) == 0 {
+		return r.data.Close()
+	}
+
+	return nil
+}
+
 type SessionContextConfig struct {
 	// Log is used to emit logs
 	Log *logrus.Entry
@@ -87,9 +114,9 @@ type SessionContextConfig struct {
 	// RootClusterName is the name of the root cluster
 	RootClusterName string
 
-	// RootClient holds a connection to the root auth. Note that requests made using this
+	// rootClient holds a connection to the root auth. Note that requests made using this
 	// client are made with the identity of the user and are NOT cached.
-	RootClient *auth.Client
+	rootClient *RefCounterCloser[*auth.Client]
 
 	// UnsafeCachedAuthClient holds a read-only cache to root auth. Note this access
 	// point cache is authenticated with the identity of the node, not of the
@@ -111,8 +138,15 @@ type SessionContextConfig struct {
 	newRemoteClient func(ctx context.Context, sessionContext *SessionContext, site reversetunnelclient.RemoteSite) (auth.ClientI, error)
 }
 
+//func (c *SessionContext) Use() {
+//	c.sharedUseRefCountMtx.Lock()
+//	defer c.sharedUseRefCountMtx.Unlock()
+//
+//	c.sharedUseRefCount++
+//}
+
 func (c *SessionContextConfig) CheckAndSetDefaults() error {
-	if c.RootClient == nil {
+	if c.rootClient == nil {
 		return trace.BadParameter("RootClient required")
 	}
 
@@ -207,12 +241,12 @@ func (c *SessionContext) validateBearerToken(ctx context.Context, token string) 
 
 // GetClient returns the client connected to the auth server
 func (c *SessionContext) GetClient() (auth.ClientI, error) {
-	return c.cfg.RootClient, nil
+	return c.cfg.rootClient.data, nil
 }
 
 // GetClientConnection returns a connection to Auth Service
 func (c *SessionContext) GetClientConnection() *grpc.ClientConn {
-	return c.cfg.RootClient.GetConnection()
+	return c.cfg.rootClient.data.GetConnection()
 }
 
 // GetUserClient will return an auth.ClientI with the role of the user at
@@ -222,7 +256,7 @@ func (c *SessionContext) GetClientConnection() *grpc.ClientConn {
 func (c *SessionContext) GetUserClient(ctx context.Context, site reversetunnelclient.RemoteSite) (auth.ClientI, error) {
 	// if we're trying to access the local cluster, pass back the local client.
 	if c.cfg.RootClusterName == site.GetName() {
-		return c.cfg.RootClient, nil
+		return c.cfg.rootClient.data, nil
 	}
 
 	// return the client for the requested remote site
@@ -412,7 +446,12 @@ func (c *SessionContext) GetUser() string {
 // extendWebSession creates a new web session for this user
 // based on the previous session
 func (c *SessionContext) extendWebSession(ctx context.Context, req renewSessionRequest) (types.WebSession, error) {
-	session, err := c.cfg.RootClient.ExtendWebSession(ctx, auth.WebSessionReq{
+	authClient, err := c.GetClient()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	session, err := authClient.ExtendWebSession(ctx, auth.WebSessionReq{
 		User:            c.cfg.User,
 		PrevSessionID:   c.cfg.Session.GetName(),
 		AccessRequestID: req.AccessRequestID,
@@ -422,6 +461,11 @@ func (c *SessionContext) extendWebSession(ctx context.Context, req renewSessionR
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	// Increment the ref count on the root client to prevent it from being closed
+	c.cfg.rootClient.Inc()
+	// map the new client to the old session
+	//c.
 
 	return session, nil
 }
@@ -533,13 +577,22 @@ func (c *SessionContext) GetSessionID() string {
 // Close cleans up resources associated with this context and removes it
 // from the user context
 func (c *SessionContext) Close() error {
+	//{
+	//	c.sharedUseRefCountMtx.Lock()
+	//	defer c.sharedUseRefCountMtx.Unlock()
+	//	if c.sharedUseRefCount > 1 {
+	//		c.sharedUseRefCount--
+	//		return nil
+	//	}
+	//}
+
 	var err error
 	c.mu.Lock()
 	if c.kubeGRPCServiceConn != nil {
 		err = c.kubeGRPCServiceConn.Close()
 	}
 	c.mu.Unlock()
-	return trace.NewAggregate(c.remoteClientCache.Close(), c.cfg.RootClient.Close(), err)
+	return trace.NewAggregate(c.remoteClientCache.Close(), c.cfg.rootClient.Close(), err) // here
 }
 
 // getToken returns the bearer token associated with the underlying
@@ -637,6 +690,7 @@ func newSessionCache(ctx context.Context, config sessionCacheOptions) (*sessionC
 		accessPoint:               config.accessPoint,
 		sessions:                  make(map[string]*SessionContext),
 		resources:                 make(map[string]*sessionResources),
+		authClients:               make(map[string]*RefCounterCloser[*auth.Client]),
 		authServers:               config.servers,
 		closer:                    utils.NewCloseBroadcaster(),
 		cipherSuites:              config.cipherSuites,
@@ -675,6 +729,8 @@ type sessionCache struct {
 	// sessionGroup ensures only a single SessionContext will exist for a
 	// user+session.
 	sessionGroup singleflight.Group
+
+	authClients map[string]*RefCounterCloser[*auth.Client]
 
 	// session cache maintains a list of resources per-user as long
 	// as the user session is active even though individual session values
@@ -724,7 +780,11 @@ func (s *sessionCache) clearExpiredSessions(ctx context.Context) {
 		if !c.expired(ctx) {
 			continue
 		}
-		s.removeSessionContextLocked(c.cfg.Session.GetUser(), c.cfg.Session.GetName())
+		err := s.removeSessionContextLocked(c.cfg.Session.GetUser(), c.cfg.Session.GetName())
+		if err != nil {
+			s.log.WithError(err).Debug("Failed to remove expired session.")
+			return
+		}
 		s.log.WithField("ctx", c.String()).Debug("Context expired.")
 	}
 }
@@ -960,14 +1020,18 @@ func (s *sessionCache) newSessionContextFromSession(ctx context.Context, session
 		return nil, trace.Wrap(err)
 	}
 
-	userClient, err := auth.NewClient(apiclient.Config{
-		Addrs:                utils.NetAddrsToStrings(s.authServers),
-		Credentials:          []apiclient.Credentials{apiclient.LoadTLS(tlsConfig)},
-		CircuitBreakerConfig: breaker.NoopBreakerConfig(),
-		PROXYHeaderGetter:    client.CreatePROXYHeaderGetter(ctx, s.proxySigner),
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
+	userClient, ok := s.authClients[session.GetUser()] // Add reference counter
+	if !ok {
+		uClient, err := auth.NewClient(apiclient.Config{
+			Addrs:                utils.NetAddrsToStrings(s.authServers),
+			Credentials:          []apiclient.Credentials{apiclient.LoadTLS(tlsConfig)},
+			CircuitBreakerConfig: breaker.NoopBreakerConfig(),
+			PROXYHeaderGetter:    client.CreatePROXYHeaderGetter(ctx, s.proxySigner),
+		})
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		s.authClients[session.GetUser()] = NewRefCounterCloser(uClient)
 	}
 
 	sctx, err := NewSessionContext(SessionContextConfig{
@@ -976,7 +1040,7 @@ func (s *sessionCache) newSessionContextFromSession(ctx context.Context, session
 			"session": session.GetShortName(),
 		}),
 		User:                   session.GetUser(),
-		RootClient:             userClient,
+		rootClient:             userClient,
 		UnsafeCachedAuthClient: s.accessPoint,
 		Parent:                 s,
 		Resources:              s.upsertSessionContext(session.GetUser()),
