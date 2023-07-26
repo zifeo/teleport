@@ -784,7 +784,7 @@ func (h *Handler) bindDefaultEndpoints() {
 
 	// WebSocket endpoint for the chat conversation
 	h.GET("/webapi/sites/:site/assistant", h.WithClusterAuth(h.assistant))
-	h.GET("/webapi/sites/:site/assistant/v2", h.WithClusterWSAuth(h.assistantV2))
+	h.GET("/webapi/sites/:site/assistant/ws", h.WithClusterWSAuth(h.assistantV2))
 
 	// Sets the title for the conversation.
 	h.POST("/webapi/assistant/conversations/:conversation_id/title", h.WithAuth(h.setAssistantTitle))

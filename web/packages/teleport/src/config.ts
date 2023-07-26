@@ -242,7 +242,7 @@ const cfg = {
     assistGenerateSummaryPath: '/v1/webapi/assistant/title/summary',
     assistConversationWebSocketPath:
       // 'wss://:hostname/v1/webapi/sites/:clusterId/assistant',
-      'wss://:hostname/v1/webapi/sites/:clusterId/assistant/v2',
+      'wss://:hostname/v1/webapi/sites/:clusterId/assistant/ws',
     assistConversationHistoryPath:
       '/v1/webapi/assistant/conversations/:conversationId',
     assistExecuteCommandWebSocketPath:
