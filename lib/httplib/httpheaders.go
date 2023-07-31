@@ -31,33 +31,25 @@ import (
 	"github.com/gravitational/teleport/api/utils"
 )
 
-// Mutex protected cache for memoizing functions which construct the CSP header string.
+// Cache for memoizing functions which construct the CSP header string.
 // This is necessary because the CSP header is constructed on every request to the web UI,
 // so caching here has a significant performance impact.
-type cspCache struct {
-	sync.RWMutex
-	entries map[string]string
-}
+type cspCache struct{ sync.Map }
 
-func (c *cspCache) get(key string) (string, bool) {
-	c.RLock()
-	defer c.RUnlock()
-
-	val, ok := c.entries[key]
-	return val, ok
-}
-
-func (c *cspCache) set(key, value string) {
-	c.Lock()
-	defer c.Unlock()
-
-	c.entries[key] = value
-}
-
-func newCSPCache() *cspCache {
-	return &cspCache{
-		entries: make(map[string]string),
+func (c *cspCache) load(key string) (string, bool) {
+	if cspString, ok := c.Map.Load(key); ok {
+		if cspStringStr, ok := cspString.(string); ok {
+			return cspStringStr, true
+		} else {
+			panic(fmt.Sprintf("cspString is not a string: %v", cspString))
+		}
 	}
+
+	return "", false
+}
+
+func newCSPCache() cspCache {
+	return cspCache{}
 }
 
 type cspMap map[string][]string
@@ -182,13 +174,13 @@ func getIndexContentSecurityPolicy(withStripe, withWasm bool) cspMap {
 // which is a route to a desktop session that uses WASM.
 var desktopSessionRe = regexp.MustCompile(`^/web/cluster/[^/]+/desktops/[^/]+/[^/]+$`)
 
-var indexCSPStringCache *cspCache = newCSPCache()
+var indexCSPStringCache cspCache = newCSPCache()
 
 func getIndexContentSecurityPolicyString(cfg proto.Features, urlPath string) string {
 	// Check for result with this cfg and urlPath in cache
 	withStripe := cfg.GetCloud() && cfg.GetIsUsageBased()
 	key := fmt.Sprintf("%v-%v", withStripe, urlPath)
-	if cspString, ok := indexCSPStringCache.get(key); ok {
+	if cspString, ok := indexCSPStringCache.load(key); ok {
 		return cspString
 	}
 
@@ -198,7 +190,7 @@ func getIndexContentSecurityPolicyString(cfg proto.Features, urlPath string) str
 		getIndexContentSecurityPolicy(withStripe, withWasm),
 	)
 	// Add result to cache
-	indexCSPStringCache.set(key, cspString)
+	indexCSPStringCache.Store(key, cspString)
 
 	return cspString
 }
@@ -209,10 +201,10 @@ func SetIndexContentSecurityPolicy(h http.Header, cfg proto.Features, urlPath st
 	h.Set("Content-Security-Policy", cspString)
 }
 
-var appLaunchCSPStringCache *cspCache = newCSPCache()
+var appLaunchCSPStringCache cspCache = newCSPCache()
 
 func getAppLaunchContentSecurityPolicyString(applicationURL string) string {
-	if cspString, ok := appLaunchCSPStringCache.get(applicationURL); ok {
+	if cspString, ok := appLaunchCSPStringCache.load(applicationURL); ok {
 		return cspString
 	}
 
@@ -223,7 +215,7 @@ func getAppLaunchContentSecurityPolicyString(applicationURL string) string {
 			"connect-src": {"'self'", applicationURL},
 		},
 	)
-	appLaunchCSPStringCache.set(applicationURL, cspString)
+	appLaunchCSPStringCache.Store(applicationURL, cspString)
 
 	return cspString
 }
@@ -234,10 +226,10 @@ func SetAppLaunchContentSecurityPolicy(h http.Header, applicationURL string) {
 	h.Set("Content-Security-Policy", cspString)
 }
 
-var redirectCSPStringCache *cspCache = newCSPCache()
+var redirectCSPStringCache cspCache = newCSPCache()
 
 func getRedirectPageContentSecurityPolicyString(scriptSrc string) string {
-	if cspString, ok := redirectCSPStringCache.get(scriptSrc); ok {
+	if cspString, ok := redirectCSPStringCache.load(scriptSrc); ok {
 		return cspString
 	}
 
@@ -247,7 +239,7 @@ func getRedirectPageContentSecurityPolicyString(scriptSrc string) string {
 			"script-src": {"'" + scriptSrc + "'"},
 		},
 	)
-	redirectCSPStringCache.set(scriptSrc, cspString)
+	redirectCSPStringCache.Store(scriptSrc, cspString)
 
 	return cspString
 }
