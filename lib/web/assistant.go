@@ -333,7 +333,7 @@ func (h *Handler) assistant(w http.ResponseWriter, r *http.Request, _ httprouter
 	}
 
 	defer ws.Close()
-	if err := runAssistant(h, w, r, sctx, site, ws); err != nil {
+	if err := runAssistant(h, w, r, sctx, site, NewWS(ws, nil)); err != nil {
 		h.log.Warn(trace.DebugReport(err))
 
 		if err := ws.WriteJSON(err); err != nil {
@@ -346,7 +346,7 @@ func (h *Handler) assistant(w http.ResponseWriter, r *http.Request, _ httprouter
 }
 
 func (h *Handler) assistantV2(w http.ResponseWriter, r *http.Request, _ httprouter.Params,
-	sctx *SessionContext, site reversetunnelclient.RemoteSite, ws *websocket.Conn,
+	sctx *SessionContext, site reversetunnelclient.RemoteSite, ws *WS,
 ) (any, error) {
 	if err := runAssistant(h, w, r, sctx, site, ws); err != nil {
 		h.log.Warn(trace.DebugReport(err))
@@ -401,7 +401,7 @@ func checkAssistEnabled(a auth.ClientI, ctx context.Context) error {
 
 // runAssistant upgrades the HTTP connection to a websocket and starts a chat loop.
 func runAssistant(h *Handler, _ http.ResponseWriter, r *http.Request,
-	sctx *SessionContext, site reversetunnelclient.RemoteSite, ws *websocket.Conn,
+	sctx *SessionContext, site reversetunnelclient.RemoteSite, ws *WS,
 ) (err error) {
 	q := r.URL.Query()
 	conversationID := q.Get("conversation_id")

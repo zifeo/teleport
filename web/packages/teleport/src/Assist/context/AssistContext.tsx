@@ -118,6 +118,16 @@ export function AssistContextProvider(props: PropsWithChildren<unknown>) {
     });
   }
 
+  function extendWebSession() {
+    const payload = {
+      access_token: getAccessToken(),
+    };
+
+    const data = JSON.stringify(payload);
+    console.log('extending web session', data);
+    activeWebSocket.current.send('t' + data);
+  }
+
   function setupWebSocket(conversationId: string, initialMessage?: string) {
     activeWebSocket.current = new WebSocket(
       cfg.getAssistConversationWebSocketUrl(
@@ -137,10 +147,10 @@ export function AssistContextProvider(props: PropsWithChildren<unknown>) {
     initialMessage = JSON.stringify(initialPayload);
 
     // refresh the websocket connection just before the ten-minute timeout of the session
-    // refreshWebSocketTimeout.current = window.setTimeout(
-    //   () => setupWebSocket(conversationId),
-    //   TEN_MINUTES * 0.8
-    // );
+    refreshWebSocketTimeout.current = window.setInterval(
+      () => extendWebSession(),
+      TEN_MINUTES * 0.1
+    );
 
     activeWebSocket.current.onopen = () => {
       if (initialMessage) {

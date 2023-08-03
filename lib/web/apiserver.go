@@ -3485,6 +3485,45 @@ func (h *Handler) String() string {
 	return "multi site"
 }
 
+type authRequest struct {
+	// BearerToken is a token used to authenticate the user.
+	AccessToken string `json:"access_token"`
+}
+
+type WS struct {
+	*websocket.Conn
+	updateToken func(token string) error
+}
+
+func NewWS(conn *websocket.Conn, updateToken func(token string) error) *WS {
+	return &WS{
+		Conn:        conn,
+		updateToken: updateToken,
+	}
+}
+
+func (w *WS) ReadMessage() (int, []byte, error) {
+	if w.updateToken == nil {
+		return w.Conn.ReadMessage()
+	}
+
+	messageType, p, err := w.Conn.ReadMessage()
+	if err == nil && len(p) > 0 && p[0] == 't' {
+		var r authRequest
+		if err := json.Unmarshal(p[1:], &r); err != nil {
+			// Can't parse the token, pretend that nothing happened
+			return messageType, p, err
+		}
+		if err := w.updateToken(r.AccessToken); err != nil {
+			_ = w.Conn.Close() // invalid token, close the connection
+		}
+
+		// Read and return the next message
+		return w.Conn.ReadMessage()
+	}
+	return messageType, p, err
+}
+
 // currentSiteShortcut is a special shortcut that will return the first
 // available site, is helpful when UI works in single site mode to reduce
 // the amount of requests
@@ -3496,7 +3535,7 @@ type ContextHandler func(w http.ResponseWriter, r *http.Request, p httprouter.Pa
 // ClusterHandler is a authenticated handler that is called for some existing remote cluster
 type ClusterHandler func(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (interface{}, error)
 
-type ClusterWSHandler func(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite, ws *websocket.Conn) (any, error)
+type ClusterWSHandler func(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite, ws *WS) (any, error)
 
 // WithClusterAuth wraps a ClusterHandler to ensure that a request is authenticated to this proxy
 // (the same as WithAuth), as well as to grab the remoteSite (which can represent this local cluster
@@ -3523,7 +3562,7 @@ func (h *Handler) WithClusterWSAuth(fn ClusterWSHandler) httprouter.Handle {
 	})
 }
 
-func (h *Handler) authenticateWSWithCluster(w http.ResponseWriter, r *http.Request, p httprouter.Params) (*SessionContext, reversetunnelclient.RemoteSite, *websocket.Conn, error) {
+func (h *Handler) authenticateWSWithCluster(w http.ResponseWriter, r *http.Request, p httprouter.Params) (*SessionContext, reversetunnelclient.RemoteSite, *WS, error) {
 	sctx, ws, err := h.AuthenticateWSConnection(w, r)
 	if err != nil {
 		return nil, nil, nil, trace.Wrap(err)
@@ -3878,7 +3917,7 @@ func extractCookie(r *http.Request) (*websession.Cookie, error) {
 
 // AuthenticateWSConnection authenticates websocket connection using a combination of a session cookie
 // and bearer token.
-func (h *Handler) AuthenticateWSConnection(w http.ResponseWriter, r *http.Request) (*SessionContext, *websocket.Conn, error) {
+func (h *Handler) AuthenticateWSConnection(w http.ResponseWriter, r *http.Request) (*SessionContext, *WS, error) {
 	decodedCookie, err := extractCookie(r)
 	if err != nil {
 		return nil, nil, trace.Wrap(err)
@@ -3910,11 +3949,6 @@ func (h *Handler) AuthenticateWSConnection(w http.ResponseWriter, r *http.Reques
 		return nil, nil, trace.Errorf("failed to read the first message: %w", err)
 	}
 
-	type authRequest struct {
-		// BearerToken is a token used to authenticate the user.
-		AccessToken string `json:"access_token"`
-	}
-
 	var req authRequest // TODO: add read limit
 	if err := json.Unmarshal(msg, &req); err != nil {
 		return nil, nil, trace.Errorf("failed to unmarshal the auth request: %w", err)
@@ -3928,7 +3962,37 @@ func (h *Handler) AuthenticateWSConnection(w http.ResponseWriter, r *http.Reques
 		return nil, nil, trace.AccessDenied("bad bearer token")
 	}
 
-	return sessionCtx, ws, nil
+	sessionTicker := time.NewTicker(10 * time.Minute)
+	refreshChan := make(chan struct{}, 1)
+
+	extendSessionFn := func(token string) error {
+		log.Debugf("Extending session for %v", sessionCtx)
+		err := sessionCtx.validateBearerToken(r.Context(), token)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		log.Debugf("Session extended for %v", sessionCtx)
+		refreshChan <- struct{}{}
+
+		return nil
+	}
+
+	go func() {
+		defer sessionTicker.Stop()
+		for {
+			select {
+			case <-sessionTicker.C:
+				// session has not been refreshed, close the connection
+				_ = ws.Close()
+			case <-refreshChan:
+				// session has been refreshed, reset the ticker
+				sessionTicker.Reset(10 * time.Minute)
+				return
+			}
+		}
+	}()
+
+	return sessionCtx, NewWS(ws, extendSessionFn), nil
 }
 
 // ProxyWithRoles returns a reverse tunnel proxy verifying the permissions

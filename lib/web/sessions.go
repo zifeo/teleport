@@ -98,9 +98,12 @@ func (r *RefCounterCloser[T]) Inc() {
 }
 
 func (r *RefCounterCloser[T]) Close() error {
+	log.Debugf("Maybe closing %T, refCount=%v", r.data, r.refCount.Load())
 	if r.refCount.Add(-1) == 0 {
 		return r.data.Close()
 	}
+
+	log.Debugf("Closing %T, refCount=%v", r.data, r.refCount.Load())
 
 	return nil
 }
@@ -137,13 +140,6 @@ type SessionContextConfig struct {
 	// newRemoteClient is used by tests to override how remote clients are constructed to allow for fake sites
 	newRemoteClient func(ctx context.Context, sessionContext *SessionContext, site reversetunnelclient.RemoteSite) (auth.ClientI, error)
 }
-
-//func (c *SessionContext) Use() {
-//	c.sharedUseRefCountMtx.Lock()
-//	defer c.sharedUseRefCountMtx.Unlock()
-//
-//	c.sharedUseRefCount++
-//}
 
 func (c *SessionContextConfig) CheckAndSetDefaults() error {
 	if c.rootClient == nil {
@@ -463,7 +459,7 @@ func (c *SessionContext) extendWebSession(ctx context.Context, req renewSessionR
 	}
 
 	// Increment the ref count on the root client to prevent it from being closed
-	c.cfg.rootClient.Inc()
+	//c.cfg.rootClient.Inc()
 	// map the new client to the old session
 	//c.
 
@@ -1020,7 +1016,7 @@ func (s *sessionCache) newSessionContextFromSession(ctx context.Context, session
 		return nil, trace.Wrap(err)
 	}
 
-	userClient, ok := s.authClients[session.GetUser()] // Add reference counter
+	userClient, ok := s.authClients[session.GetUser()]
 	if !ok {
 		uClient, err := auth.NewClient(apiclient.Config{
 			Addrs:                utils.NetAddrsToStrings(s.authServers),
@@ -1031,7 +1027,11 @@ func (s *sessionCache) newSessionContextFromSession(ctx context.Context, session
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
-		s.authClients[session.GetUser()] = NewRefCounterCloser(uClient)
+		userClient = NewRefCounterCloser(uClient)
+		s.authClients[session.GetUser()] = userClient
+	} else {
+		// increment the reference counter to prevent the client from being closed
+		userClient.Inc()
 	}
 
 	sctx, err := NewSessionContext(SessionContextConfig{
