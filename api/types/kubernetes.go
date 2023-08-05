@@ -736,3 +736,42 @@ type GKECluster struct {
 	// Labels are the cluster labels in GCP.
 	Labels map[string]string
 }
+
+// AKSAuthMethod defines the authentication method for AKS cluster.
+type AKSAuthMethod uint8
+
+const (
+	// AzureRBAC indicates that the Azure AD is enabled and authorization is handled by Azure RBAC.
+	AzureRBAC AKSAuthMethod = iota
+	// AzureAD indicates that the Azure AD is enabled but authorization is handled by Kubernetes RBAC.
+	AzureAD
+	// LocalAccounts indicates that the cluster access happens through Local accounts created
+	// during provisioning phase.
+	LocalAccounts
+)
+
+// AKSCluster represents an AKS cluster.
+type AKSCluster struct {
+	// Name is the name of the cluster.
+	Name string
+	// GroupName is the resource group name.
+	GroupName string
+	// TenantID is the cluster TenantID.
+	TenantID string
+	// Location is the cluster region.
+	Location string
+	// SubscriptionID is the cluster subscription id.
+	SubscriptionID string
+	// Tags are the cluster tags.
+	Tags map[string]string
+	// Properties are the cluster authentication and authorization properties.
+	Properties AKSClusterProperties
+}
+
+// AKSClusterProperties holds the AZ cluster authentication properties.
+type AKSClusterProperties struct {
+	// AccessConfig indicates the authentication & authorization config to use with the cluster.
+	AccessConfig AKSAuthMethod
+	// LocalAccounts indicates if the cluster has local accounts.
+	LocalAccounts bool
+}

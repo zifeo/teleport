@@ -40,46 +40,9 @@ import (
 	authztypes "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/gravitational/teleport/api/types"
 )
-
-// AKSAuthMethod defines the authentication method for AKS cluster.
-type AKSAuthMethod uint8
-
-const (
-	// AzureRBAC indicates that the Azure AD is enabled and authorization is handled by Azure RBAC.
-	AzureRBAC AKSAuthMethod = iota
-	// AzureAD indicates that the Azure AD is enabled but authorization is handled by Kubernetes RBAC.
-	AzureAD
-	// LocalAccounts indicates that the cluster access happens through Local accounts created
-	// during provisioning phase.
-	LocalAccounts
-)
-
-// AKSCluster represents an AKS cluster.
-type AKSCluster struct {
-	// Name is the name of the cluster.
-	Name string
-	// GroupName is the resource group name.
-	GroupName string
-	// TenantID is the cluster TenantID.
-	TenantID string
-	// Location is the cluster region.
-	Location string
-	// SubscriptionID is the cluster subscription id.
-	SubscriptionID string
-	// Tags are the cluster tags.
-	Tags map[string]string
-	// Properties are the cluster authentication and authorization properties.
-	Properties AKSClusterProperties
-}
-
-// AKSClusterProperties holds the AZ cluster authentication properties.
-type AKSClusterProperties struct {
-	// AccessConfig indicates the authentication & authorization config to use with the cluster.
-	AccessConfig AKSAuthMethod
-	// LocalAccounts indicates if the cluster has local accounts.
-	LocalAccounts bool
-}
 
 // ARMAKS is an interface for armcontainerservice.ManagedClustersClient.
 type ARMAKS interface {
@@ -141,9 +104,9 @@ func (c ClusterCredentialsConfig) CheckAndSetDefaults() error {
 // AKSClient is the Azure client to interact with AKS.
 type AKSClient interface {
 	// ListAll returns all AKSClusters the user has access to.
-	ListAll(ctx context.Context) ([]*AKSCluster, error)
+	ListAll(ctx context.Context) ([]*types.AKSCluster, error)
 	// ListAll returns all AKSClusters the user has access to within the resource group.
-	ListWithinGroup(ctx context.Context, group string) ([]*AKSCluster, error)
+	ListWithinGroup(ctx context.Context, group string) ([]*types.AKSCluster, error)
 	// ClusterCredentials returns the credentials for accessing the desired AKS cluster.
 	// If agent access has not yet been configured, this function will attempt to configure it
 	// using administrator credentials `ListClusterAdminCredentials`` or by running a command `BeginRunCommand`.
@@ -169,7 +132,7 @@ func NewAKSClustersClient(api ARMAKS, azIdentity azureIdentityFunction) AKSClien
 }
 
 // get returns AKSCluster information for a single AKS cluster.
-func (c *aksClient) get(ctx context.Context, group, name string) (*AKSCluster, error) {
+func (c *aksClient) get(ctx context.Context, group, name string) (*types.AKSCluster, error) {
 	res, err := c.api.Get(ctx, group, name, nil)
 	if err != nil {
 		return nil, trace.Wrap(ConvertResponseError(err))
@@ -178,8 +141,8 @@ func (c *aksClient) get(ctx context.Context, group, name string) (*AKSCluster, e
 	return cluster, trace.Wrap(err)
 }
 
-func (c *aksClient) ListAll(ctx context.Context) ([]*AKSCluster, error) {
-	var servers []*AKSCluster
+func (c *aksClient) ListAll(ctx context.Context) ([]*types.AKSCluster, error) {
+	var servers []*types.AKSCluster
 	options := &armcontainerservice.ManagedClustersClientListOptions{}
 	pager := c.api.NewListPager(options)
 
@@ -201,8 +164,8 @@ func (c *aksClient) ListAll(ctx context.Context) ([]*AKSCluster, error) {
 	return servers, nil
 }
 
-func (c *aksClient) ListWithinGroup(ctx context.Context, group string) ([]*AKSCluster, error) {
-	var servers []*AKSCluster
+func (c *aksClient) ListWithinGroup(ctx context.Context, group string) ([]*types.AKSCluster, error) {
+	var servers []*types.AKSCluster
 	options := &armcontainerservice.ManagedClustersClientListByResourceGroupOptions{}
 	pager := c.api.NewListByResourceGroupPager(group, options)
 	for pager.More() {
@@ -239,15 +202,15 @@ func (c *aksClient) ClusterCredentials(ctx context.Context, cfg ClusterCredentia
 	}
 
 	switch clusterDetails.Properties.AccessConfig {
-	case AzureRBAC:
+	case types.AzureRBAC:
 		// In this mode, Authentication happens via AD users and Authorization is granted by AzureRBAC.
 		cfg, expiresOn, err := c.getAzureRBACCredentials(ctx, cfg)
 		return cfg, expiresOn, trace.Wrap(err)
-	case AzureAD:
+	case types.AzureAD:
 		// In this mode, Authentication happens via AD users and Authorization is granted by Kubernetes RBAC.
 		cfg, expiresOn, err := c.getAzureADCredentials(ctx, cfg)
 		return cfg, expiresOn, trace.Wrap(err)
-	case LocalAccounts:
+	case types.LocalAccounts:
 		// In this mode, Authentication is granted by provisioned static accounts accessible via
 		// ListClusterUserCredentials
 		cfg, err := c.getUserCredentials(ctx, cfg)
@@ -561,8 +524,8 @@ func checkIfAuthMethodIsUnSupported(cfg *rest.Config) (*rest.Config, error) {
 }
 
 // AKSClusterFromManagedCluster converts an Azure armcontainerservice.ManagedCluster into AKSCluster.
-func AKSClusterFromManagedCluster(cluster *armcontainerservice.ManagedCluster) (*AKSCluster, error) {
-	result := &AKSCluster{
+func AKSClusterFromManagedCluster(cluster *armcontainerservice.ManagedCluster) (*types.AKSCluster, error) {
+	result := &types.AKSCluster{
 		Name:     StringVal(cluster.Name),
 		Location: StringVal(cluster.Location),
 		Tags:     ConvertTags(cluster.Tags),
@@ -583,17 +546,17 @@ func AKSClusterFromManagedCluster(cluster *armcontainerservice.ManagedCluster) (
 	}
 
 	if cluster.Properties.AADProfile != nil && ptrToVal(cluster.Properties.AADProfile.EnableAzureRBAC) {
-		result.Properties = AKSClusterProperties{
-			AccessConfig: AzureRBAC,
+		result.Properties = types.AKSClusterProperties{
+			AccessConfig: types.AzureRBAC,
 		}
 	} else if cluster.Properties.AADProfile != nil {
-		result.Properties = AKSClusterProperties{
-			AccessConfig:  AzureAD,
+		result.Properties = types.AKSClusterProperties{
+			AccessConfig:  types.AzureAD,
 			LocalAccounts: !ptrToVal(cluster.Properties.DisableLocalAccounts),
 		}
 	} else {
-		result.Properties = AKSClusterProperties{
-			AccessConfig:  LocalAccounts,
+		result.Properties = types.AKSClusterProperties{
+			AccessConfig:  types.LocalAccounts,
 			LocalAccounts: true,
 		}
 	}

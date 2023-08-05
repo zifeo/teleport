@@ -28,7 +28,6 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/gravitational/teleport/api/types"
-	"github.com/gravitational/teleport/lib/cloud/azure"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -196,7 +195,7 @@ func setGCPKubeName(meta types.Metadata, firstNamePart string, extraNameParts ..
 }
 
 // NewKubeClusterFromAzureAKS creates a kube_cluster resource from an AKSCluster.
-func NewKubeClusterFromAzureAKS(cluster *azure.AKSCluster) (types.KubeCluster, error) {
+func NewKubeClusterFromAzureAKS(cluster *types.AKSCluster) (types.KubeCluster, error) {
 	labels := labelsFromAzureKubeCluster(cluster)
 	return types.NewKubernetesClusterV3(
 		setAzureKubeName(types.Metadata{
@@ -216,7 +215,7 @@ func NewKubeClusterFromAzureAKS(cluster *azure.AKSCluster) (types.KubeCluster, e
 }
 
 // labelsFromAzureKubeCluster creates kube cluster labels.
-func labelsFromAzureKubeCluster(cluster *azure.AKSCluster) map[string]string {
+func labelsFromAzureKubeCluster(cluster *types.AKSCluster) map[string]string {
 	labels := azureTagsToLabels(cluster.Tags)
 	labels[types.OriginLabel] = types.OriginCloud
 	labels[types.CloudLabel] = types.CloudAzure
