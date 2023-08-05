@@ -125,7 +125,7 @@ func (a *gkeFetcher) String() string {
 // filtering labels. It also excludes GKE clusters that are not Running/Degraded/Reconciling.
 // If any cluster does not match the filtering criteria, this function returns
 // a “trace.CompareFailed“ error to distinguish filtering and operational errors.
-func (a *gkeFetcher) getMatchingKubeCluster(gkeCluster gcp.GKECluster) (types.KubeCluster, error) {
+func (a *gkeFetcher) getMatchingKubeCluster(gkeCluster types.GKECluster) (types.KubeCluster, error) {
 	cluster, err := services.NewKubeClusterFromGCPGKE(gkeCluster)
 	if err != nil {
 		return nil, trace.WrapWithMessage(err, "Unable to create types.KubernetesClusterV3 cluster from gcp.GKECluster.")
@@ -137,7 +137,7 @@ func (a *gkeFetcher) getMatchingKubeCluster(gkeCluster gcp.GKECluster) (types.Ku
 		return nil, trace.CompareFailed("GKE cluster %q labels does not match the selector: %s", gkeCluster.Name, reason)
 	}
 
-	switch st := gkeCluster.Status; st {
+	switch st := containerpb.Cluster_Status(gkeCluster.Status); st {
 	case containerpb.Cluster_RUNNING, containerpb.Cluster_RECONCILING, containerpb.Cluster_DEGRADED:
 	default:
 		return nil, trace.CompareFailed("GKE cluster %q not enrolled due to its current status: %s", gkeCluster.Name, st)

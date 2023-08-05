@@ -719,3 +719,20 @@ func (k KubeResources) AsResources() ResourcesWithLabels {
 	}
 	return resources
 }
+
+// GKECluster represents a GKE cluster and contains the information necessary
+// for Teleport Discovery to decide whether or not to import the cluster.
+type GKECluster struct {
+	// Name is the cluster name.
+	Name string
+	// Description is the cluster description field in GCP.
+	Description string
+	// Location is the cluster location.
+	Location string
+	// ProjectID is the GCP project ID to which the cluster belongs.
+	ProjectID string
+	// Status is the cluster current status.
+	Status int32
+	// Labels are the cluster labels in GCP.
+	Labels map[string]string
+}

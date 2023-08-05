@@ -29,7 +29,6 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/cloud/azure"
-	"github.com/gravitational/teleport/lib/cloud/gcp"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -229,7 +228,7 @@ func labelsFromAzureKubeCluster(cluster *azure.AKSCluster) map[string]string {
 }
 
 // NewKubeClusterFromGCPGKE creates a kube_cluster resource from an GKE cluster.
-func NewKubeClusterFromGCPGKE(cluster gcp.GKECluster) (types.KubeCluster, error) {
+func NewKubeClusterFromGCPGKE(cluster types.GKECluster) (types.KubeCluster, error) {
 	return types.NewKubernetesClusterV3(
 		setGCPKubeName(types.Metadata{
 			Description: getOrSetDefaultGCPDescription(cluster),
@@ -246,7 +245,7 @@ func NewKubeClusterFromGCPGKE(cluster gcp.GKECluster) (types.KubeCluster, error)
 
 // getOrSetDefaultGCPDescription gets the default GKE cluster description if available,
 // otherwise returns a default one.
-func getOrSetDefaultGCPDescription(cluster gcp.GKECluster) string {
+func getOrSetDefaultGCPDescription(cluster types.GKECluster) string {
 	if len(cluster.Description) > 0 {
 		return cluster.Description
 	}
@@ -256,7 +255,7 @@ func getOrSetDefaultGCPDescription(cluster gcp.GKECluster) string {
 }
 
 // labelsFromGCPKubeCluster creates kube cluster labels.
-func labelsFromGCPKubeCluster(cluster gcp.GKECluster) map[string]string {
+func labelsFromGCPKubeCluster(cluster types.GKECluster) map[string]string {
 	labels := maps.Clone(cluster.Labels)
 	labels[types.OriginLabel] = types.OriginCloud
 	labels[types.CloudLabel] = types.CloudGCP

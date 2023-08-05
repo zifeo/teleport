@@ -44,7 +44,7 @@ type GKEClient interface {
 	// ListClusters lists the GCP GKE clusters that belong to the projectID and are
 	// located in location.
 	// location supports wildcard "*".
-	ListClusters(ctx context.Context, projectID string, location string) ([]GKECluster, error)
+	ListClusters(ctx context.Context, projectID string, location string) ([]types.GKECluster, error)
 	// GetClusterRestConfig returns the Kubernetes client config to connect to the
 	// specified cluster. The access token is based on the default credentials configured
 	// for the current GCP Service Account and must include the following permissions:
@@ -91,23 +91,6 @@ type gcpGKEClient interface {
 
 // make sure container.ClusterManagerClient satisfies GCPGKEClient interface.
 var _ gcpGKEClient = &container.ClusterManagerClient{}
-
-// GKECluster represents a GKE cluster and contains the information necessary
-// for Teleport Discovery to decide whether or not to import the cluster.
-type GKECluster struct {
-	// Name is the cluster name.
-	Name string
-	// Description is the cluster description field in GCP.
-	Description string
-	// Location is the cluster location.
-	Location string
-	// ProjectID is the GCP project ID to which the cluster belongs.
-	ProjectID string
-	// Status is the cluster current status.
-	Status containerpb.Cluster_Status
-	// Labels are the cluster labels in GCP.
-	Labels map[string]string
-}
 
 // ClusterDetails is the cluster identification properties.
 type ClusterDetails struct {
@@ -169,7 +152,7 @@ type gkeClient struct {
 // ListClusters lists the GCP GKE clusters that belong to the projectID and are
 // located in location.
 // location supports wildcard "*".
-func (g *gkeClient) ListClusters(ctx context.Context, projectID string, location string) ([]GKECluster, error) {
+func (g *gkeClient) ListClusters(ctx context.Context, projectID string, location string) ([]types.GKECluster, error) {
 	if len(projectID) == 0 {
 		return nil, trace.BadParameter("projectID must be set")
 	}
@@ -186,14 +169,14 @@ func (g *gkeClient) ListClusters(ctx context.Context, projectID string, location
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var clusters []GKECluster
+	var clusters []types.GKECluster
 	for _, cluster := range res.Clusters {
-		clusters = append(clusters, GKECluster{
+		clusters = append(clusters, types.GKECluster{
 			Name:        cluster.Name,
 			Description: cluster.Description,
 			ProjectID:   projectID,
 			Labels:      cluster.ResourceLabels,
-			Status:      cluster.Status,
+			Status:      int32(cluster.Status),
 			Location:    cluster.Location,
 		})
 	}
