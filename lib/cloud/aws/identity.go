@@ -21,10 +21,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/arn"
-	"github.com/aws/aws-sdk-go/service/sts"
-	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/gravitational/trace"
 )
 
@@ -106,13 +105,13 @@ func (i identityBase) String() string {
 
 // GetIdentityWithClient determines AWS identity of this Teleport process
 // using the provided STS API client.
-func GetIdentityWithClient(ctx context.Context, stsClient stsiface.STSAPI) (Identity, error) {
-	out, err := stsClient.GetCallerIdentityWithContext(ctx, &sts.GetCallerIdentityInput{})
+func GetIdentityWithClient(ctx context.Context, stsClient sts.Client) (Identity, error) {
+	out, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	return IdentityFromArn(aws.StringValue(out.Arn))
+	return IdentityFromArn(aws.ToString(out.Arn))
 }
 
 // IdentityFromArn returns an `Identity` interface based on the provided ARN.

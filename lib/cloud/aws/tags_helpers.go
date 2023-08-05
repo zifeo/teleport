@@ -17,14 +17,13 @@ limitations under the License.
 package aws
 
 import (
-	rdsTypesV2 "github.com/aws/aws-sdk-go-v2/service/rds/types"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/elasticache"
-	"github.com/aws/aws-sdk-go/service/memorydb"
-	"github.com/aws/aws-sdk-go/service/opensearchservice"
-	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/service/redshift"
-	"github.com/aws/aws-sdk-go/service/redshiftserverless"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	elasticacheTypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
+	memorydbTypes "github.com/aws/aws-sdk-go-v2/service/memorydb/types"
+	opensearchTypes "github.com/aws/aws-sdk-go-v2/service/opensearch/types"
+	rdsTypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	redshiftTypes "github.com/aws/aws-sdk-go-v2/service/redshift/types"
+	redshiftserverlessTypes "github.com/aws/aws-sdk-go-v2/service/redshiftserverless/types"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -36,13 +35,14 @@ import (
 type ResourceTag interface {
 	// TODO Go generic does not allow access common fields yet. List all types
 	//  here and use a type switch for now.
-	rdsTypesV2.Tag |
-		*rds.Tag |
-		*redshift.Tag |
-		*elasticache.Tag |
-		*memorydb.Tag |
-		*redshiftserverless.Tag |
-		*opensearchservice.Tag
+	*rdsTypes.Tag |
+		rdsTypes.Tag |
+		*elasticacheTypes.Tag |
+		*memorydbTypes.Tag |
+		*opensearchTypes.Tag |
+		redshiftTypes.Tag |
+		*redshiftTypes.Tag |
+		*redshiftserverlessTypes.Tag
 }
 
 // TagsToLabels converts a list of AWS resource tags to a label map.
@@ -66,20 +66,20 @@ func TagsToLabels[Tag ResourceTag](tags []Tag) map[string]string {
 
 func resourceTagToKeyValue[Tag ResourceTag](tag Tag) (string, string) {
 	switch v := any(tag).(type) {
-	case *rds.Tag:
-		return aws.StringValue(v.Key), aws.StringValue(v.Value)
-	case *redshift.Tag:
-		return aws.StringValue(v.Key), aws.StringValue(v.Value)
-	case *elasticache.Tag:
-		return aws.StringValue(v.Key), aws.StringValue(v.Value)
-	case *memorydb.Tag:
-		return aws.StringValue(v.Key), aws.StringValue(v.Value)
-	case *redshiftserverless.Tag:
-		return aws.StringValue(v.Key), aws.StringValue(v.Value)
-	case rdsTypesV2.Tag:
-		return aws.StringValue(v.Key), aws.StringValue(v.Value)
-	case *opensearchservice.Tag:
-		return aws.StringValue(v.Key), aws.StringValue(v.Value)
+	case *rdsTypes.Tag:
+		return aws.ToString(v.Key), aws.ToString(v.Value)
+	case rdsTypes.Tag:
+		return aws.ToString(v.Key), aws.ToString(v.Value)
+	case *redshiftTypes.Tag:
+		return aws.ToString(v.Key), aws.ToString(v.Value)
+	case *elasticacheTypes.Tag:
+		return aws.ToString(v.Key), aws.ToString(v.Value)
+	case *memorydbTypes.Tag:
+		return aws.ToString(v.Key), aws.ToString(v.Value)
+	case *redshiftserverlessTypes.Tag:
+		return aws.ToString(v.Key), aws.ToString(v.Value)
+	case *opensearchTypes.Tag:
+		return aws.ToString(v.Key), aws.ToString(v.Value)
 	default:
 		return "", ""
 	}
@@ -109,16 +109,16 @@ func LabelsToTags[T any, PT SettableTag[T]](labels map[string]string) (tags []*T
 }
 
 // LabelsToRDSV2Tags converts labels into [rdsTypesV2.Tag] list.
-func LabelsToRDSV2Tags(labels map[string]string) []rdsTypesV2.Tag {
+func LabelsToRDSV2Tags(labels map[string]string) []rdsTypes.Tag {
 	keys := maps.Keys(labels)
 	slices.Sort(keys)
 
-	ret := make([]rdsTypesV2.Tag, 0, len(keys))
+	ret := make([]rdsTypes.Tag, 0, len(keys))
 	for _, key := range keys {
 		key := key
 		value := labels[key]
 
-		ret = append(ret, rdsTypesV2.Tag{
+		ret = append(ret, rdsTypes.Tag{
 			Key:   &key,
 			Value: &value,
 		})

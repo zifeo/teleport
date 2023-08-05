@@ -21,8 +21,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/eks"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/maps"
@@ -264,9 +263,18 @@ func labelsFromGCPKubeCluster(cluster types.GKECluster) map[string]string {
 	return labels
 }
 
+// StringValue returns the value of the string pointer passed in or
+// "" if the pointer is nil.
+func StringValue(v *string) string {
+	if v != nil {
+		return *v
+	}
+	return ""
+}
+
 // NewKubeClusterFromAWSEKS creates a kube_cluster resource from an EKS cluster.
-func NewKubeClusterFromAWSEKS(cluster *eks.Cluster) (types.KubeCluster, error) {
-	parsedARN, err := arn.Parse(aws.StringValue(cluster.Arn))
+func NewKubeClusterFromAWSEKS(cluster *ekstypes.Cluster) (types.KubeCluster, error) {
+	parsedARN, err := arn.Parse(StringValue(cluster.Arn))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -275,13 +283,13 @@ func NewKubeClusterFromAWSEKS(cluster *eks.Cluster) (types.KubeCluster, error) {
 	return types.NewKubernetesClusterV3(
 		setAWSKubeName(types.Metadata{
 			Description: fmt.Sprintf("AWS EKS cluster %q in %s",
-				aws.StringValue(cluster.Name),
+				StringValue(cluster.Name),
 				parsedARN.Region),
 			Labels: labels,
-		}, aws.StringValue(cluster.Name)),
+		}, StringValue(cluster.Name)),
 		types.KubernetesClusterSpecV3{
 			AWS: types.KubeAWS{
-				Name:      aws.StringValue(cluster.Name),
+				Name:      StringValue(cluster.Name),
 				AccountID: parsedARN.AccountID,
 				Region:    parsedARN.Region,
 			},
@@ -289,7 +297,7 @@ func NewKubeClusterFromAWSEKS(cluster *eks.Cluster) (types.KubeCluster, error) {
 }
 
 // labelsFromAWSKubeCluster creates kube cluster labels.
-func labelsFromAWSKubeCluster(cluster *eks.Cluster, parsedARN arn.ARN) map[string]string {
+func labelsFromAWSKubeCluster(cluster *ekstypes.Cluster, parsedARN arn.ARN) map[string]string {
 	labels := awsEKSTagsToLabels(cluster.Tags)
 	labels[types.OriginLabel] = types.OriginCloud
 	labels[types.CloudLabel] = types.CloudAWS
@@ -300,11 +308,11 @@ func labelsFromAWSKubeCluster(cluster *eks.Cluster, parsedARN arn.ARN) map[strin
 }
 
 // awsEKSTagsToLabels converts AWS tags to a labels map.
-func awsEKSTagsToLabels(tags map[string]*string) map[string]string {
+func awsEKSTagsToLabels(tags map[string]string) map[string]string {
 	labels := make(map[string]string)
 	for key, val := range tags {
 		if types.IsValidLabelKey(key) {
-			labels[key] = aws.StringValue(val)
+			labels[key] = val
 		} else {
 			log.Debugf("Skipping EKS tag %q, not a valid label key.", key)
 		}
