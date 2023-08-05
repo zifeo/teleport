@@ -21,10 +21,11 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 
+	embeddingpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/embedding/v1"
 	"github.com/gravitational/teleport/api/internalutils/stream"
 	"github.com/gravitational/teleport/api/utils/retryutils"
-	"github.com/gravitational/teleport/lib/ai"
 	"github.com/gravitational/teleport/lib/backend"
 )
 
@@ -42,34 +43,48 @@ const (
 )
 
 // GetEmbedding looks up a single embedding by its name in the backend.
-func (e EmbeddingsService) GetEmbedding(ctx context.Context, kind, resourceID string) (*ai.Embedding, error) {
+func (e EmbeddingsService) GetEmbedding(ctx context.Context, kind, resourceID string) (*embeddingpb.Embedding, error) {
 	result, err := e.Get(ctx, backend.Key(embeddingsPrefix, kind, resourceID))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return ai.UnmarshalEmbedding(result.Value)
+
+	if len(result.Value) == 0 {
+		return nil, trace.BadParameter("missing embedding data")
+	}
+	var embedding embeddingpb.Embedding
+	if err := proto.Unmarshal(result.Value, &embedding); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return &embedding, nil
 }
 
 // GetEmbeddings returns a stream of embeddings for a given kind.
-func (e EmbeddingsService) GetEmbeddings(ctx context.Context, kind string) stream.Stream[*ai.Embedding] {
+func (e EmbeddingsService) GetEmbeddings(ctx context.Context, kind string) stream.Stream[*embeddingpb.Embedding] {
 	startKey := backend.ExactKey(embeddingsPrefix, kind)
 	items := backend.StreamRange(ctx, e, startKey, backend.RangeEnd(startKey), 50)
-	return stream.FilterMap(items, func(item backend.Item) (*ai.Embedding, bool) {
-		embedding, err := ai.UnmarshalEmbedding(item.Value)
-		if err != nil {
+	return stream.FilterMap(items, func(item backend.Item) (*embeddingpb.Embedding, bool) {
+		if len(item.Value) == 0 {
+			e.log.Warnf("Skipping embedding at %s, no data found", item.Key)
+			return nil, false
+		}
+		var embedding embeddingpb.Embedding
+		if err := proto.Unmarshal(item.Value, &embedding); err != nil {
 			e.log.Warnf("Skipping embedding at %s, failed to unmarshal: %v", item.Key, err)
 			return nil, false
 		}
-		return embedding, true
+		return &embedding, true
 	})
 }
 
 // UpsertEmbedding creates or update a single ai.Embedding in the backend.
-func (e EmbeddingsService) UpsertEmbedding(ctx context.Context, embedding *ai.Embedding) (*ai.Embedding, error) {
-	value, err := ai.MarshalEmbedding(embedding)
+func (e EmbeddingsService) UpsertEmbedding(ctx context.Context, embedding *embeddingpb.Embedding) (*embeddingpb.Embedding, error) {
+	value, err := proto.Marshal(embedding)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
 	_, err = e.Put(ctx, backend.Item{
 		Key:     embeddingItemKey(embedding),
 		Value:   value,
@@ -92,6 +107,7 @@ func NewEmbeddingsService(b backend.Backend) *EmbeddingsService {
 }
 
 // embeddingItemKey builds the backend item key for a given ai.Embedding.
-func embeddingItemKey(embedding *ai.Embedding) []byte {
-	return backend.Key(embeddingsPrefix, embedding.GetName())
+func embeddingItemKey(embedding *embeddingpb.Embedding) []byte {
+	name := embedding.EmbeddedKind + string(backend.Separator) + embedding.EmbeddedId
+	return backend.Key(embeddingsPrefix, name)
 }

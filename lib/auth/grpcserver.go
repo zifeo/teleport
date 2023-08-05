@@ -46,7 +46,6 @@ import (
 	"github.com/gravitational/teleport/api/client"
 	authpb "github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/constants"
-	"github.com/gravitational/teleport/api/gen/proto/go/assist/v1"
 	auditlogpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/auditlog/v1"
 	integrationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/integration/v1"
 	oktapb "github.com/gravitational/teleport/api/gen/proto/go/teleport/okta/v1"
@@ -57,7 +56,7 @@ import (
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/types/installers"
 	"github.com/gravitational/teleport/api/types/wrappers"
-	"github.com/gravitational/teleport/lib/auth/assist/assistv1"
+	//"github.com/gravitational/teleport/lib/auth/assist/assistv1"
 	integrationService "github.com/gravitational/teleport/lib/auth/integration/integrationv1"
 	"github.com/gravitational/teleport/lib/auth/okta"
 	"github.com/gravitational/teleport/lib/auth/trust/trustv1"
@@ -5414,18 +5413,18 @@ func NewGRPCServer(cfg GRPCServerConfig) (*GRPCServer, error) {
 	trustpb.RegisterTrustServiceServer(server, trust)
 
 	// Initialize and register the assist service.
-	assistSrv, err := assistv1.NewService(&assistv1.ServiceConfig{
-		Backend:        cfg.AuthServer.Services,
-		Embeddings:     cfg.AuthServer.embeddingsRetriever,
-		Embedder:       cfg.AuthServer.embedder,
-		Authorizer:     cfg.Authorizer,
-		ResourceGetter: cfg.AuthServer,
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	assist.RegisterAssistServiceServer(server, assistSrv)
-	assist.RegisterAssistEmbeddingServiceServer(server, assistSrv)
+	//	assistSrv, err := assistv1.NewService(&assistv1.ServiceConfig{
+	//	Backend:        cfg.AuthServer.Services,
+	//	Embeddings:     cfg.AuthServer.embeddingsRetriever,
+	//	Embedder:       cfg.AuthServer.embedder,
+	//	Authorizer:     cfg.Authorizer,
+	//	ResourceGetter: cfg.AuthServer,
+	//})
+	//if err != nil {
+	//	return nil, trace.Wrap(err)
+	//}
+	//assist.RegisterAssistServiceServer(server, assistSrv)
+	//assist.RegisterAssistEmbeddingServiceServer(server, assistSrv)
 
 	// create server with no-op role to pass to JoinService server
 	serverWithNopRole, err := serverWithNopRole(cfg)

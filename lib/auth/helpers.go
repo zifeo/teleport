@@ -35,7 +35,6 @@ import (
 	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/types"
 	apiutils "github.com/gravitational/teleport/api/utils"
-	"github.com/gravitational/teleport/lib/ai"
 	"github.com/gravitational/teleport/lib/auth/keystore"
 	"github.com/gravitational/teleport/lib/auth/native"
 	authority "github.com/gravitational/teleport/lib/auth/testauthority"
@@ -78,7 +77,7 @@ type TestAuthServerConfig struct {
 	// AuthPreferenceSpec is custom initial AuthPreference spec for the test.
 	AuthPreferenceSpec *types.AuthPreferenceSpecV2
 	// Embedder is required to enable the assist in the auth server.
-	Embedder ai.Embedder
+	//Embedder ai.Embedder
 }
 
 // CheckAndSetDefaults checks and sets defaults
@@ -101,9 +100,9 @@ func (cfg *TestAuthServerConfig) CheckAndSetDefaults() error {
 			SecondFactor: constants.SecondFactorOff,
 		}
 	}
-	if cfg.Embedder == nil {
-		cfg.Embedder = &noopEmbedder{}
-	}
+	//	if cfg.Embedder == nil {
+	//	cfg.Embedder = &noopEmbedder{}
+	//	}
 	return nil
 }
 
@@ -194,12 +193,12 @@ func WithClock(clock clockwork.Clock) ServerOption {
 }
 
 // WithEmbedder is a functional server option that sets the server's embedder.
-func WithEmbedder(embedder ai.Embedder) ServerOption {
-	return func(s *Server) error {
-		s.embedder = embedder
-		return nil
-	}
-}
+//func WithEmbedder(embedder ai.Embedder) ServerOption {
+//	return func(s *Server) error {
+//		s.embedder = embedder
+//		return nil
+//	}
+//}
 
 // TestAuthServer is auth server using local filesystem backend
 // and test certificate authority key generation that speeds up
@@ -282,10 +281,10 @@ func NewTestAuthServer(cfg TestAuthServerConfig) (*TestAuthServer, error) {
 				RSAKeyPairSource: authority.New().GenerateKeyPair,
 			},
 		},
-		EmbeddingRetriever: ai.NewSimpleRetriever(),
+		//EmbeddingRetriever: ai.NewSimpleRetriever(),
 	},
 		WithClock(cfg.Clock),
-		WithEmbedder(cfg.Embedder),
+		//		WithEmbedder(cfg.Embedder),
 	)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -1184,8 +1183,8 @@ func CreateUserAndRoleWithoutRoles(clt clt, username string, allowedLogins []str
 }
 
 // noopEmbedder is a no op implementation of the Embedder interface.
-type noopEmbedder struct{}
+//type noopEmbedder struct{}
 
-func (n noopEmbedder) ComputeEmbeddings(_ context.Context, _ []string) ([]ai.Vector64, error) {
-	return []ai.Vector64{}, nil
-}
+//func (n noopEmbedder) ComputeEmbeddings(_ context.Context, _ []string) ([]ai.Vector64, error) {
+//	return []ai.Vector64{}, nil
+//}
