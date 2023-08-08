@@ -3508,8 +3508,10 @@ func (w *WS) ReadMessage() (int, []byte, error) {
 	}
 
 	messageType, p, err := w.Conn.ReadMessage()
+	log.Warnf("got message: %q", p)
 	if err == nil && len(p) > 0 && p[0] == 't' {
 		var r authRequest
+		log.Warnf("got token update request: %q", p)
 		if err := json.Unmarshal(p[1:], &r); err != nil {
 			// Can't parse the token, pretend that nothing happened
 			return messageType, p, err
@@ -3519,7 +3521,7 @@ func (w *WS) ReadMessage() (int, []byte, error) {
 		}
 
 		// Read and return the next message
-		return w.Conn.ReadMessage()
+		return w.ReadMessage()
 	}
 	return messageType, p, err
 }
@@ -3962,7 +3964,7 @@ func (h *Handler) AuthenticateWSConnection(w http.ResponseWriter, r *http.Reques
 		return nil, nil, trace.AccessDenied("bad bearer token")
 	}
 
-	sessionTicker := time.NewTicker(10 * time.Minute)
+	sessionTicker := time.NewTicker(auth.BearerTokenTTL)
 	refreshChan := make(chan struct{}, 1)
 
 	extendSessionFn := func(token string) error {
@@ -3978,16 +3980,19 @@ func (h *Handler) AuthenticateWSConnection(w http.ResponseWriter, r *http.Reques
 	}
 
 	go func() {
-		defer sessionTicker.Stop()
+		defer sessionTicker.Stop() //
+		defer log.Warnf("!!!!!!!!!!! Closing websocket for %v", sessionCtx)
 		for {
 			select {
 			case <-sessionTicker.C:
-				// session has not been refreshed, close the connection
-				_ = ws.Close()
+				// the session has not been refreshed, close the connection
+				if err := ws.Close(); err != nil {
+					log.Warnf("Failed to close websocket: %v", err)
+				}
+				return
 			case <-refreshChan:
 				// session has been refreshed, reset the ticker
-				sessionTicker.Reset(10 * time.Minute)
-				return
+				sessionTicker.Reset(auth.BearerTokenTTL)
 			}
 		}
 	}()

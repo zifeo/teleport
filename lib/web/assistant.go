@@ -350,7 +350,7 @@ func (h *Handler) assistantV2(w http.ResponseWriter, r *http.Request, _ httprout
 ) (any, error) {
 	if err := runAssistant(h, w, r, sctx, site, ws); err != nil {
 		h.log.Warn(trace.DebugReport(err))
-		return nil, trace.Wrap(err)
+		return nil, trace.Wrap(err) // return error via WS
 	}
 
 	return nil, nil
@@ -470,8 +470,7 @@ func runAssistant(h *Handler, _ http.ResponseWriter, r *http.Request,
 
 	// Update the read deadline upon receiving a pong message.
 	ws.SetPongHandler(func(_ string) error {
-		ws.SetReadDeadline(deadlineForInterval(keepAliveInterval))
-		return nil
+		return ws.SetReadDeadline(deadlineForInterval(keepAliveInterval))
 	})
 
 	ws.SetCloseHandler(func(code int, text string) error {
@@ -526,7 +525,7 @@ func runAssistant(h *Handler, _ http.ResponseWriter, r *http.Request,
 		}
 
 		// We can not know how many tokens we will consume in advance.
-		// Try to consume a small amount of tokens first.
+		// Try to consume a small number of tokens first.
 		const lookaheadTokens = 100
 		if !h.assistantLimiter.AllowN(time.Now(), lookaheadTokens) {
 			err := onMessageFn(assist.MessageKindError, []byte("You have reached the rate limit. Please try again later."), h.clock.Now().UTC())
