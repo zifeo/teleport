@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Flex, Indicator, Box } from 'design';
 
 import styled from 'styled-components';
+
+import { DbProtocol } from 'shared/services/databases';
 
 import {
   FeatureBox,
@@ -26,6 +28,8 @@ import {
 } from 'teleport/components/Layout';
 import ErrorMessage from 'teleport/components/AgentErrorMessage';
 import useTeleport from 'teleport/useTeleport';
+import DbConnectDialog from 'teleport/Databases/ConnectDialog';
+import KubeConnectDialog from 'teleport/Kubes/ConnectDialog';
 
 import { useResources } from './useResources';
 import { ResourceCard } from './ResourceCard';
@@ -38,6 +42,15 @@ export function Resources() {
     attempt,
     fetchedData,
     fetchMore,
+    getNodeLoginOptions,
+    getWindowsLoginOptions,
+    accessRequestId,
+    username,
+    clusterId,
+    authType,
+    startSshSession,
+    startRemoteDesktopSession,
+    filtering: { pathname, params, setParams, setSort, replaceHistory },
     filtering: {
       pathname,
       params,
@@ -47,9 +60,16 @@ export function Resources() {
       onLabelClick,
     },
   } = useResources(teleCtx);
-  const observed = React.useRef(null);
+  const observed = useRef(null);
 
-  React.useEffect(() => {
+  const [dbConnectInfo, setDbConnectInfo] = useState<{
+    name: string;
+    protocol: DbProtocol;
+  }>(null);
+
+  const [kubeConnectName, setKubeConnectName] = useState('');
+
+  useEffect(() => {
     if (observed.current) {
       const observer = new IntersectionObserver(entries => {
         if (entries[0]?.isIntersecting) {
@@ -85,6 +105,16 @@ export function Resources() {
       <ResourcesContainer gap={2}>
         {fetchedData.agents.map((agent, i) => (
           <ResourceCard key={i} resource={agent} onLabelClick={onLabelClick} />
+          <ResourceCard
+            key={i}
+            resource={agent}
+            getNodeLoginOptions={getNodeLoginOptions}
+            getWindowsLoginOptions={getWindowsLoginOptions}
+            startRemoteDesktopSession={startRemoteDesktopSession}
+            startSshSession={startSshSession}
+            setDbConnectInfo={setDbConnectInfo}
+            setKubeConnectInfo={setKubeConnectName}
+          />
         ))}
       </ResourcesContainer>
       <div
@@ -102,6 +132,27 @@ export function Resources() {
           </Box>
         )}
       </div>
+      {dbConnectInfo && (
+        <DbConnectDialog
+          username={username}
+          clusterId={clusterId}
+          dbName={dbConnectInfo.name}
+          dbProtocol={dbConnectInfo.protocol}
+          onClose={() => setDbConnectInfo(null)}
+          authType={authType}
+          accessRequestId={accessRequestId}
+        />
+      )}
+      {kubeConnectName && (
+        <KubeConnectDialog
+          onClose={() => setKubeConnectName('')}
+          username={username}
+          authType={authType}
+          kubeConnectName={kubeConnectName}
+          clusterId={clusterId}
+          accessRequestId={accessRequestId}
+        />
+      )}
     </FeatureBox>
   );
 }
