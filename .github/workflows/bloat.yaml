@@ -1,0 +1,68 @@
+name: Bloat Check
+on:
+  pull_request:
+
+jobs:
+  build:
+    name: Bloat Check
+    runs-on: ubuntu-latest
+    outputs:
+      base_build_dir: ${{ steps.build_master.outputs.build_dir }}
+      current_build_dir: ${{ steps.build_branch.outputs.build_dir }}
+
+    permissions:
+      contents: read
+
+    container:
+      image: ghcr.io/gravitational/teleport-buildbox:teleport14
+
+    steps:
+      - name: Checkout Teleport
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Prepare workspace
+        uses: ./.github/actions/prepare-workspace
+
+      - name: Setup master cache
+        uses: actions/cache@v3
+        id: cache-build
+        with:
+          path: |
+            $(pwd)/base_build
+          key: ${{ runner.os }}-${{ github.event.pull_request.base.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.event.pull_request.base.sha }}
+
+      - if: ${{ steps.cache-build.outputs.cache-hit != 'true' }}
+        name: Build master
+        id: build_master
+        run: |
+          make BUILDDIR=base_build binaries
+          echo "build_dir=$(pwd)/base_build" >> $GITHUB_OUTPUT
+
+      - name: Checkout E branch
+        uses: actions/checkout@v3
+        with:
+          path: e
+          clean: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Build branch
+        id: build_branch
+        run: |
+          make clean
+          make binaries
+          echo "build_dir=$(pwd)/build" >> $GITHUB_OUTPUT
+
+      - name: Checkout shared-workflow
+        uses: actions/checkout@v3
+        with:
+          repository: gravitational/shared-workflows
+          path: .github/shared-workflows
+          ref: main
+
+      - name: Run bloat check
+        run: |
+          cd .github/shared-workflows/bot && go run main.go -workflow=bloat --artifacts="tctl,teleport,tsh" --base=${{ needs.build.outputs.base_build_dir }} --current=${{ needs.build.outputs.current_build_dir }} -token="${{ secrets.GITHUB_TOKEN }}" -reviewers="${{ secrets.reviewers }}" > $GITHUB_STEP_SUMMARY
