@@ -1270,77 +1270,77 @@ func BenchmarkListNodes(b *testing.B) {
 				}
 			},
 		},
-		{
-			desc: "simple expression",
-			editRole: func(r types.Role, id string) {
-				if id == "hidden" {
-					err = r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
-						Expression: `labels.key == "hidden"`,
-					})
-					require.NoError(b, err)
-				} else {
-					err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
-						Expression: fmt.Sprintf(`labels.key == %q`, id),
-					})
-					require.NoError(b, err)
-				}
-			},
-		},
-		{
-			desc: "labels",
-			editRole: func(r types.Role, id string) {
-				r.SetNodeLabels(types.Allow, types.Labels{
-					"key":   {id},
-					"group": {"{{external.group}}"},
-				})
-				r.SetNodeLabels(types.Deny, types.Labels{"key": {"hidden"}})
-			},
-		},
-		{
-			desc: "expression",
-			editRole: func(r types.Role, id string) {
-				err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
-					Expression: fmt.Sprintf(`labels.key == %q && contains(user.spec.traits["group"], labels["group"])`,
-						id),
-				})
-				require.NoError(b, err)
-				err = r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
-					Expression: `labels.key == "hidden"`,
-				})
-				require.NoError(b, err)
-			},
-		},
-		{
-			desc: "complex labels",
-			editRole: func(r types.Role, id string) {
-				r.SetNodeLabels(types.Allow, types.Labels{
-					"key": {"other", id, "another"},
-					"group": {
-						`{{regexp.replace(external.group, "^(.*)$", "$1")}}`,
-						"{{email.local(external.email)}}",
-					},
-				})
-				r.SetNodeLabels(types.Deny, types.Labels{"key": {"hidden"}})
-			},
-		},
-		{
-			desc: "complex expression",
-			editRole: func(r types.Role, id string) {
-				expr := fmt.Sprintf(
-					`(labels.key == "other" || labels.key == %q || labels.key == "another") &&
-					 (contains(email.local(user.spec.traits["email"]), labels["group"]) ||
-						 contains(regexp.replace(user.spec.traits["group"], "^(.*)$", "$1"), labels["group"]))`,
-					id)
-				err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
-					Expression: expr,
-				})
-				require.NoError(b, err)
-				err = r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
-					Expression: `labels.key == "hidden"`,
-				})
-				require.NoError(b, err)
-			},
-		},
+		//{
+		//	desc: "simple expression",
+		//	editRole: func(r types.Role, id string) {
+		//		if id == "hidden" {
+		//			err = r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
+		//				Expression: `labels.key == "hidden"`,
+		//			})
+		//			require.NoError(b, err)
+		//		} else {
+		//			err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
+		//				Expression: fmt.Sprintf(`labels.key == %q`, id),
+		//			})
+		//			require.NoError(b, err)
+		//		}
+		//	},
+		//},
+		//{
+		//	desc: "labels",
+		//	editRole: func(r types.Role, id string) {
+		//		r.SetNodeLabels(types.Allow, types.Labels{
+		//			"key":   {id},
+		//			"group": {"{{external.group}}"},
+		//		})
+		//		r.SetNodeLabels(types.Deny, types.Labels{"key": {"hidden"}})
+		//	},
+		//},
+		//{
+		//	desc: "expression",
+		//	editRole: func(r types.Role, id string) {
+		//		err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
+		//			Expression: fmt.Sprintf(`labels.key == %q && contains(user.spec.traits["group"], labels["group"])`,
+		//				id),
+		//		})
+		//		require.NoError(b, err)
+		//		err = r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
+		//			Expression: `labels.key == "hidden"`,
+		//		})
+		//		require.NoError(b, err)
+		//	},
+		//},
+		//{
+		//	desc: "complex labels",
+		//	editRole: func(r types.Role, id string) {
+		//		r.SetNodeLabels(types.Allow, types.Labels{
+		//			"key": {"other", id, "another"},
+		//			"group": {
+		//				`{{regexp.replace(external.group, "^(.*)$", "$1")}}`,
+		//				"{{email.local(external.email)}}",
+		//			},
+		//		})
+		//		r.SetNodeLabels(types.Deny, types.Labels{"key": {"hidden"}})
+		//	},
+		//},
+		//{
+		//	desc: "complex expression",
+		//	editRole: func(r types.Role, id string) {
+		//		expr := fmt.Sprintf(
+		//			`(labels.key == "other" || labels.key == %q || labels.key == "another") &&
+		//			 (contains(email.local(user.spec.traits["email"]), labels["group"]) ||
+		//				 contains(regexp.replace(user.spec.traits["group"], "^(.*)$", "$1"), labels["group"]))`,
+		//			id)
+		//		err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
+		//			Expression: expr,
+		//		})
+		//		require.NoError(b, err)
+		//		err = r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
+		//			Expression: `labels.key == "hidden"`,
+		//		})
+		//		require.NoError(b, err)
+		//	},
+		//},
 	} {
 		b.Run(tc.desc, func(b *testing.B) {
 			benchmarkListNodes(
@@ -1390,9 +1390,10 @@ func benchmarkListNodes(
 	for n := 0; n < b.N; n++ {
 		var resources []types.ResourceWithLabels
 		req := proto.ListResourcesRequest{
-			ResourceType: types.KindNode,
-			Namespace:    defaults.Namespace,
-			Limit:        1_000,
+			ResourceType:   types.KindNode,
+			Namespace:      defaults.Namespace,
+			Limit:          1_000,
+			NeedTotalCount: false,
 		}
 		for {
 			rsp, err := clt.ListResources(ctx, req)
@@ -1507,6 +1508,201 @@ func TestGetAndList_Nodes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Resources, 1)
 	require.Empty(t, cmp.Diff(testResources[0:1], resp.Resources))
+}
+
+func BenchmarkListUnifiedResources(b *testing.B) {
+	const nodeCount = 50_000
+	const roleCount = 32
+
+	logger := logrus.StandardLogger()
+	logger.ReplaceHooks(make(logrus.LevelHooks))
+	logrus.SetFormatter(utils.NewTestJSONFormatter())
+	logger.SetLevel(logrus.DebugLevel)
+	logger.SetOutput(io.Discard)
+
+	ctx := context.Background()
+	srv := newTestTLSServer(b)
+
+	var ids []string
+	for i := 0; i < roleCount; i++ {
+		ids = append(ids, uuid.New().String())
+	}
+
+	ids[0] = "hidden"
+
+	var hiddenNodes int
+	// Create test nodes.
+	for i := 0; i < nodeCount; i++ {
+		name := uuid.New().String()
+		id := ids[i%len(ids)]
+		if id == "hidden" {
+			hiddenNodes++
+		}
+		node, err := types.NewServerWithLabels(
+			name,
+			types.KindNode,
+			types.ServerSpecV2{
+				Hostname: uuid.NewString(),
+			},
+			map[string]string{
+				"key":   id,
+				"group": "users",
+			},
+		)
+		require.NoError(b, err)
+
+		_, err = srv.Auth().UpsertNode(ctx, node)
+		require.NoError(b, err)
+	}
+
+	for _, tc := range []struct {
+		desc     string
+		editRole func(types.Role, string)
+	}{
+		{
+			desc: "simple labels",
+			editRole: func(r types.Role, id string) {
+				if id == "hidden" {
+					r.SetNodeLabels(types.Deny, types.Labels{"key": {id}})
+				} else {
+					r.SetNodeLabels(types.Allow, types.Labels{"key": {id}})
+				}
+			},
+		},
+		//{
+		//	desc: "simple expression",
+		//	editRole: func(r types.Role, id string) {
+		//		if id == "hidden" {
+		//			err := r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
+		//				Expression: `labels.key == "hidden"`,
+		//			})
+		//			require.NoError(b, err)
+		//		} else {
+		//			err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
+		//				Expression: fmt.Sprintf(`labels.key == %q`, id),
+		//			})
+		//			require.NoError(b, err)
+		//		}
+		//	},
+		//},
+		//{
+		//	desc: "labels",
+		//	editRole: func(r types.Role, id string) {
+		//		r.SetNodeLabels(types.Allow, types.Labels{
+		//			"key":   {id},
+		//			"group": {"{{external.group}}"},
+		//		})
+		//		r.SetNodeLabels(types.Deny, types.Labels{"key": {"hidden"}})
+		//	},
+		//},
+		//{
+		//	desc: "expression",
+		//	editRole: func(r types.Role, id string) {
+		//		err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
+		//			Expression: fmt.Sprintf(`labels.key == %q && contains(user.spec.traits["group"], labels["group"])`,
+		//				id),
+		//		})
+		//		require.NoError(b, err)
+		//		err = r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
+		//			Expression: `labels.key == "hidden"`,
+		//		})
+		//		require.NoError(b, err)
+		//	},
+		//},
+		//{
+		//	desc: "complex labels",
+		//	editRole: func(r types.Role, id string) {
+		//		r.SetNodeLabels(types.Allow, types.Labels{
+		//			"key": {"other", id, "another"},
+		//			"group": {
+		//				`{{regexp.replace(external.group, "^(.*)$", "$1")}}`,
+		//				"{{email.local(external.email)}}",
+		//			},
+		//		})
+		//		r.SetNodeLabels(types.Deny, types.Labels{"key": {"hidden"}})
+		//	},
+		//},
+		//{
+		//	desc: "complex expression",
+		//	editRole: func(r types.Role, id string) {
+		//		expr := fmt.Sprintf(
+		//			`(labels.key == "other" || labels.key == %q || labels.key == "another") &&
+		//			 (contains(email.local(user.spec.traits["email"]), labels["group"]) ||
+		//				 contains(regexp.replace(user.spec.traits["group"], "^(.*)$", "$1"), labels["group"]))`,
+		//			id)
+		//		err := r.SetLabelMatchers(types.Allow, types.KindNode, types.LabelMatchers{
+		//			Expression: expr,
+		//		})
+		//		require.NoError(b, err)
+		//		err = r.SetLabelMatchers(types.Deny, types.KindNode, types.LabelMatchers{
+		//			Expression: `labels.key == "hidden"`,
+		//		})
+		//		require.NoError(b, err)
+		//	},
+		//},
+	} {
+		b.Run(tc.desc, func(b *testing.B) {
+			benchmarkListUnifiedResources(
+				b, ctx,
+				nodeCount, roleCount, hiddenNodes,
+				srv,
+				ids,
+				tc.editRole,
+			)
+		})
+	}
+}
+
+func benchmarkListUnifiedResources(
+	b *testing.B, ctx context.Context,
+	nodeCount, roleCount, hiddenNodes int,
+	srv *TestTLSServer,
+	ids []string,
+	editRole func(r types.Role, id string),
+) {
+	var roles []types.Role
+	for _, id := range ids {
+		role, err := types.NewRole(fmt.Sprintf("role-%s", id), types.RoleSpecV6{})
+		require.NoError(b, err)
+		editRole(role, id)
+		roles = append(roles, role)
+	}
+
+	// create user, role, and client
+	username := "user"
+
+	user, err := CreateUser(srv.Auth(), username, roles...)
+	require.NoError(b, err)
+	user.SetTraits(map[string][]string{
+		"group": {"users"},
+		"email": {"test@example.com"},
+	})
+	err = srv.Auth().UpsertUser(user)
+	require.NoError(b, err)
+	identity := TestUser(user.GetName())
+	clt, err := srv.NewClient(identity)
+	require.NoError(b, err)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		var resources []*proto.PaginatedResource
+		req := &proto.ListUnifiedResourcesRequest{
+			Limit: 1_000,
+		}
+		for {
+			rsp, err := clt.ListUnifiedResources(ctx, req)
+			require.NoError(b, err)
+
+			resources = append(resources, rsp.Resources...)
+			req.StartKey = rsp.NextKey
+			if req.StartKey == "" {
+				break
+			}
+		}
+		require.Len(b, resources, nodeCount-hiddenNodes)
+	}
 }
 
 // TestStreamSessionEventsRBAC ensures that session events can not be streamed

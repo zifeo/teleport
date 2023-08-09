@@ -130,7 +130,7 @@ func MakeAzureFetchers(clients cloud.AzureClients, matchers []types.AzureMatcher
 func filterDatabasesByLabels(databases types.Databases, labels types.Labels, log logrus.FieldLogger) types.Databases {
 	var matchedDatabases types.Databases
 	for _, database := range databases {
-		match, _, err := services.MatchLabels(labels, database.GetAllLabels())
+		match, err := services.MatchLabels(labels, database.GetAllLabels())
 		if err != nil {
 			log.Warnf("Failed to match %v against selector: %v.", database, err)
 		} else if match {

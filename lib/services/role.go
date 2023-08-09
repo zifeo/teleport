@@ -1002,13 +1002,18 @@ func NewEnumerationResult() EnumerationResult {
 
 // MatchNamespace returns true if given list of namespace matches
 // target namespace, wildcard matches everything.
-func MatchNamespace(selectors []string, namespace string) (bool, string) {
+func MatchNamespace(selectors []string, namespace string, debug bool) (bool, string) {
 	for _, n := range selectors {
 		if n == namespace || n == types.Wildcard {
 			return true, "matched"
 		}
 	}
-	return false, fmt.Sprintf("no match, role selectors %v, server namespace: %v", selectors, namespace)
+
+	if debug {
+		return false, fmt.Sprintf("no match, role selectors %v, server namespace: %v", selectors, namespace)
+	}
+
+	return false, ""
 }
 
 // MatchAWSRoleARN returns true if provided role ARN matches selectors.
@@ -1073,7 +1078,7 @@ func MatchDatabaseUser(selectors []string, user string, matchWildcard bool) (boo
 
 // MatchLabels matches selector against target. Empty selector matches
 // nothing, wildcard matches everything.
-func MatchLabels(selector types.Labels, target map[string]string) (bool, string, error) {
+func MatchLabels(selector types.Labels, target map[string]string) (bool, error) {
 	return MatchLabelGetter(selector, mapLabelGetter(target))
 }
 
@@ -1096,9 +1101,43 @@ func (m mapLabelGetter) GetAllLabels() map[string]string {
 	return map[string]string(m)
 }
 
-// MatchLabelGetter matches selector against labelGetter. Empty selector matches
+func MatchLabelGetter(selector types.Labels, labelGetter LabelGetter) (bool, error) {
+	// Empty selector matches nothing.
+	if len(selector) == 0 {
+		return false, nil
+	}
+
+	// *: * matches everything even empty target set.
+	selectorValues := selector[types.Wildcard]
+	if len(selectorValues) == 1 && selectorValues[0] == types.Wildcard {
+		return true, nil
+	}
+
+	// Perform full match.
+	for key, selectorValues := range selector {
+		targetVal, hasKey := labelGetter.GetLabel(key)
+		if !hasKey {
+			return false, nil
+		}
+
+		if slices.Contains(selectorValues, types.Wildcard) {
+			continue
+		}
+
+		result, err := utils.SliceMatchesRegex(targetVal, selectorValues)
+		if err != nil {
+			return false, trace.Wrap(err)
+		} else if !result {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// MatchLabelGetterWithMessage matches selector against labelGetter. Empty selector matches
 // nothing, wildcard matches everything.
-func MatchLabelGetter(selector types.Labels, labelGetter LabelGetter) (bool, string, error) {
+func MatchLabelGetterWithMessage(selector types.Labels, labelGetter LabelGetter) (bool, string, error) {
 	// Empty selector matches nothing.
 	if len(selector) == 0 {
 		return false, "no match, empty selector", nil
@@ -2316,13 +2355,14 @@ type AccessCheckable interface {
 	GetAllLabels() map[string]string
 }
 
+var rbacLogger = log.WithField(trace.Component, teleport.ComponentRBAC)
+
 // rbacDebugLogger creates a debug logger for Teleport's RBAC component.
 // It also returns a flag indicating whether debug logging is enabled,
 // allowing the RBAC system to generate more verbose errors in debug mode.
 func rbacDebugLogger() (debugEnabled bool, debugf func(format string, args ...interface{})) {
 	isDebugEnabled := log.IsLevelEnabled(log.TraceLevel)
-	log := log.WithField(trace.Component, teleport.ComponentRBAC)
-	return isDebugEnabled, log.Tracef
+	return isDebugEnabled, rbacLogger.Tracef
 }
 
 func (set RoleSet) checkAccess(r AccessCheckable, traits wrappers.Traits, state AccessState, matchers ...RoleMatcher) error {
@@ -2354,7 +2394,7 @@ func (set RoleSet) checkAccess(r AccessCheckable, traits wrappers.Traits, state 
 
 	// Check deny rules.
 	for _, role := range set {
-		matchNamespace, namespaceMessage := MatchNamespace(role.GetNamespaces(types.Deny), namespace)
+		matchNamespace, namespaceMessage := MatchNamespace(role.GetNamespaces(types.Deny), namespace, isDebugEnabled)
 		if !matchNamespace {
 			continue
 		}
@@ -2394,7 +2434,7 @@ func (set RoleSet) checkAccess(r AccessCheckable, traits wrappers.Traits, state 
 	allowed := false
 	// Check allow rules.
 	for _, role := range set {
-		matchNamespace, namespaceMessage := MatchNamespace(role.GetNamespaces(types.Allow), namespace)
+		matchNamespace, namespaceMessage := MatchNamespace(role.GetNamespaces(types.Allow), namespace, isDebugEnabled)
 		if !matchNamespace {
 			if isDebugEnabled {
 				errs = append(errs, trace.AccessDenied("role=%v, match(namespace=%v)",
@@ -2532,7 +2572,16 @@ func checkLabelsMatch(
 	labelsUnsetOrMatch, expressionUnsetOrMatch := true, true
 
 	if len(labelMatchers.Labels) > 0 {
-		match, msg, err := MatchLabelGetter(labelMatchers.Labels, resource)
+		var (
+			match bool
+			msg   string
+			err   error
+		)
+		if debug {
+			match, msg, err = MatchLabelGetterWithMessage(labelMatchers.Labels, resource)
+		} else {
+			match, err = MatchLabelGetter(labelMatchers.Labels, resource)
+		}
 		if err != nil {
 			return false, "", trace.Wrap(err)
 		}
@@ -2872,7 +2921,7 @@ func (set RoleSet) checkAccessToRuleImpl(p checkAccessParams) error {
 
 	// check deny: a single match on a deny rule prohibits access
 	for _, role := range set {
-		matchNamespace, _ := MatchNamespace(role.GetNamespaces(types.Deny), types.ProcessNamespace(p.namespace))
+		matchNamespace, _ := MatchNamespace(role.GetNamespaces(types.Deny), types.ProcessNamespace(p.namespace), false)
 		if matchNamespace {
 			matched, err := MakeRuleSet(role.GetRules(types.Deny)).Match(p.denyWhere, actionsParser, p.resource, p.verb)
 			if err != nil {
@@ -2892,7 +2941,7 @@ func (set RoleSet) checkAccessToRuleImpl(p checkAccessParams) error {
 
 	// check allow: if rule matches, grant access to resource
 	for _, role := range set {
-		matchNamespace, _ := MatchNamespace(role.GetNamespaces(types.Allow), types.ProcessNamespace(p.namespace))
+		matchNamespace, _ := MatchNamespace(role.GetNamespaces(types.Allow), types.ProcessNamespace(p.namespace), false)
 		if matchNamespace {
 			match, err := MakeRuleSet(role.GetRules(types.Allow)).Match(p.allowWhere, actionsParser, p.resource, p.verb)
 			if err != nil {
@@ -2939,7 +2988,7 @@ func (set RoleSet) ExtractConditionForIdentifier(ctx RuleContext, namespace, res
 	// and concatenate their negations by AND.
 	var denyCond *types.WhereExpr
 	for _, role := range set {
-		matchNamespace, _ := MatchNamespace(role.GetNamespaces(types.Deny), types.ProcessNamespace(namespace))
+		matchNamespace, _ := MatchNamespace(role.GetNamespaces(types.Deny), types.ProcessNamespace(namespace), false)
 		if !matchNamespace {
 			continue
 		}
@@ -2971,7 +3020,7 @@ func (set RoleSet) ExtractConditionForIdentifier(ctx RuleContext, namespace, res
 	// and concatenate by OR.
 	var allowCond *types.WhereExpr
 	for _, role := range set {
-		matchNamespace, _ := MatchNamespace(role.GetNamespaces(types.Allow), types.ProcessNamespace(namespace))
+		matchNamespace, _ := MatchNamespace(role.GetNamespaces(types.Allow), types.ProcessNamespace(namespace), false)
 		if !matchNamespace {
 			continue
 		}

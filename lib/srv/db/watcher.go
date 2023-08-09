@@ -362,7 +362,7 @@ func applyResourceMatcherToDatabase(database types.Database, resourceMatchers []
 		if len(matcher.Labels) == 0 || matcher.AWS.AssumeRoleARN == "" {
 			continue
 		}
-		if match, _, _ := services.MatchLabels(matcher.Labels, database.GetAllLabels()); !match {
+		if match, _ := services.MatchLabels(matcher.Labels, database.GetAllLabels()); !match {
 			continue
 		}
 

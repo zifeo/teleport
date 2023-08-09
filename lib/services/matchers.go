@@ -111,7 +111,7 @@ func MatchResourceLabels(matchers []ResourceMatcher, resource types.ResourceWith
 		if len(matcher.Labels) == 0 {
 			return false
 		}
-		match, _, err := MatchLabels(matcher.Labels, resource.GetAllLabels())
+		match, err := MatchLabels(matcher.Labels, resource.GetAllLabels())
 		if err != nil {
 			logrus.WithError(err).Errorf("Failed to match labels %v: %v.",
 				matcher.Labels, resource)

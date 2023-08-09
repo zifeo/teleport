@@ -200,13 +200,13 @@ func (u *UnifiedResourceCache) GetUnifiedResources(ctx context.Context) ([]types
 		return nil, trace.Wrap(err, "getting unified resource range")
 	}
 	for _, item := range result.Items {
-		cloned := item.Value.CloneAny()
-		clonedResource, ok := cloned.(types.ResourceWithLabels)
-		if !ok {
-			return nil, trace.BadParameter("clone returned unexpected type %T", clonedResource)
-		}
+		//cloned := item.Value.CloneAny()
+		//clonedResource, ok := cloned.(types.ResourceWithLabels)
+		//if !ok {
+		//	return nil, trace.BadParameter("clone returned unexpected type %T", clonedResource)
+		//}
 
-		resources = append(resources, clonedResource)
+		resources = append(resources, item.Value.(types.ResourceWithLabels))
 	}
 
 	return resources, nil
