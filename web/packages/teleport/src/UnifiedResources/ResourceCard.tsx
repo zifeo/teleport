@@ -17,11 +17,9 @@
 import React from 'react';
 import styled from 'styled-components';
 
-import { Box, ButtonBorder, ButtonLink, Flex, Label, Text } from 'design';
-import { Box, Flex, Label, Text } from 'design';
+import { Box, ButtonLink, Flex, Label, Text } from 'design';
 import { LoginItem } from 'shared/components/MenuLogin';
 import { DbProtocol } from 'shared/services/databases';
-import { Box, ButtonBorder, ButtonText, Flex, Label, Text } from 'design';
 
 import { ResourceIcon, ResourceIconName } from 'design/ResourceIcon';
 import {
@@ -38,19 +36,14 @@ import {
   UnifiedResourceKind,
 } from 'teleport/services/agents';
 import { Desktop } from 'teleport/services/desktops';
-import { UnifiedResource, UnifiedResourceKind } from 'teleport/services/agents';
+
+import { ResourceActionButton } from './ResourceActionButton';
 
 // Since we do a lot of manual resizing and some absolute positioning, we have
 // to put some layout constants in place here.
 const labelRowHeight = 26; // px
 const labelVerticalMargin = 1; // px
 const labelHeight = labelRowHeight - 2 * labelVerticalMargin;
-import { ResourceActionButton } from './ResourceActionButton';
-
-const SingleLineBox = styled(Box)`
-  overflow: hidden;
-  white-space: nowrap;
-`;
 
 /**
  * This box serves twofold purpose: first, it prevents the underlying icon from
@@ -78,11 +71,10 @@ type Props = {
   setKubeConnectInfo: React.Dispatch<React.SetStateAction<string>>;
 };
 
-export const ResourceCard = ({ resource, onLabelClick }: Props) => {
-
 export function ResourceCard({
   resource,
   getNodeLoginOptions,
+  onLabelClick,
   getWindowsLoginOptions,
   startSshSession,
   startRemoteDesktopSession,
@@ -172,7 +164,15 @@ export function ResourceCard({
             <SingleLineBox flex="1" title={name}>
               <Text typography="h5">{name}</Text>
             </SingleLineBox>
-            <ButtonBorder size="small">Connect</ButtonBorder>
+            <ResourceActionButton
+              resource={resource}
+              startSshSession={startSshSession}
+              startRemoteDesktopSession={startRemoteDesktopSession}
+              getNodeLoginOptions={getNodeLoginOptions}
+              getWindowsLoginOptions={getWindowsLoginOptions}
+              setDbConnectInfo={setDbConnectInfo}
+              setKubeConnectInfo={setKubeConnectInfo}
+            />
           </Flex>
           <Flex flexDirection="row" alignItems="center">
             <ResTypeIconBox>

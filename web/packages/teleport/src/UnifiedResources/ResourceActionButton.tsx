@@ -84,7 +84,8 @@ const renderNodeConnect = (
     return onOpen(id);
   }
 
-  function handleOnSelect(_, login: string) {
+  function handleOnSelect(e: React.SyntheticEvent, login: string) {
+    e.preventDefault();
     if (!startSshSession) {
       return [];
     }
@@ -117,7 +118,8 @@ function renderDesktopConnect(
     return onOpen(desktop);
   }
 
-  function handleOnSelect(_, login: string) {
+  function handleOnSelect(e: React.SyntheticEvent, login: string) {
+    e.preventDefault();
     if (!onSelect) {
       return [];
     }

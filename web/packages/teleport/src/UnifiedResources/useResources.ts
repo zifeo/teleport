@@ -44,6 +44,8 @@ export interface ResourcesState {
   attempt: Attempt;
   accessRequestId: string;
   filtering: UrlFilteringState;
+  canCreate: boolean;
+  isLeafCluster: boolean;
 }
 
 /**
@@ -52,8 +54,9 @@ export interface ResourcesState {
  * the initial batch, and `fetchMore` to support infinite scrolling.
  */
 export function useResources(ctx: Ctx): ResourcesState {
-  const { clusterId } = useStickyClusterId();
+  const { clusterId, isLeafCluster } = useStickyClusterId();
   const username = ctx.storeUser.state.username;
+  const canCreate = ctx.storeUser.getTokenAccess().create;
   const authType = ctx.storeUser.state.authType;
   const accessRequestId = ctx.storeUser.getAccessRequestId();
 
@@ -106,6 +109,8 @@ export function useResources(ctx: Ctx): ResourcesState {
   return {
     clusterId,
     fetchedData,
+    canCreate,
+    isLeafCluster,
     fetchMore,
     username,
     authType,

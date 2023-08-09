@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Flex, Indicator, Box } from 'design';
+import { Box, Indicator, Flex } from 'design';
 
 import styled from 'styled-components';
 
@@ -30,6 +30,8 @@ import ErrorMessage from 'teleport/components/AgentErrorMessage';
 import useTeleport from 'teleport/useTeleport';
 import DbConnectDialog from 'teleport/Databases/ConnectDialog';
 import KubeConnectDialog from 'teleport/Kubes/ConnectDialog';
+import AgentButtonAdd from 'teleport/components/AgentButtonAdd';
+import QuickLaunch from 'teleport/components/QuickLaunch';
 
 import { useResources } from './useResources';
 import { ResourceCard } from './ResourceCard';
@@ -45,12 +47,13 @@ export function Resources() {
     getNodeLoginOptions,
     getWindowsLoginOptions,
     accessRequestId,
+    canCreate,
+    isLeafCluster,
     username,
     clusterId,
     authType,
     startSshSession,
     startRemoteDesktopSession,
-    filtering: { pathname, params, setParams, setSort, replaceHistory },
     filtering: {
       pathname,
       params,
@@ -85,6 +88,17 @@ export function Resources() {
     <FeatureBox>
       <FeatureHeader alignItems="center" justifyContent="space-between">
         <FeatureHeaderTitle>Resources</FeatureHeaderTitle>
+        {attempt.status === 'success' && (
+          <Flex alignItems="center">
+            <QuickLaunch width="280px" onPress={startSshSession} mr={3} />
+            <AgentButtonAdd
+              agent="unified_resource"
+              beginsWithVowel={false}
+              isLeafCluster={isLeafCluster}
+              canCreate={canCreate}
+            />
+          </Flex>
+        )}
       </FeatureHeader>
       <SearchPanel
         params={params}
@@ -104,9 +118,9 @@ export function Resources() {
       )}
       <ResourcesContainer gap={2}>
         {fetchedData.agents.map((agent, i) => (
-          <ResourceCard key={i} resource={agent} onLabelClick={onLabelClick} />
           <ResourceCard
             key={i}
+            onLabelClick={onLabelClick}
             resource={agent}
             getNodeLoginOptions={getNodeLoginOptions}
             getWindowsLoginOptions={getWindowsLoginOptions}
