@@ -52,7 +52,7 @@ export default function AgentButtonAdd(props: Props) {
         width="240px"
         onClick={onClick}
       >
-        Add {agent}
+        {agent === 'unified_resource' ? 'Enroll New Resource' : `Add ${agent}`}
       </ButtonPrimary>
     </Link>
   );
@@ -63,6 +63,7 @@ export type AddButtonResourceKind =
   | 'application'
   | 'desktop'
   | 'kubernetes'
+  | 'unified_resource'
   | 'database';
 
 export type Props = {
