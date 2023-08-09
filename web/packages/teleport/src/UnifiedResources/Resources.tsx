@@ -14,12 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Box, Indicator, Flex } from 'design';
 
 import styled from 'styled-components';
-
-import { DbProtocol } from 'shared/services/databases';
 
 import {
   FeatureBox,
@@ -27,59 +25,69 @@ import {
   FeatureHeaderTitle,
 } from 'teleport/components/Layout';
 import ErrorMessage from 'teleport/components/AgentErrorMessage';
+import cfg from 'teleport/config';
+import { openNewTab } from 'teleport/lib/util';
 import useTeleport from 'teleport/useTeleport';
-import DbConnectDialog from 'teleport/Databases/ConnectDialog';
-import KubeConnectDialog from 'teleport/Kubes/ConnectDialog';
+import useStickyClusterId from 'teleport/useStickyClusterId';
 import AgentButtonAdd from 'teleport/components/AgentButtonAdd';
 import QuickLaunch from 'teleport/components/QuickLaunch';
+import { useInfiniteScroll } from 'teleport/components/hooks/useInfiniteScroll';
+import { useUrlFiltering } from 'teleport/components/hooks';
 
-import { useResources } from './useResources';
 import { ResourceCard } from './ResourceCard';
 import SearchPanel from './SearchPanel';
 import { FilterPanel } from './FilterPanel';
 
 export function Resources() {
+  const { isLeafCluster } = useStickyClusterId();
   const teleCtx = useTeleport();
+  const canCreate = teleCtx.storeUser.getTokenAccess().create;
+  const { clusterId } = useStickyClusterId();
+
+  const filtering = useUrlFiltering({
+    fieldName: 'name',
+    dir: 'ASC',
+  });
   const {
-    attempt,
-    fetchedData,
-    fetchMore,
-    getNodeLoginOptions,
-    getWindowsLoginOptions,
-    accessRequestId,
-    canCreate,
-    isLeafCluster,
-    username,
+    params,
+    search,
+    setParams,
+    replaceHistory,
+    pathname,
+    setSort,
+    onLabelClick,
+  } = filtering;
+
+  const { fetchInitial, fetchedData, attempt, fetchMore } = useInfiniteScroll({
+    fetchFunc: teleCtx.resourceService.fetchUnifiedResources,
     clusterId,
-    authType,
-    startSshSession,
-    startRemoteDesktopSession,
-    filtering: {
-      pathname,
-      params,
-      setParams,
-      setSort,
-      replaceHistory,
-      onLabelClick,
-    },
-  } = useResources(teleCtx);
-  const observed = useRef(null);
-
-  const [dbConnectInfo, setDbConnectInfo] = useState<{
-    name: string;
-    protocol: DbProtocol;
-  }>(null);
-
-  const [kubeConnectName, setKubeConnectName] = useState('');
+    params,
+  });
 
   useEffect(() => {
-    if (observed.current) {
+    fetchInitial();
+  }, [clusterId, search]);
+
+  const startSshSession = (login: string, serverId: string) => {
+    const url = cfg.getSshConnectRoute({
+      clusterId,
+      serverId,
+      login,
+    });
+
+    openNewTab(url);
+  };
+
+  const infiniteScrollDetector = useRef(null);
+
+  useEffect(() => {
+    if (infiniteScrollDetector.current) {
       const observer = new IntersectionObserver(entries => {
         if (entries[0]?.isIntersecting) {
           fetchMore();
         }
       });
-      observer.observe(observed.current);
+      observer.observe(infiniteScrollDetector.current);
       return () => observer.disconnect();
     }
   });
@@ -88,17 +96,15 @@ export function Resources() {
     <FeatureBox>
       <FeatureHeader alignItems="center" justifyContent="space-between">
         <FeatureHeaderTitle>Resources</FeatureHeaderTitle>
-        {attempt.status === 'success' && (
-          <Flex alignItems="center">
-            <QuickLaunch width="280px" onPress={startSshSession} mr={3} />
-            <AgentButtonAdd
-              agent="unified_resource"
-              beginsWithVowel={false}
-              isLeafCluster={isLeafCluster}
-              canCreate={canCreate}
-            />
-          </Flex>
-        )}
+        <Flex alignItems="center">
+          <QuickLaunch width="280px" onPress={startSshSession} mr={3} />
+          <AgentButtonAdd
+            agent="unified_resource"
+            beginsWithVowel={false}
+            isLeafCluster={isLeafCluster}
+            canCreate={canCreate}
+          />
+        </Flex>
       </FeatureHeader>
       <SearchPanel
         params={params}
@@ -118,21 +124,11 @@ export function Resources() {
       )}
       <ResourcesContainer gap={2}>
         {fetchedData.agents.map((agent, i) => (
-          <ResourceCard
-            key={i}
-            onLabelClick={onLabelClick}
-            resource={agent}
-            getNodeLoginOptions={getNodeLoginOptions}
-            getWindowsLoginOptions={getWindowsLoginOptions}
-            startRemoteDesktopSession={startRemoteDesktopSession}
-            startSshSession={startSshSession}
-            setDbConnectInfo={setDbConnectInfo}
-            setKubeConnectInfo={setKubeConnectName}
-          />
+          <ResourceCard key={i} onLabelClick={onLabelClick} resource={agent} />
         ))}
       </ResourcesContainer>
       <div
-        ref={observed}
+        ref={infiniteScrollDetector}
         style={{
           visibility: attempt.status === 'processing' ? 'visible' : 'hidden',
         }}
@@ -146,27 +142,6 @@ export function Resources() {
           </Box>
         )}
       </div>
-      {dbConnectInfo && (
-        <DbConnectDialog
-          username={username}
-          clusterId={clusterId}
-          dbName={dbConnectInfo.name}
-          dbProtocol={dbConnectInfo.protocol}
-          onClose={() => setDbConnectInfo(null)}
-          authType={authType}
-          accessRequestId={accessRequestId}
-        />
-      )}
-      {kubeConnectName && (
-        <KubeConnectDialog
-          onClose={() => setKubeConnectName('')}
-          username={username}
-          authType={authType}
-          kubeConnectName={kubeConnectName}
-          clusterId={clusterId}
-          accessRequestId={accessRequestId}
-        />
-      )}
     </FeatureBox>
   );
 }

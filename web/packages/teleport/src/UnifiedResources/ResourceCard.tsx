@@ -18,8 +18,6 @@ import React from 'react';
 import styled from 'styled-components';
 
 import { Box, ButtonLink, Flex, Label, Text } from 'design';
-import { LoginItem } from 'shared/components/MenuLogin';
-import { DbProtocol } from 'shared/services/databases';
 
 import { ResourceIcon, ResourceIconName } from 'design/ResourceIcon';
 import {
@@ -35,7 +33,6 @@ import {
   UnifiedResource,
   UnifiedResourceKind,
 } from 'teleport/services/agents';
-import { Desktop } from 'teleport/services/desktops';
 
 import { ResourceActionButton } from './ResourceActionButton';
 
@@ -58,29 +55,9 @@ const ResTypeIconBox = styled(Box)`
 type Props = {
   resource: UnifiedResource;
   onLabelClick?: (label: AgentLabel) => void;
-  getNodeLoginOptions: (serverId: string) => LoginItem[];
-  getWindowsLoginOptions: (desktop: Desktop) => LoginItem[];
-  startSshSession: (login: string, serverId: string) => void;
-  startRemoteDesktopSession: (username: string, desktopName: string) => void;
-  setDbConnectInfo: React.Dispatch<
-    React.SetStateAction<{
-      name: string;
-      protocol: DbProtocol;
-    }>
-  >;
-  setKubeConnectInfo: React.Dispatch<React.SetStateAction<string>>;
 };
 
-export function ResourceCard({
-  resource,
-  getNodeLoginOptions,
-  onLabelClick,
-  getWindowsLoginOptions,
-  startSshSession,
-  startRemoteDesktopSession,
-  setDbConnectInfo,
-  setKubeConnectInfo,
-}: Props) {
+export function ResourceCard({ resource, onLabelClick }: Props) {
   const name = resourceName(resource);
   const resIcon = resourceIconName(resource);
   const ResTypeIcon = resourceTypeIcon(resource.kind);
@@ -164,15 +141,7 @@ export function ResourceCard({
             <SingleLineBox flex="1" title={name}>
               <Text typography="h5">{name}</Text>
             </SingleLineBox>
-            <ResourceActionButton
-              resource={resource}
-              startSshSession={startSshSession}
-              startRemoteDesktopSession={startRemoteDesktopSession}
-              getNodeLoginOptions={getNodeLoginOptions}
-              getWindowsLoginOptions={getWindowsLoginOptions}
-              setDbConnectInfo={setDbConnectInfo}
-              setKubeConnectInfo={setKubeConnectInfo}
-            />
+            <ResourceActionButton resource={resource} />
           </Flex>
           <Flex flexDirection="row" alignItems="center">
             <ResTypeIconBox>

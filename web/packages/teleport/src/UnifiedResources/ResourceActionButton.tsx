@@ -14,83 +14,102 @@
  * limitations under the License.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ButtonBorder } from 'design';
 import { LoginItem, MenuLogin } from 'shared/components/MenuLogin';
-import { DbProtocol } from 'shared/services/databases';
 
 import { UnifiedResource } from 'teleport/services/agents';
+import cfg from 'teleport/config';
 
 import AwsLaunchButton from 'teleport/Apps/AppList/AwsLaunchButton';
+import useTeleport from 'teleport/useTeleport';
 import { Database } from 'teleport/services/databases';
-import { App } from 'teleport/services/apps';
+import { openNewTab } from 'teleport/lib/util';
 import { Kube } from 'teleport/services/kube';
 import { Desktop } from 'teleport/services/desktops';
+import DbConnectDialog from 'teleport/Databases/ConnectDialog';
+import KubeConnectDialog from 'teleport/Kubes/ConnectDialog';
+import useStickyClusterId from 'teleport/useStickyClusterId';
+import { Node } from 'teleport/services/nodes';
+import { App } from 'teleport/services/apps';
 
 type Props = {
   resource: UnifiedResource;
-  getNodeLoginOptions: (serverId: string) => LoginItem[];
-  getWindowsLoginOptions: (desktop: Desktop) => LoginItem[];
-  startSshSession: (login: string, serverId: string) => void;
-  startRemoteDesktopSession: (username: string, desktopName: string) => void;
-  setDbConnectInfo: React.Dispatch<
-    React.SetStateAction<{
-      name: string;
-      protocol: DbProtocol;
-    }>
-  >;
-  setKubeConnectInfo: React.Dispatch<React.SetStateAction<string>>;
 };
 
-export const ResourceActionButton = ({
-  resource,
-  getNodeLoginOptions,
-  getWindowsLoginOptions,
-  startSshSession,
-  startRemoteDesktopSession,
-  setDbConnectInfo,
-  setKubeConnectInfo,
-}: Props) => {
+export const ResourceActionButton = ({ resource }: Props) => {
   switch (resource.kind) {
     case 'node':
-      return renderNodeConnect(
-        resource.id,
-        startSshSession,
-        getNodeLoginOptions
-      );
+      return <NodeConnect node={resource} />;
     case 'app':
-      return renderAppLaunch(resource);
+      return <AppLaunch app={resource} />;
     case 'db':
-      return renderDatabaseConnect(resource, setDbConnectInfo);
+      return <DatabaseConnect database={resource} />;
     case 'kube_cluster':
-      return renderKubeConnect(resource, setKubeConnectInfo);
+      return <KubeConnect kube={resource} />;
     case 'windows_desktop':
-      return renderDesktopConnect(
-        resource,
-        getWindowsLoginOptions,
-        startRemoteDesktopSession
-      );
+      return <DesktopConnect desktop={resource} />;
     default:
       return null;
   }
 };
 
-const renderNodeConnect = (
-  id: string,
-  startSshSession: (login: string, serverId: string) => void,
-  onOpen: (serverId: string) => LoginItem[]
-) => {
+const NodeConnect = ({ node }: { node: Node }) => {
+  const { clusterId } = useStickyClusterId();
+  const startSshSession = (login: string, serverId: string) => {
+    const url = cfg.getSshConnectRoute({
+      clusterId,
+      serverId,
+      login,
+    });
+
+    openNewTab(url);
+  };
+
   function handleOnOpen() {
-    return onOpen(id);
+    return makeNodeOptions(clusterId, node);
+  }
+
+  const handleOnSelect = (e: React.SyntheticEvent, login: string) => {
+    e.preventDefault();
+    return startSshSession(login, node.id);
+  };
+
+  return (
+    <MenuLogin
+      getLoginItems={handleOnOpen}
+      onSelect={handleOnSelect}
+      transformOrigin={{
+        vertical: 'top',
+        horizontal: 'right',
+      }}
+      anchorOrigin={{
+        vertical: 'center',
+        horizontal: 'right',
+      }}
+    />
+  );
+};
+
+const DesktopConnect = ({ desktop }: { desktop: Desktop }) => {
+  const { clusterId } = useStickyClusterId();
+  const startRemoteDesktopSession = (username: string, desktopName: string) => {
+    const url = cfg.getDesktopRoute({
+      clusterId,
+      desktopName,
+      username,
+    });
+
+    openNewTab(url);
+  };
+
+  function handleOnOpen() {
+    return makeDesktopLoginOptions(clusterId, desktop.name, desktop.logins);
   }
 
   function handleOnSelect(e: React.SyntheticEvent, login: string) {
     e.preventDefault();
-    if (!startSshSession) {
-      return [];
-    }
-
-    return startSshSession(login, id);
+    return startRemoteDesktopSession(login, desktop.name);
   }
 
   return (
@@ -109,51 +128,18 @@ const renderNodeConnect = (
   );
 };
 
-function renderDesktopConnect(
-  desktop: Desktop,
-  onOpen: (desktop: Desktop) => LoginItem[],
-  onSelect: (username: string, desktopName: string) => void
-) {
-  function handleOnOpen() {
-    return onOpen(desktop);
-  }
-
-  function handleOnSelect(e: React.SyntheticEvent, login: string) {
-    e.preventDefault();
-    if (!onSelect) {
-      return [];
-    }
-
-    return onSelect(login, desktop.name);
-  }
-
-  return (
-    <MenuLogin
-      getLoginItems={handleOnOpen}
-      onSelect={handleOnSelect}
-      transformOrigin={{
-        vertical: 'top',
-        horizontal: 'right',
-      }}
-      anchorOrigin={{
-        vertical: 'center',
-        horizontal: 'right',
-      }}
-    />
-  );
-}
-
-function renderAppLaunch({
-  launchUrl,
-  awsConsole,
-  awsRoles,
-  fqdn,
-  clusterId,
-  publicAddr,
-  isCloudOrTcpEndpoint,
-  samlApp,
-  samlAppSsoUrl,
-}: App) {
+const AppLaunch = ({ app }: { app: App }) => {
+  const {
+    launchUrl,
+    awsConsole,
+    awsRoles,
+    fqdn,
+    clusterId,
+    publicAddr,
+    isCloudOrTcpEndpoint,
+    samlApp,
+    samlAppSsoUrl,
+  } = app;
   let $btn;
   if (awsConsole) {
     $btn = (
@@ -168,72 +154,144 @@ function renderAppLaunch({
     $btn = (
       <ButtonBorder
         disabled
-        width="88px"
+        width="90px"
         size="small"
         title="Cloud or TCP applications cannot be launched by the browser"
       >
-        LAUNCH
+        Launch
       </ButtonBorder>
     );
   } else if (samlApp) {
     $btn = (
       <ButtonBorder
         as="a"
-        width="88px"
+        width="90px"
         size="small"
         target="_blank"
         href={samlAppSsoUrl}
         rel="noreferrer"
       >
-        LOGIN
+        Login
       </ButtonBorder>
     );
   } else {
     $btn = (
       <ButtonBorder
         as="a"
-        width="88px"
+        width="90px"
         size="small"
         target="_blank"
         href={launchUrl}
         rel="noreferrer"
       >
-        LAUNCH
+        Launch
       </ButtonBorder>
     );
   }
 
   return $btn;
-}
+};
 
-function renderDatabaseConnect(
-  { name, protocol }: Database,
-  setDbConnectInfo: React.Dispatch<
-    React.SetStateAction<{
-      name: string;
-      protocol: DbProtocol;
-    }>
-  >
-) {
+function DatabaseConnect({ database }: { database: Database }) {
+  const { name, protocol } = database;
+  const ctx = useTeleport();
+  const { clusterId } = useStickyClusterId();
+  const [open, setOpen] = useState(false);
+  const username = ctx.storeUser.state.username;
+  const authType = ctx.storeUser.state.authType;
+  const accessRequestId = ctx.storeUser.getAccessRequestId();
   return (
-    <ButtonBorder
-      size="small"
-      onClick={() => {
-        setDbConnectInfo({ name, protocol });
-      }}
-    >
-      Connect
-    </ButtonBorder>
+    <>
+      <ButtonBorder
+        size="small"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        Connect
+      </ButtonBorder>
+      {open && (
+        <DbConnectDialog
+          username={username}
+          clusterId={clusterId}
+          dbName={name}
+          dbProtocol={protocol}
+          onClose={() => setOpen(false)}
+          authType={authType}
+          accessRequestId={accessRequestId}
+        />
+      )}
+    </>
   );
 }
 
-export const renderKubeConnect = (
-  { name }: Kube,
-  setKubeConnectName: React.Dispatch<React.SetStateAction<string>>
-) => {
+const KubeConnect = ({ kube }: { kube: Kube }) => {
+  const ctx = useTeleport();
+  const { clusterId } = useStickyClusterId();
+  const [open, setOpen] = useState(false);
+  const username = ctx.storeUser.state.username;
+  const authType = ctx.storeUser.state.authType;
+  const accessRequestId = ctx.storeUser.getAccessRequestId();
   return (
-    <ButtonBorder size="small" onClick={() => setKubeConnectName(name)}>
-      Connect
-    </ButtonBorder>
+    <>
+      <ButtonBorder size="small" onClick={() => setOpen(true)}>
+        Connect
+      </ButtonBorder>
+      {open && (
+        <KubeConnectDialog
+          onClose={() => setOpen(false)}
+          username={username}
+          authType={authType}
+          kubeConnectName={kube.name}
+          clusterId={clusterId}
+          accessRequestId={accessRequestId}
+        />
+      )}
+    </>
   );
+};
+
+const sortNodeLogins = (logins: string[]) => {
+  const noRoot = logins.filter(l => l !== 'root').sort();
+  if (noRoot.length === logins.length) {
+    return logins;
+  }
+  return ['root', ...noRoot];
+};
+
+const makeNodeOptions = (clusterId: string, node: Node | undefined) => {
+  const nodeLogins = node?.sshLogins || [];
+  const logins = sortNodeLogins(nodeLogins);
+
+  return logins.map(login => {
+    const url = cfg.getSshConnectRoute({
+      clusterId,
+      serverId: node?.id || '',
+      login,
+    });
+
+    return {
+      login,
+      url,
+    };
+  });
+};
+
+const makeDesktopLoginOptions = (
+  clusterId: string,
+  desktopName = '',
+  logins = [] as string[]
+): LoginItem[] => {
+  return logins.map(username => {
+    const url = cfg.getDesktopRoute({
+      clusterId,
+      desktopName,
+      username,
+    });
+
+    return {
+      login: username,
+      url,
+    };
+  });
 };
