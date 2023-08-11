@@ -120,16 +120,10 @@ func (c *UnifiedResourceCache) put(ctx context.Context, i item) error {
 	})
 }
 
-func putResources(ctx context.Context, c *UnifiedResourceCache, resources []resource) error {
-	return c.read(ctx, func(tree *btree.BTreeG[*item]) error {
-		for _, resource := range resources {
-			if resource == nil {
-				continue
-			}
-			tree.ReplaceOrInsert(&item{Key: resourceKey(resource), Value: resource})
-		}
-		return nil
-	})
+func putResources[T resource](tree *btree.BTreeG[*item], resources []T) {
+	for _, resource := range resources {
+		tree.ReplaceOrInsert(&item{Key: resourceKey(resource), Value: resource})
+	}
 }
 
 // delete removes the item by key, returns NotFound error
@@ -221,90 +215,76 @@ func resourceKey(resource types.Resource) []byte {
 	return backend.Key(prefix, resource.GetName(), resource.GetKind())
 }
 
-func (c *UnifiedResourceCache) clear(ctx context.Context) {
-	c.read(ctx, func(tree *btree.BTreeG[*item]) error {
-		// passing false means we do NOT add the nodes to a "freelist" as it clears the tree
-		// and instead, just dereferences every item and leaves it to the garbage collector to deal with.
-		// because we clear on cache create (and re-init), this was chosen to speed up the process as it's O(1)
-		tree.Clear(false)
-		return nil
-	})
-}
-
 func (c *UnifiedResourceCache) getResourcesAndUpdateCurrent(ctx context.Context) error {
-	c.clear(ctx)
-	newNodes, err := c.getAndUpdateNodes(ctx)
+	newNodes, err := c.getNodes(ctx)
 	if err != nil {
-		return trace.Wrap(err)
+		return trace.Wrap(err, "getting nodes for unified resource watcher")
 	}
-	newResources := make([]resource, len(newNodes))
-	newResources = append(newResources, newNodes...)
 
-	newDbs, err := c.getAndUpdateDatabases(ctx)
+	newDbs, err := c.getDatabaseServers(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	newResources = append(newResources, newDbs...)
 
-	newKubes, err := c.getAndUpdateKubes(ctx)
+	newKubes, err := c.getKubeServers(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	newResources = append(newResources, newKubes...)
 
-	newApps, err := c.getAndUpdateApps(ctx)
+	newApps, err := c.getAppServers(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	newResources = append(newResources, newApps...)
 
-	newSAMLApps, err := c.getAndUpdateSAMLApps(ctx)
+	newSAMLApps, err := c.getSAMLIdPServiceProviders(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	newResources = append(newResources, newSAMLApps...)
 
-	newDesktops, err := c.getAndUpdateDesktops(ctx)
+	newDesktops, err := c.getWindowsDesktops(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	newResources = append(newResources, newDesktops...)
 
-	err = putResources(ctx, c, newResources)
-	if err != nil {
+	if err := c.read(ctx, func(tree *btree.BTreeG[*item]) error {
+		tree.Clear(false)
+		putResources[types.Server](tree, newNodes)
+		putResources[types.DatabaseServer](tree, newDbs)
+		putResources[types.KubeServer](tree, newKubes)
+		putResources[types.AppServer](tree, newApps)
+		putResources[types.SAMLIdPServiceProvider](tree, newSAMLApps)
+		putResources[types.WindowsDesktop](tree, newDesktops)
+
+		c.stale = false
+		c.defineCollectorAsInitialized()
+		return nil
+	}); err != nil {
 		return trace.Wrap(err)
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.stale = false
-	c.defineCollectorAsInitialized()
+
 	return nil
 }
 
 // getAndUpdateNodes will get nodes and return them as a resources
-func (c *UnifiedResourceCache) getAndUpdateNodes(ctx context.Context) ([]resource, error) {
+func (c *UnifiedResourceCache) getNodes(ctx context.Context) ([]types.Server, error) {
 	newNodes, err := c.ResourceGetter.GetNodes(ctx, apidefaults.Namespace)
 	if err != nil {
 		return nil, trace.Wrap(err, "getting nodes for unified resource watcher")
 	}
-	resources := make([]resource, len(newNodes))
-	for _, node := range newNodes {
-		resources = append(resources, node)
-	}
 
-	return resources, err
+	return newNodes, err
 }
 
-// getAndUpdateDatabases will get database servers and return them as a resources
-func (c *UnifiedResourceCache) getAndUpdateDatabases(ctx context.Context) ([]resource, error) {
+// getDatabases will get database servers and return them as a resources
+func (c *UnifiedResourceCache) getDatabaseServers(ctx context.Context) ([]types.DatabaseServer, error) {
 	newDbs, err := c.GetDatabaseServers(ctx, apidefaults.Namespace)
 	if err != nil {
 		return nil, trace.Wrap(err, "getting databases for unified resource watcher")
 	}
 	// because it's possible to have multiple replicas of a database server serving the same database
-	// we only want to store one based on it's internal database resource
+	// we only want to store one based on its internal database resource
 	unique := map[string]struct{}{}
-	resources := make([]resource, len(newDbs))
+	resources := make([]types.DatabaseServer, 0, len(newDbs))
 	for _, dbServer := range newDbs {
 		db := dbServer.GetDatabase()
 		if _, ok := unique[db.GetName()]; ok {
@@ -317,14 +297,14 @@ func (c *UnifiedResourceCache) getAndUpdateDatabases(ctx context.Context) ([]res
 	return resources, nil
 }
 
-// getAndUpdateKubes will get kube clusters and return them as a resources
-func (c *UnifiedResourceCache) getAndUpdateKubes(ctx context.Context) ([]resource, error) {
+// getAndUpdateKubeServers will get kube servers and return them as a resources
+func (c *UnifiedResourceCache) getKubeServers(ctx context.Context) ([]types.KubeServer, error) {
 	newKubes, err := c.GetKubernetesServers(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err, "getting kubes for unified resource watcher")
 	}
 	unique := map[string]struct{}{}
-	resources := make([]resource, len(newKubes))
+	resources := make([]types.KubeServer, 0, len(newKubes))
 	for _, kubeServer := range newKubes {
 		cluster := kubeServer.GetCluster()
 		if _, ok := unique[cluster.GetName()]; ok {
@@ -338,13 +318,13 @@ func (c *UnifiedResourceCache) getAndUpdateKubes(ctx context.Context) ([]resourc
 }
 
 // getAndUpdateApps will get application servers and return them as a resources
-func (c *UnifiedResourceCache) getAndUpdateApps(ctx context.Context) ([]resource, error) {
+func (c *UnifiedResourceCache) getAppServers(ctx context.Context) ([]types.AppServer, error) {
 	newApps, err := c.GetApplicationServers(ctx, apidefaults.Namespace)
 	if err != nil {
 		return nil, trace.Wrap(err, "getting apps for unified resource watcher")
 	}
 	unique := map[string]struct{}{}
-	resources := make([]resource, len(newApps))
+	resources := make([]types.AppServer, len(newApps))
 	for _, appServer := range newApps {
 		app := appServer.GetApp()
 		if _, ok := unique[app.GetName()]; ok {
@@ -358,21 +338,17 @@ func (c *UnifiedResourceCache) getAndUpdateApps(ctx context.Context) ([]resource
 }
 
 // getAndUpdateDesktops will get windows desktops and return them as a resources
-func (c *UnifiedResourceCache) getAndUpdateDesktops(ctx context.Context) ([]resource, error) {
+func (c *UnifiedResourceCache) getWindowsDesktops(ctx context.Context) ([]types.WindowsDesktop, error) {
 	newDesktops, err := c.GetWindowsDesktops(ctx, types.WindowsDesktopFilter{})
 	if err != nil {
 		return nil, trace.Wrap(err, "getting desktops for unified resource watcher")
 	}
-	resources := make([]resource, len(newDesktops))
-	for _, desktop := range newDesktops {
-		resources = append(resources, desktop)
-	}
 
-	return resources, nil
+	return newDesktops, nil
 }
 
 // getAndUpdateSAMLApps will get SAML Idp Service Providers servers and return them as a resources
-func (c *UnifiedResourceCache) getAndUpdateSAMLApps(ctx context.Context) ([]resource, error) {
+func (c *UnifiedResourceCache) getSAMLIdPServiceProviders(ctx context.Context) ([]types.SAMLIdPServiceProvider, error) {
 	var newSAMLApps []types.SAMLIdPServiceProvider
 	startKey := ""
 
@@ -390,12 +366,8 @@ func (c *UnifiedResourceCache) getAndUpdateSAMLApps(ctx context.Context) ([]reso
 
 		startKey = nextKey
 	}
-	resources := make([]resource, len(newSAMLApps))
-	for _, app := range newSAMLApps {
-		resources = append(resources, app)
-	}
 
-	return resources, nil
+	return newSAMLApps, nil
 }
 
 // read applies the supplied closure to either the primary tree or the ttl-based fallback tree depending on
