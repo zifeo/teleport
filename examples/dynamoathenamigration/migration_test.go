@@ -25,7 +25,6 @@ import (
 	"math/rand"
 	"os"
 	"path"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -36,6 +35,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/utils"
@@ -200,11 +200,11 @@ func (m *mockEmitter) EmitAuditEvent(ctx context.Context, in apievents.AuditEven
 // requireEventsEqualInAnyOrder compares slices of auditevents ignoring order.
 // It's useful in tests because consumer does not guarantee order.
 func requireEventsEqualInAnyOrder(t *testing.T, want, got []apievents.AuditEvent) {
-	sort.Slice(want, func(i, j int) bool {
-		return want[i].GetID() < want[j].GetID()
+	slices.SortFunc(want, func(a, b apievents.AuditEvent) bool {
+		return a.GetID() < b.GetID()
 	})
-	sort.Slice(got, func(i, j int) bool {
-		return got[i].GetID() < got[j].GetID()
+	slices.SortFunc(got, func(a, b apievents.AuditEvent) bool {
+		return a.GetID() < b.GetID()
 	})
 	require.Empty(t, cmp.Diff(want, got))
 }

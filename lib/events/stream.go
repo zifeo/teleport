@@ -22,7 +22,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,6 +30,7 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/utils/retryutils"
@@ -677,8 +677,8 @@ func (w *sliceWriter) completeStream() {
 	}
 	if w.proto.completeType.Load() == completeTypeComplete {
 		// part upload notifications could arrive out of order
-		sort.Slice(w.completedParts, func(i, j int) bool {
-			return w.completedParts[i].Number < w.completedParts[j].Number
+		slices.SortFunc(w.completedParts, func(a, b StreamPart) bool {
+			return a.Number < b.Number
 		})
 		err := w.proto.cfg.Uploader.CompleteUpload(w.proto.cancelCtx, w.proto.cfg.Upload, w.completedParts)
 		w.proto.setCompleteResult(err)

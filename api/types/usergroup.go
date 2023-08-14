@@ -18,9 +18,9 @@ package types
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api/utils"
 )
@@ -111,12 +111,12 @@ func (g UserGroups) SortByCustom(sortBy SortBy) error {
 	isDesc := sortBy.IsDesc
 	switch sortBy.Field {
 	case ResourceMetadataName:
-		sort.SliceStable(g, func(i, j int) bool {
-			return stringCompare(g[i].GetName(), g[j].GetName(), isDesc)
+		slices.SortStableFunc(g, func(a, b UserGroup) bool {
+			return stringCompare(a.GetName(), b.GetName(), isDesc)
 		})
 	case ResourceSpecDescription:
-		sort.SliceStable(g, func(i, j int) bool {
-			return stringCompare(g[i].GetMetadata().Description, g[j].GetMetadata().Description, isDesc)
+		slices.SortStableFunc(g, func(a, b UserGroup) bool {
+			return stringCompare(a.GetMetadata().Description, b.GetMetadata().Description, isDesc)
 		})
 
 	default:

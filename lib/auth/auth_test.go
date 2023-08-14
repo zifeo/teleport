@@ -29,7 +29,6 @@ import (
 	"fmt"
 	mathrand "math/rand"
 	"os"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -42,6 +41,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/client/proto"
@@ -2597,8 +2597,12 @@ func newTestServices(t *testing.T) Services {
 }
 
 func compareDevices(t *testing.T, ignoreUpdateAndCounter bool, got []*types.MFADevice, want ...*types.MFADevice) {
-	sort.Slice(got, func(i, j int) bool { return got[i].GetName() < got[j].GetName() })
-	sort.Slice(want, func(i, j int) bool { return want[i].GetName() < want[j].GetName() })
+	slices.SortFunc(got, func(a, b *types.MFADevice) bool {
+		return a.GetName() < b.GetName()
+	})
+	slices.SortFunc(want, func(a, b *types.MFADevice) bool {
+		return a.GetName() < b.GetName()
+	})
 
 	// Remove TOTP keys before comparison.
 	for _, w := range want {

@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +27,7 @@ import (
 	containerpb "cloud.google.com/go/container/apiv1/containerpb"
 	gax "github.com/googleapis/gax-go/v2"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 	"golang.org/x/oauth2"
 	"k8s.io/client-go/rest"
 
@@ -163,8 +163,8 @@ func Test_gcpGKEClient_ListClusters(t *testing.T) {
 			got, err := client.ListClusters(tt.args.ctx, tt.args.projectID, tt.args.location)
 			tt.errValidation(t, err)
 
-			sort.Slice(got, func(i, j int) bool {
-				return got[i].Name < got[j].Name
+			slices.SortFunc(got, func(a, b GKECluster) bool {
+				return a.Name < b.Name
 			})
 
 			require.Equal(t, got, tt.want)

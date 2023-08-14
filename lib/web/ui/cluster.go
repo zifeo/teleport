@@ -18,10 +18,10 @@ package ui
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
@@ -65,8 +65,8 @@ func NewClusters(remoteClusters []reversetunnelclient.RemoteSite) ([]Cluster, er
 		clusters = append(clusters, *cluster)
 	}
 
-	sort.Slice(clusters, func(i, j int) bool {
-		return clusters[i].Name < clusters[j].Name
+	slices.SortFunc(clusters, func(a, b Cluster) bool {
+		return a.Name < b.Name
 	})
 
 	return clusters, nil

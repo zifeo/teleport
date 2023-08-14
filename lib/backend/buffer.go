@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/types"
@@ -210,8 +210,8 @@ func removeRedundantPrefixes(prefixes [][]byte) [][]byte {
 		return prefixes
 	}
 	// group adjacent prefixes together
-	sort.Slice(prefixes, func(i, j int) bool {
-		return bytes.Compare(prefixes[i], prefixes[j]) == -1
+	slices.SortFunc(prefixes, func(a, b []byte) bool {
+		return bytes.Compare(a, b) == -1
 	})
 	// j increments only for values with non-redundant prefixes
 	j := 0

@@ -21,13 +21,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/types"
@@ -147,14 +147,15 @@ func (c *AccessRequestCommand) List(ctx context.Context, client auth.ClientI) er
 	}
 
 	now := time.Now()
-	activeReqs := []types.AccessRequest{}
+	var activeReqs []types.AccessRequest
 	for _, req := range reqs {
 		if now.Before(req.GetAccessExpiry()) {
 			activeReqs = append(activeReqs, req)
 		}
 	}
-	sort.Slice(activeReqs, func(i, j int) bool {
-		return activeReqs[i].GetCreationTime().After(activeReqs[j].GetCreationTime())
+
+	slices.SortFunc(activeReqs, func(a, b types.AccessRequest) bool {
+		return a.GetCreationTime().After(b.GetCreationTime())
 	})
 
 	if err := printRequestsOverview(activeReqs, c.format); err != nil {
@@ -164,7 +165,7 @@ func (c *AccessRequestCommand) List(ctx context.Context, client auth.ClientI) er
 }
 
 func (c *AccessRequestCommand) Get(ctx context.Context, client auth.ClientI) error {
-	reqs := []types.AccessRequest{}
+	var reqs []types.AccessRequest
 	for _, reqID := range strings.Split(c.reqIDs, ",") {
 		req, err := client.GetAccessRequests(ctx, types.AccessRequestFilter{
 			ID: reqID,

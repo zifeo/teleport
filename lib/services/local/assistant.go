@@ -21,12 +21,12 @@ package local
 import (
 	"context"
 	"encoding/json"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/gravitational/teleport/api/gen/proto/go/assist/v1"
@@ -199,8 +199,8 @@ func (s *AssistService) GetAssistantConversations(ctx context.Context, req *assi
 		})
 	}
 
-	sort.Slice(conversationsIDs, func(i, j int) bool {
-		return conversationsIDs[i].CreatedTime.AsTime().Before(conversationsIDs[j].GetCreatedTime().AsTime())
+	slices.SortFunc(conversationsIDs, func(a, b *assist.ConversationInfo) bool {
+		return a.CreatedTime.AsTime().Before(b.GetCreatedTime().AsTime())
 	})
 
 	return &assist.GetAssistantConversationsResponse{
@@ -233,9 +233,9 @@ func (s *AssistService) GetAssistantMessages(ctx context.Context, req *assist.Ge
 		out[i] = &a
 	}
 
-	sort.Slice(out, func(i, j int) bool {
+	slices.SortFunc(out, func(a, b *assist.AssistantMessage) bool {
 		// Sort by created time.
-		return out[i].CreatedTime.AsTime().Before(out[j].GetCreatedTime().AsTime())
+		return a.CreatedTime.AsTime().Before(b.GetCreatedTime().AsTime())
 	})
 
 	return &assist.GetAssistantMessagesResponse{

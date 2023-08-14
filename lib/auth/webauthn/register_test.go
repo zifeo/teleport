@@ -18,13 +18,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/pem"
-	"sort"
 	"testing"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/google/go-cmp/cmp"
 	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/auth/mocku2f"
@@ -193,8 +193,8 @@ func TestRegistrationFlow_Begin_excludeList(t *testing.T) {
 			require.NoError(t, err, "Begin")
 
 			got := cc.Response.CredentialExcludeList
-			sort.Slice(got, func(i, j int) bool {
-				return bytes.Compare(got[i].CredentialID, got[j].CredentialID) == -1
+			slices.SortFunc(got, func(a, b wanlib.CredentialDescriptor) bool {
+				return bytes.Compare(a.CredentialID, b.CredentialID) == -1
 			})
 
 			want := make([]wanlib.CredentialDescriptor, len(test.wantExcludeList))
@@ -204,8 +204,8 @@ func TestRegistrationFlow_Begin_excludeList(t *testing.T) {
 					CredentialID: id,
 				}
 			}
-			sort.Slice(want, func(i, j int) bool {
-				return bytes.Compare(want[i].CredentialID, want[j].CredentialID) == -1
+			slices.SortFunc(want, func(a, b wanlib.CredentialDescriptor) bool {
+				return bytes.Compare(a.CredentialID, b.CredentialID) == -1
 			})
 
 			if diff := cmp.Diff(want, got); diff != "" {

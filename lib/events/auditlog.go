@@ -27,7 +27,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +35,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
@@ -370,17 +370,18 @@ type sessionIndex struct {
 }
 
 func (idx *sessionIndex) sort() {
-	sort.Slice(idx.events, func(i, j int) bool {
-		return idx.events[i].Index < idx.events[j].Index
+	slices.SortFunc(idx.events, func(a, b indexEntry) bool {
+		return a.Index < b.Index
 	})
-	sort.Slice(idx.chunks, func(i, j int) bool {
-		return idx.chunks[i].Offset < idx.chunks[j].Offset
+
+	slices.SortFunc(idx.chunks, func(a, b indexEntry) bool {
+		return a.Offset < b.Offset
 	})
 
 	// Enhanced events.
 	for _, events := range idx.enhancedEvents {
-		sort.Slice(events, func(i, j int) bool {
-			return events[i].Index < events[j].Index
+		slices.SortFunc(events, func(a, b indexEntry) bool {
+			return a.Index < b.Index
 		})
 	}
 }

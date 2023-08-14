@@ -19,7 +19,6 @@ package common
 import (
 	"fmt"
 	"path"
-	"sort"
 	"strings"
 	"time"
 
@@ -336,8 +335,8 @@ func onRequestReview(cf *CLIConf) error {
 }
 
 func showRequestTable(cf *CLIConf, reqs []types.AccessRequest) error {
-	sort.Slice(reqs, func(i, j int) bool {
-		return reqs[i].GetCreationTime().After(reqs[j].GetCreationTime())
+	slices.SortFunc(reqs, func(a, b types.AccessRequest) bool {
+		return a.GetCreationTime().After(b.GetCreationTime())
 	})
 
 	table := asciitable.MakeTable([]string{"ID", "User", "Roles"})

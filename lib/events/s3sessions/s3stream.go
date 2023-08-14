@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/defaults"
@@ -116,8 +116,8 @@ func (h *Handler) CompleteUpload(ctx context.Context, upload events.StreamUpload
 	defer func() { h.Infof("UploadPart(%v) completed in %v.", upload.ID, time.Since(start)) }()
 
 	// Parts must be sorted in PartNumber order.
-	sort.Slice(parts, func(i, j int) bool {
-		return parts[i].Number < parts[j].Number
+	slices.SortFunc(parts, func(a, b events.StreamPart) bool {
+		return a.Number < b.Number
 	})
 
 	completedParts := make([]*s3.CompletedPart, len(parts))
@@ -167,8 +167,8 @@ func (h *Handler) ListParts(ctx context.Context, upload events.StreamUpload) ([]
 		partNumberMarker = re.PartNumberMarker
 	}
 	// Parts must be sorted in PartNumber order.
-	sort.Slice(parts, func(i, j int) bool {
-		return parts[i].Number < parts[j].Number
+	slices.SortFunc(parts, func(a, b events.StreamPart) bool {
+		return a.Number < b.Number
 	})
 	return parts, nil
 }
@@ -208,8 +208,8 @@ func (h *Handler) ListUploads(ctx context.Context) ([]events.StreamUpload, error
 		uploadIDMarker = re.UploadIdMarker
 	}
 
-	sort.Slice(uploads, func(i, j int) bool {
-		return uploads[i].Initiated.Before(uploads[j].Initiated)
+	slices.SortFunc(uploads, func(a, b events.StreamUpload) bool {
+		return a.Initiated.Before(b.Initiated)
 	})
 
 	return uploads, nil

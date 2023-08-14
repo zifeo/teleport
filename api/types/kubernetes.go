@@ -19,7 +19,6 @@ package types
 import (
 	"fmt"
 	"regexp"
-	"sort"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -472,8 +471,8 @@ func (s KubeClusters) SortByCustom(sortBy SortBy) error {
 	isDesc := sortBy.IsDesc
 	switch sortBy.Field {
 	case ResourceMetadataName:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetName(), s[j].GetName(), isDesc)
+		slices.SortStableFunc(s, func(a, b KubeCluster) bool {
+			return stringCompare(a.GetName(), b.GetName(), isDesc)
 		})
 	default:
 		return trace.NotImplemented("sorting by field %q for resource %q is not supported", sortBy.Field, KindKubernetesCluster)
@@ -712,8 +711,8 @@ func (k KubeResources) SortByCustom(sortBy SortBy) error {
 	isDesc := sortBy.IsDesc
 	switch sortBy.Field {
 	case ResourceMetadataName:
-		sort.SliceStable(k, func(i, j int) bool {
-			return stringCompare(k[i].GetName(), k[j].GetName(), isDesc)
+		slices.SortStableFunc(k, func(a, b *KubernetesResourceV1) bool {
+			return stringCompare(a.GetName(), b.GetName(), isDesc)
 		})
 	default:
 		return trace.NotImplemented("sorting by field %q for kubernetes resources is not supported", sortBy.Field)

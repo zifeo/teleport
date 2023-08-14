@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/textproto"
-	"sort"
 	"strings"
 	"time"
 
@@ -32,6 +31,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/gravitational/trace"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	apievents "github.com/gravitational/teleport/api/types/events"
 	apiawsutils "github.com/gravitational/teleport/api/utils/aws"
@@ -285,8 +285,8 @@ type Roles []Role
 
 // Sort sorts the roles by their display names.
 func (roles Roles) Sort() {
-	sort.SliceStable(roles, func(x, y int) bool {
-		return strings.ToLower(roles[x].Display) < strings.ToLower(roles[y].Display)
+	slices.SortStableFunc(roles, func(a, b Role) bool {
+		return strings.ToLower(a.Display) < strings.ToLower(b.Display)
 	})
 }
 

@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"sort"
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -109,8 +108,7 @@ func (f *loginFlow) begin(ctx context.Context, user string, passwordless bool) (
 
 		// Sort non-resident keys first, which may cause clients to favor them for
 		// MFA in some scenarios (eg, tsh).
-		sort.Slice(devices, func(i, j int) bool {
-			dev1, dev2 := devices[i], devices[j]
+		slices.SortFunc(devices, func(dev1, dev2 *types.MFADevice) bool {
 			web1, web2 := dev1.GetWebauthn(), dev2.GetWebauthn()
 			resident1 := web1 != nil && web1.ResidentKey
 			resident2 := web2 != nil && web2.ResidentKey

@@ -2133,8 +2133,8 @@ func onListNodes(cf *CLIConf) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	sort.Slice(nodes, func(i, j int) bool {
-		return nodes[i].GetHostname() < nodes[j].GetHostname()
+	slices.SortFunc(nodes, func(a, b types.Server) bool {
+		return a.GetHostname() < b.GetHostname()
 	})
 
 	if err := printNodes(nodes, cf); err != nil {
@@ -4522,8 +4522,8 @@ func onApps(cf *CLIConf) error {
 	}
 
 	// Sort by app name.
-	sort.Slice(apps, func(i, j int) bool {
-		return apps[i].GetName() < apps[j].GetName()
+	slices.SortFunc(apps, func(a, b types.Application) bool {
+		return a.GetName() < b.GetName()
 	})
 
 	return trace.Wrap(showApps(apps, profile.Apps, cf.Format, cf.Verbose))

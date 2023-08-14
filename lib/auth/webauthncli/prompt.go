@@ -19,10 +19,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"strconv"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/lib/auth/touchid"
 	"github.com/gravitational/teleport/lib/utils/prompt"
@@ -91,10 +91,8 @@ func (p *DefaultPrompt) PromptCredential(creds []*CredentialInfo) (*CredentialIn
 		return nil, errors.New("attempted to prompt credential with empty credentials")
 	}
 
-	sort.Slice(creds, func(i, j int) bool {
-		c1 := creds[i]
-		c2 := creds[j]
-		return c1.User.Name < c2.User.Name
+	slices.SortFunc(creds, func(a, b *CredentialInfo) bool {
+		return a.User.Name < b.User.Name
 	})
 	for i, cred := range creds {
 		fmt.Fprintf(p.out, "[%v] %v\n", i+1, cred.User.Name)

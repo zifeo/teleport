@@ -16,12 +16,12 @@ package common
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/lib/asciitable"
 	"github.com/gravitational/teleport/lib/auth/touchid"
@@ -94,16 +94,14 @@ func (c *touchIDLsCommand) run(cf *CLIConf) error {
 		return trace.Wrap(err)
 	}
 
-	sort.Slice(infos, func(i, j int) bool {
-		i1 := &infos[i]
-		i2 := &infos[j]
-		if cmp := strings.Compare(i1.RPID, i2.RPID); cmp != 0 {
+	slices.SortFunc(infos, func(a, b touchid.CredentialInfo) bool {
+		if cmp := strings.Compare(a.RPID, b.RPID); cmp != 0 {
 			return cmp < 0
 		}
-		if cmp := strings.Compare(i1.User.Name, i2.User.Name); cmp != 0 {
+		if cmp := strings.Compare(a.User.Name, b.User.Name); cmp != 0 {
 			return cmp < 0
 		}
-		return i1.CreateTime.Before(i2.CreateTime)
+		return a.CreateTime.Before(b.CreateTime)
 	})
 
 	t := asciitable.MakeTable([]string{"RPID", "User", "Create Time", "Credential ID"})

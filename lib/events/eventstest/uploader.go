@@ -20,13 +20,13 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"sort"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/session"
@@ -172,8 +172,8 @@ func (m *MemoryUploader) ListUploads(ctx context.Context) ([]events.StreamUpload
 			Initiated: upload.Initiated,
 		})
 	}
-	sort.Slice(uploads, func(i, j int) bool {
-		return uploads[i].Initiated.Before(uploads[j].Initiated)
+	slices.SortFunc(uploads, func(a, b events.StreamUpload) bool {
+		return a.Initiated.Before(b.Initiated)
 	})
 	return uploads, nil
 }
@@ -193,9 +193,7 @@ func (m *MemoryUploader) GetParts(uploadID string) ([][]byte, error) {
 	for partNumber := range up.parts {
 		partNumbers = append(partNumbers, partNumber)
 	}
-	sort.Slice(partNumbers, func(i, j int) bool {
-		return partNumbers[i] < partNumbers[j]
-	})
+	slices.Sort(partNumbers)
 	for _, partNumber := range partNumbers {
 		sortedParts = append(sortedParts, up.parts[partNumber])
 	}
@@ -225,9 +223,7 @@ func (m *MemoryUploader) ListParts(ctx context.Context, upload events.StreamUplo
 	for partNumber := range up.parts {
 		partNumbers = append(partNumbers, partNumber)
 	}
-	sort.Slice(partNumbers, func(i, j int) bool {
-		return partNumbers[i] < partNumbers[j]
-	})
+	slices.Sort(partNumbers)
 	for _, partNumber := range partNumbers {
 		sortedParts = append(sortedParts, events.StreamPart{Number: partNumber})
 	}

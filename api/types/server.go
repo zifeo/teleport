@@ -19,12 +19,12 @@ package types
 import (
 	"fmt"
 	"net"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api/utils"
 )
@@ -606,16 +606,16 @@ func (s Servers) SortByCustom(sortBy SortBy) error {
 	isDesc := sortBy.IsDesc
 	switch sortBy.Field {
 	case ResourceMetadataName:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetName(), s[j].GetName(), isDesc)
+		slices.SortStableFunc(s, func(a, b Server) bool {
+			return stringCompare(a.GetName(), b.GetName(), isDesc)
 		})
 	case ResourceSpecHostname:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetHostname(), s[j].GetHostname(), isDesc)
+		slices.SortStableFunc(s, func(a, b Server) bool {
+			return stringCompare(a.GetHostname(), b.GetHostname(), isDesc)
 		})
 	case ResourceSpecAddr:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetAddr(), s[j].GetAddr(), isDesc)
+		slices.SortStableFunc(s, func(a, b Server) bool {
+			return stringCompare(a.GetHostname(), b.GetHostname(), isDesc)
 		})
 	default:
 		return trace.NotImplemented("sorting by field %q for resource %q is not supported", sortBy.Field, KindNode)

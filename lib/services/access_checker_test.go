@@ -17,10 +17,10 @@ limitations under the License.
 package services
 
 import (
-	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api/types"
 )
@@ -522,5 +522,7 @@ func newKubeCluster(t *testing.T, name string, labels map[string]string) types.K
 }
 
 func sortKubeResourceSlice(resources []types.KubernetesResource) {
-	sort.Slice(resources, func(i, j int) bool { return resources[i].Name < resources[j].Name })
+	slices.SortFunc(resources, func(a, b types.KubernetesResource) bool {
+		return a.Name < b.Name
+	})
 }

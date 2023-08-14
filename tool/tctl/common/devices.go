@@ -17,13 +17,13 @@ package common
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/gravitational/trace/trail"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	devicepb "github.com/gravitational/teleport/api/gen/proto/go/teleport/devicetrust/v1"
@@ -203,15 +203,12 @@ func (c *deviceListCommand) Run(ctx context.Context, authClient auth.ClientI) er
 	}
 
 	// Sort by {AssetTag, OsType}.
-	sort.Slice(devs, func(i, j int) bool {
-		d1 := devs[i]
-		d2 := devs[j]
-
-		if d1.AssetTag == d2.AssetTag {
-			return d1.OsType < d2.OsType
+	slices.SortFunc(devs, func(a, b *devicepb.Device) bool {
+		if a.AssetTag == b.AssetTag {
+			return a.OsType < b.OsType
 		}
 
-		return d1.AssetTag < d2.AssetTag
+		return a.AssetTag < b.AssetTag
 	})
 
 	// Print devices.

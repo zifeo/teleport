@@ -17,9 +17,8 @@ limitations under the License.
 package types
 
 import (
-	"sort"
-
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api/utils"
 )
@@ -251,12 +250,12 @@ func (s WindowsDesktops) SortByCustom(sortBy SortBy) error {
 	isDesc := sortBy.IsDesc
 	switch sortBy.Field {
 	case ResourceMetadataName:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetName(), s[j].GetName(), isDesc)
+		slices.SortStableFunc(s, func(a, b WindowsDesktop) bool {
+			return stringCompare(a.GetName(), b.GetName(), isDesc)
 		})
 	case ResourceSpecAddr:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetAddr(), s[j].GetAddr(), isDesc)
+		slices.SortStableFunc(s, func(a, b WindowsDesktop) bool {
+			return stringCompare(a.GetAddr(), b.GetAddr(), isDesc)
 		})
 	default:
 		return trace.NotImplemented("sorting by field %q for resource %q is not supported", sortBy.Field, KindWindowsDesktop)

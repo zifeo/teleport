@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +35,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/types"
@@ -331,8 +331,8 @@ func (h *Handler) getOldestVersion(ctx context.Context, bucket string, prefix st
 	}
 
 	// Sort the versions slice so the first entry is the oldest and return it.
-	sort.Slice(versions, func(i int, j int) bool {
-		return versions[i].Timestamp.Before(versions[j].Timestamp)
+	slices.SortFunc(versions, func(a, b versionID) bool {
+		return a.Timestamp.Before(b.Timestamp)
 	})
 	return versions[0].ID, nil
 }

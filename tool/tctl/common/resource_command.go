@@ -23,7 +23,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -1934,15 +1933,12 @@ func (rc *ResourceCommand) getCollection(ctx context.Context, client auth.Client
 			req.PageToken = resp.NextPageToken
 		}
 
-		sort.Slice(devs, func(i, j int) bool {
-			d1 := devs[i]
-			d2 := devs[j]
-
-			if d1.AssetTag == d2.AssetTag {
-				return d1.OsType < d2.OsType
+		slices.SortFunc(devs, func(a, b *devicepb.Device) bool {
+			if a.AssetTag == b.AssetTag {
+				return a.OsType < b.OsType
 			}
 
-			return d1.AssetTag < d2.AssetTag
+			return a.AssetTag < b.AssetTag
 		})
 
 		return &deviceCollection{devices: devs}, nil

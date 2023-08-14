@@ -19,11 +19,11 @@ package types
 import (
 	"net/url"
 	"regexp"
-	"sort"
 	"time"
 	"unicode"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 )
 
 // matchAlertLabelKey is a fairly conservative allowed charset for label keys.
@@ -110,11 +110,11 @@ func NewClusterAlert(name string, message string, opts ...AlertOption) (ClusterA
 // with higher severity alerts first, and alerts of the same priority are sorted
 // with newer alerts first.
 func SortClusterAlerts(alerts []ClusterAlert) {
-	sort.Slice(alerts, func(i, j int) bool {
-		if alerts[i].Spec.Severity == alerts[j].Spec.Severity {
-			return alerts[i].Spec.Created.After(alerts[j].Spec.Created)
+	slices.SortFunc(alerts, func(a, b ClusterAlert) bool {
+		if a.Spec.Severity == b.Spec.Severity {
+			return a.Spec.Created.After(b.Spec.Created)
 		}
-		return alerts[i].Spec.Severity > alerts[j].Spec.Severity
+		return a.Spec.Severity > b.Spec.Severity
 	})
 }
 

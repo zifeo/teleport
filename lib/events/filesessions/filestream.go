@@ -22,13 +22,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/events"
@@ -135,8 +135,8 @@ func (h *Handler) CompleteUpload(ctx context.Context, upload events.StreamUpload
 	}
 
 	// Parts must be sorted in PartNumber order.
-	sort.Slice(parts, func(i, j int) bool {
-		return parts[i].Number < parts[j].Number
+	slices.SortFunc(parts, func(a, b events.StreamPart) bool {
+		return a.Number < b.Number
 	})
 
 	uploadPath := h.path(upload.SessionID)
@@ -224,8 +224,8 @@ func (h *Handler) ListParts(ctx context.Context, upload events.StreamUpload) ([]
 		return nil, trace.Wrap(err)
 	}
 	// Parts must be sorted in PartNumber order.
-	sort.Slice(parts, func(i, j int) bool {
-		return parts[i].Number < parts[j].Number
+	slices.SortFunc(parts, func(a, b events.StreamPart) bool {
+		return a.Number < b.Number
 	})
 	return parts, nil
 }
@@ -285,8 +285,8 @@ func (h *Handler) ListUploads(ctx context.Context) ([]events.StreamUpload, error
 		})
 	}
 
-	sort.Slice(uploads, func(i, j int) bool {
-		return uploads[i].Initiated.Before(uploads[j].Initiated)
+	slices.SortFunc(uploads, func(a, b events.StreamUpload) bool {
+		return a.Initiated.Before(b.Initiated)
 	})
 
 	return uploads, nil

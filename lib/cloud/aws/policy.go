@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
-	"sort"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -358,8 +357,8 @@ func (p *policies) Upsert(ctx context.Context, policy *Policy) (string, error) {
 	// Check number of policy versions and delete one if necessary.
 	if len(versions) == maxPolicyVersions {
 		// Sort versions based on create date.
-		sort.Slice(versions, func(i, j int) bool {
-			return versions[i].CreateDate.Before(aws.TimeValue(versions[j].CreateDate))
+		slices.SortFunc(versions, func(a, b *iam.PolicyVersion) bool {
+			return a.CreateDate.Before(aws.TimeValue(b.CreateDate))
 		})
 
 		// Find the first version that is not default.

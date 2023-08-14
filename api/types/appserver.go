@@ -18,10 +18,10 @@ package types
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api"
 	"github.com/gravitational/teleport/api/utils"
@@ -330,16 +330,16 @@ func (s AppServers) SortByCustom(sortBy SortBy) error {
 	isDesc := sortBy.IsDesc
 	switch sortBy.Field {
 	case ResourceMetadataName:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetApp().GetName(), s[j].GetApp().GetName(), isDesc)
+		slices.SortStableFunc(s, func(a, b AppServer) bool {
+			return stringCompare(a.GetApp().GetName(), b.GetApp().GetName(), isDesc)
 		})
 	case ResourceSpecDescription:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetApp().GetDescription(), s[j].GetApp().GetDescription(), isDesc)
+		slices.SortStableFunc(s, func(a, b AppServer) bool {
+			return stringCompare(a.GetApp().GetDescription(), b.GetApp().GetDescription(), isDesc)
 		})
 	case ResourceSpecPublicAddr:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetApp().GetPublicAddr(), s[j].GetApp().GetPublicAddr(), isDesc)
+		slices.SortStableFunc(s, func(a, b AppServer) bool {
+			return stringCompare(a.GetApp().GetPublicAddr(), b.GetApp().GetPublicAddr(), isDesc)
 		})
 	default:
 		return trace.NotImplemented("sorting by field %q for resource %q is not supported", sortBy.Field, KindAppServer)

@@ -25,9 +25,10 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/client/proto"
@@ -42,7 +43,6 @@ import (
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/teleport/lib/utils/prompt"
-	"golang.org/x/exp/slices"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/ghodss/yaml"
@@ -132,7 +132,9 @@ func (c *mfaLSCommand) run(cf *CLIConf) error {
 	}
 
 	// Sort by name before printing.
-	sort.Slice(devs, func(i, j int) bool { return devs[i].GetName() < devs[j].GetName() })
+	slices.SortFunc(devs, func(a, b *types.MFADevice) bool {
+		return a.GetName() < b.GetName()
+	})
 
 	format := strings.ToLower(c.format)
 	switch format {

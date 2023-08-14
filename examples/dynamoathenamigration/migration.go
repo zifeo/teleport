@@ -26,7 +26,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"sort"
 	"sync"
 	"time"
 
@@ -606,8 +605,8 @@ func sortEventsAndWriteTmpFile(dir string, events []eventWithTime) (*os.File, er
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	sort.SliceStable(events, func(i, j int) bool {
-		return events[i].eventDate < events[j].eventDate
+	slices.SortStableFunc(events, func(a, b eventWithTime) bool {
+		return a.eventDate < b.eventDate
 	})
 	enc := json.NewEncoder(tmp)
 	for _, eventWithTime := range events {

@@ -18,10 +18,10 @@ package types
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 )
 
 // AppServerOrSAMLIdPServiceProvider describes methods shared between an AppServer and a SAMLIdpServiceProvider resource.
@@ -94,16 +94,16 @@ func (s AppServersOrSAMLIdPServiceProviders) SortByCustom(sortBy SortBy) error {
 	isDesc := sortBy.IsDesc
 	switch sortBy.Field {
 	case ResourceMetadataName:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetName(), s[j].GetName(), isDesc)
+		slices.SortStableFunc(s, func(a, b AppServerOrSAMLIdPServiceProvider) bool {
+			return stringCompare(a.GetName(), b.GetName(), isDesc)
 		})
 	case ResourceSpecDescription:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetDescription(), s[j].GetDescription(), isDesc)
+		slices.SortStableFunc(s, func(a, b AppServerOrSAMLIdPServiceProvider) bool {
+			return stringCompare(a.GetDescription(), b.GetDescription(), isDesc)
 		})
 	case ResourceSpecPublicAddr:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetPublicAddr(), s[j].GetPublicAddr(), isDesc)
+		slices.SortStableFunc(s, func(a, b AppServerOrSAMLIdPServiceProvider) bool {
+			return stringCompare(a.GetPublicAddr(), b.GetPublicAddr(), isDesc)
 		})
 	default:
 		return trace.NotImplemented("sorting by field %q for resource %q is not supported", sortBy.Field, KindAppOrSAMLIdPServiceProvider)

@@ -18,11 +18,11 @@ package types
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/gravitational/trace"
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api"
 	"github.com/gravitational/teleport/api/utils"
@@ -306,16 +306,16 @@ func (s DatabaseServers) SortByCustom(sortBy SortBy) error {
 	isDesc := sortBy.IsDesc
 	switch sortBy.Field {
 	case ResourceMetadataName:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetDatabase().GetName(), s[j].GetDatabase().GetName(), isDesc)
+		slices.SortStableFunc(s, func(a, b DatabaseServer) bool {
+			return stringCompare(a.GetDatabase().GetName(), b.GetDatabase().GetName(), isDesc)
 		})
 	case ResourceSpecDescription:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetDatabase().GetDescription(), s[j].GetDatabase().GetDescription(), isDesc)
+		slices.SortStableFunc(s, func(a, b DatabaseServer) bool {
+			return stringCompare(a.GetDatabase().GetDescription(), b.GetDatabase().GetDescription(), isDesc)
 		})
 	case ResourceSpecType:
-		sort.SliceStable(s, func(i, j int) bool {
-			return stringCompare(s[i].GetDatabase().GetType(), s[j].GetDatabase().GetType(), isDesc)
+		slices.SortStableFunc(s, func(a, b DatabaseServer) bool {
+			return stringCompare(a.GetDatabase().GetType(), b.GetDatabase().GetType(), isDesc)
 		})
 	default:
 		return trace.NotImplemented("sorting by field %q for resource %q is not supported", sortBy.Field, KindDatabaseServer)

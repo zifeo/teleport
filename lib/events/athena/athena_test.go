@@ -20,7 +20,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +31,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/protoadapt"
 
 	apievents "github.com/gravitational/teleport/api/types/events"
@@ -451,11 +451,11 @@ func TestPublisherConsumer(t *testing.T) {
 // requireEventsEqualInAnyOrder compares slices of auditevents ignoring order.
 // It's useful in tests because consumer does not guarantee order.
 func requireEventsEqualInAnyOrder(t *testing.T, want, got []apievents.AuditEvent) {
-	sort.Slice(want, func(i, j int) bool {
-		return want[i].GetID() < want[j].GetID()
+	slices.SortFunc(want, func(a, b apievents.AuditEvent) bool {
+		return a.GetID() < b.GetID()
 	})
-	sort.Slice(got, func(i, j int) bool {
-		return got[i].GetID() < got[j].GetID()
+	slices.SortFunc(got, func(a, b apievents.AuditEvent) bool {
+		return a.GetID() < b.GetID()
 	})
 	require.Empty(t, cmp.Diff(want, got))
 }

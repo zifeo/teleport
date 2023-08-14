@@ -19,10 +19,10 @@ package clusters
 import (
 	"context"
 	"errors"
-	"sort"
 
 	"github.com/gravitational/trace"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api/client/webclient"
 	"github.com/gravitational/teleport/api/constants"
@@ -359,10 +359,8 @@ func (p *pwdlessLoginPrompt) PromptCredential(deviceCreds []*wancli.CredentialIn
 	}
 
 	// Sorts in place.
-	sort.Slice(deviceCreds, func(i, j int) bool {
-		c1 := deviceCreds[i]
-		c2 := deviceCreds[j]
-		return c1.User.Name < c2.User.Name
+	slices.SortFunc(deviceCreds, func(a, b *wancli.CredentialInfo) bool {
+		return a.User.Name < b.User.Name
 	})
 
 	// Convert to grpc message.

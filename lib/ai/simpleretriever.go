@@ -17,8 +17,9 @@
 package ai
 
 import (
-	"sort"
 	"sync"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/lib/ai/embedding"
 )
@@ -99,8 +100,8 @@ func (r *SimpleRetriever) GetRelevant(query *embedding.Embedding, k int, filter 
 
 			// Sort to preserve the invariant - the result slice is sorted by
 			// similarity score
-			sort.Slice(results, func(i, j int) bool {
-				return results[i].SimilarityScore > results[j].SimilarityScore
+			slices.SortFunc(results, func(a, b *Document) bool {
+				return a.SimilarityScore > b.SimilarityScore
 			})
 		} else if similarity > results[len(results)-1].SimilarityScore {
 			// If the element is more relevant than the least similar element,
@@ -112,8 +113,8 @@ func (r *SimpleRetriever) GetRelevant(query *embedding.Embedding, k int, filter 
 
 			// Sort to preserve the invariant - the result slice is sorted by
 			// similarity score
-			sort.Slice(results, func(i, j int) bool {
-				return results[i].SimilarityScore > results[j].SimilarityScore
+			slices.SortFunc(results, func(a, b *Document) bool {
+				return a.SimilarityScore > b.SimilarityScore
 			})
 		}
 	}

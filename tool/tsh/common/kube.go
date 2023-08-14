@@ -543,8 +543,8 @@ func (c *kubeSessionsCommand) run(cf *CLIConf) error {
 		}
 	}
 
-	sort.Slice(filteredSessions, func(i, j int) bool {
-		return filteredSessions[i].GetCreated().Before(filteredSessions[j].GetCreated())
+	slices.SortFunc(filteredSessions, func(a, b types.SessionTracker) bool {
+		return a.GetCreated().Before(b.GetCreated())
 	})
 
 	format := strings.ToLower(c.format)

@@ -22,7 +22,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -35,6 +34,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/constants"
@@ -422,16 +422,16 @@ func (b *WatcherStats) SortedTopEvents() []Event {
 		out = append(out, events)
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].GetFreq() != out[j].GetFreq() {
-			return out[i].GetFreq() > out[j].GetFreq()
+	slices.SortFunc(out, func(a, b Event) bool {
+		if a.GetFreq() != b.GetFreq() {
+			return a.GetFreq() > b.GetFreq()
 		}
 
-		if out[i].Count != out[j].Count {
-			return out[i].Count > out[j].Count
+		if a.Count != b.Count {
+			return a.Count > b.Count
 		}
 
-		return out[i].Resource < out[j].Resource
+		return a.Resource < b.Resource
 	})
 	return out
 }
@@ -507,16 +507,16 @@ func (b *BackendStats) SortedTopRequests() []Request {
 		out = append(out, req)
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].GetFreq() != out[j].GetFreq() {
-			return out[i].GetFreq() > out[j].GetFreq()
+	slices.SortFunc(out, func(a, b Request) bool {
+		if a.GetFreq() != b.GetFreq() {
+			return a.GetFreq() > b.GetFreq()
 		}
 
-		if out[i].Count != out[j].Count {
-			return out[i].Count > out[j].Count
+		if a.Count != b.Count {
+			return a.Count > b.Count
 		}
 
-		return out[i].Key.Key < out[j].Key.Key
+		return a.Key.Key < b.Key.Key
 	})
 	return out
 }

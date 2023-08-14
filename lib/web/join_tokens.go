@@ -26,7 +26,6 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/exp/slices"
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/gravitational/teleport/api/client/proto"
@@ -481,11 +481,11 @@ func generateAzureTokenName(rules []*types.ProvisionTokenSpecV2Azure_Rule) (stri
 
 // sortRules sorts a slice of rules based on their AWS Account ID and ARN
 func sortRules(rules []*types.TokenRule) {
-	sort.Slice(rules, func(i, j int) bool {
-		iAcct, jAcct := rules[i].AWSAccount, rules[j].AWSAccount
+	slices.SortFunc(rules, func(a, b *types.TokenRule) bool {
+		iAcct, jAcct := a.AWSAccount, b.AWSAccount
 		// if accountID is the same, sort based on arn
 		if iAcct == jAcct {
-			arn1, arn2 := rules[i].AWSARN, rules[j].AWSARN
+			arn1, arn2 := a.AWSARN, b.AWSARN
 			return arn1 < arn2
 		}
 
@@ -495,8 +495,8 @@ func sortRules(rules []*types.TokenRule) {
 
 // sortAzureRules sorts a slice of Azure rules based on their subscription.
 func sortAzureRules(rules []*types.ProvisionTokenSpecV2Azure_Rule) {
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].Subscription < rules[j].Subscription
+	slices.SortFunc(rules, func(a, b *types.ProvisionTokenSpecV2Azure_Rule) bool {
+		return a.Subscription < b.Subscription
 	})
 }
 

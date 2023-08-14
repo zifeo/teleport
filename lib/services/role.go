@@ -699,8 +699,8 @@ func MakeRuleSet(rules []types.Rule) RuleSet {
 		rules := set[resource]
 		// sort rules by most specific rule, the rule that has actions
 		// is more specific than the one that has no actions
-		sort.Slice(rules, func(i, j int) bool {
-			return CompareRuleScore(&rules[i], &rules[j])
+		slices.SortFunc(rules, func(a, b types.Rule) bool {
+			return CompareRuleScore(&a, &b)
 		})
 		set[resource] = rules
 	}
@@ -2713,8 +2713,8 @@ func (set RoleSet) CertificateFormat() string {
 	}
 
 	// sort the slice so the most permissive is the first element
-	sort.Slice(formats, func(i, j int) bool {
-		return certificatePriority(formats[i]) < certificatePriority(formats[j])
+	slices.SortFunc(formats, func(a, b string) bool {
+		return certificatePriority(a) < certificatePriority(b)
 	})
 
 	return formats[0]

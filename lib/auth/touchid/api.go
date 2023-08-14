@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/go-webauthn/webauthn/protocol/webauthncose"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	wanlib "github.com/gravitational/teleport/lib/auth/webauthn"
 	"github.com/gravitational/teleport/lib/darwin"
@@ -463,11 +463,9 @@ func Login(origin, user string, assertion *wanlib.CredentialAssertion, picker Cr
 	}
 
 	// If everything else is equal, prefer newer credentials.
-	sort.Slice(infos, func(i, j int) bool {
-		i1 := infos[i]
-		i2 := infos[j]
+	slices.SortFunc(infos, func(a, b CredentialInfo) bool {
 		// Sorted in descending order.
-		return i1.CreateTime.After(i2.CreateTime)
+		return a.CreateTime.After(b.CreateTime)
 	})
 
 	// Prepare authentication context and prompt for the credential picker.

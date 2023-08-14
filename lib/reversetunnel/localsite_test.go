@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"net"
 	"os"
-	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/utils/sshutils"
@@ -313,7 +313,9 @@ func TestProxyResync(t *testing.T) {
 	}()
 
 	expected := []types.Server{proxy1, proxy2}
-	sort.Slice(expected, func(i, j int) bool { return expected[i].GetName() < expected[j].GetName() })
+	slices.SortFunc(expected, func(a, b types.Server) bool {
+		return a.GetName() < b.GetName()
+	})
 	for i := 0; i < 5; i++ {
 		// wait for the heartbeat loop to select
 		clock.BlockUntil(3) // periodic ticker + heart beat timer + resync ticker = 3
@@ -327,7 +329,9 @@ func TestProxyResync(t *testing.T) {
 			require.NotNil(t, req)
 			require.Len(t, req.Proxies, 2)
 
-			sort.Slice(req.Proxies, func(i, j int) bool { return req.Proxies[i].Metadata.Name < req.Proxies[j].Metadata.Name })
+			slices.SortFunc(req.Proxies, func(a, b discoveryProxy) bool {
+				return a.Metadata.Name < b.Metadata.Name
+			})
 
 			require.Equal(t, req.Proxies[0].Metadata.Name, expected[0].GetName())
 			require.Equal(t, req.Proxies[1].Metadata.Name, expected[1].GetName())

@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"sort"
 	"strconv"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 // separator for console output
@@ -197,8 +197,8 @@ func (rr *runResult) printFlakinessSummary(out io.Writer) {
 		alltests = append(alltests, tr)
 	}
 	// reverse sort by failure rate
-	sort.Slice(alltests, func(i, j int) bool {
-		return alltests[i].count.failureRate() > alltests[j].count.failureRate()
+	slices.SortFunc(alltests, func(a, b *testResult) bool {
+		return a.count.failureRate() > b.count.failureRate()
 	})
 	for i, test := range alltests {
 		if rr.top != 0 && i >= rr.top {
@@ -213,7 +213,9 @@ func (rr *runResult) printFlakinessSummary(out io.Writer) {
 func (rr *runResult) printFailedTests(out io.Writer) {
 	// Order the packages by name for consistent output ordering.
 	pkgs := maps.Values(rr.packages)
-	sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].name < pkgs[j].name })
+	slices.SortFunc(pkgs, func(a, b *packageResult) bool {
+		return a.name < b.name
+	})
 
 	for _, pkg := range pkgs {
 		if pkg.count.fail == 0 {
@@ -235,7 +237,9 @@ func (rr *runResult) printFailedTests(out io.Writer) {
 func (rr *runResult) printFailedTestOutput(out io.Writer) {
 	// Order the packages by name for consistent output ordering.
 	pkgs := maps.Values(rr.packages)
-	sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].name < pkgs[j].name })
+	slices.SortFunc(pkgs, func(a, b *packageResult) bool {
+		return a.name < b.name
+	})
 
 	for _, pkg := range pkgs {
 		if pkg.count.fail == 0 {

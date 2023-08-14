@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -31,6 +30,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/types"
@@ -372,7 +372,9 @@ func (c *TokensCommand) List(ctx context.Context, client auth.ClientI) error {
 	}
 
 	// Sort by expire time.
-	sort.Slice(tokens, func(i, j int) bool { return tokens[i].Expiry().Unix() < tokens[j].Expiry().Unix() })
+	slices.SortFunc(tokens, func(a, b types.ProvisionToken) bool {
+		return a.Expiry().Unix() < b.Expiry().Unix()
+	})
 
 	switch c.format {
 	case teleport.JSON:
