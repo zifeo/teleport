@@ -1493,6 +1493,8 @@ pub unsafe extern "C" fn client_write_sync_keys(
     };
     // TODO(zmb3): implement 2.2.8.1.1.3.1.1.5 Synchronize Event (TS_SYNC_EVENT)
     // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/6c5d0ef9-4653-4d69-9ba9-09ba3acd660f
+    debug!("client_write_sync_keys");
+    CGOErrCode::ErrCodeSuccess
 }
 
 /// # Safety
