@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -826,24 +825,31 @@ func testLocking(t *testing.T, newBackend Constructor) {
 	lock, err := backend.AcquireLock(ctx, backend.LockConfiguration{Backend: uut, LockName: tok1, TTL: ttl})
 	require.NoError(t, err)
 
+	release := func(l backend.Lock) chan error {
+		ch := make(chan error)
+
+		asyncOps.Add(1)
+		go func() {
+			defer func() {
+				asyncOps.Done()
+				close(ch)
+			}()
+			if err := l.Release(ctx, uut); err != nil {
+				ch <- err
+			}
+		}()
+
+		return ch
+	}
+
 	//  When I asynchronously release the lock...
-	marker := int32(7)
-	asyncOps.Add(1)
-	go func() {
-		defer asyncOps.Done()
-		atomic.StoreInt32(&marker, 9)
-		if err := lock.Release(ctx, uut); err != nil {
-			asyncErrs <- err
-		}
-	}()
+	released := release(lock)
 
 	// ...and simultaneously attempt to create a new lock with the same name
 	lock, err = backend.AcquireLock(ctx, backend.LockConfiguration{Backend: uut, LockName: tok1, TTL: ttl})
 
-	// expect that the asynchronous Release() has executed - we're using the
-	// change in the value of the marker value as a proxy for the Release().
-	atomic.AddInt32(&marker, 9)
-	require.Equal(t, int32(18), atomic.LoadInt32(&marker))
+	// expect that the asynchronous Release() has executed without error.
+	require.NoError(t, <-released)
 
 	// ...and also expect that the acquire succeeded, and will release safely.
 	require.NoError(t, err)
@@ -852,55 +858,36 @@ func testLocking(t *testing.T, newBackend Constructor) {
 	// Given a lock with the same name as previously-existing, manually-released lock
 	lock, err = backend.AcquireLock(ctx, backend.LockConfiguration{Backend: uut, LockName: tok1, TTL: ttl})
 	require.NoError(t, err)
-	atomic.StoreInt32(&marker, 7)
 
 	//  When I asynchronously release the lock...
-	asyncOps.Add(1)
-	go func() {
-		defer asyncOps.Done()
-		atomic.StoreInt32(&marker, 9)
-		if err := lock.Release(ctx, uut); err != nil {
-			asyncErrs <- err
-		}
-	}()
+	released = release(lock)
 
 	// ...and simultaneously try to acquire another lock with the same name
 	lock, err = backend.AcquireLock(ctx, backend.LockConfiguration{Backend: uut, LockName: tok1, TTL: ttl})
 
-	// expect that the asynchronous Release() has executed - we're using the
-	// change in the value of the marker value as a proxy for the call to
-	// Release().
-	atomic.AddInt32(&marker, 9)
-	require.Equal(t, int32(18), atomic.LoadInt32(&marker))
+	// expect that the asynchronous Release() has executed without error
+	require.NoError(t, <-released)
 
 	// ...and also expect that the acquire succeeded, and will release safely.
 	require.NoError(t, err)
 	require.NoError(t, lock.Release(ctx, uut))
 
 	// Given a pair of locks named `tok1` and `tok2`
-	y := int32(0)
 	lock1, err := backend.AcquireLock(ctx, backend.LockConfiguration{Backend: uut, LockName: tok1, TTL: ttl})
 	require.NoError(t, err)
 	lock2, err := backend.AcquireLock(ctx, backend.LockConfiguration{Backend: uut, LockName: tok2, TTL: ttl})
 	require.NoError(t, err)
 
 	//  When I asynchronously release the locks...
-	asyncOps.Add(1)
-	go func() {
-		defer asyncOps.Done()
-		atomic.StoreInt32(&y, 15)
-		if err := lock1.Release(ctx, uut); err != nil {
-			asyncErrs <- err
-		}
+	released1 := release(lock1)
+	released2 := release(lock2)
 
-		if err := lock2.Release(ctx, uut); err != nil {
-			asyncErrs <- err
-		}
-	}()
-
+	// expect that I eventually acquire a lock with the same name and that
+	// the locks are released
 	lock, err = backend.AcquireLock(ctx, backend.LockConfiguration{Backend: uut, LockName: tok1, TTL: ttl})
 	require.NoError(t, err)
-	require.Equal(t, int32(15), atomic.LoadInt32(&y))
+	require.NoError(t, <-released1)
+	require.NoError(t, <-released2)
 	require.NoError(t, lock.Release(ctx, uut))
 }
 

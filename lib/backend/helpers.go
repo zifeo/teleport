@@ -93,7 +93,7 @@ func AcquireLock(ctx context.Context, cfg LockConfiguration) (Lock, error) {
 	}
 	for {
 		// Get will clear TTL on a lock
-		cfg.Backend.Get(ctx, key)
+		_, _ = cfg.Backend.Get(ctx, key)
 
 		// CreateVal is atomic:
 		_, err = cfg.Backend.Create(ctx, Item{Key: key, Value: id, Expires: cfg.Backend.Clock().Now().UTC().Add(cfg.TTL)})
@@ -121,13 +121,13 @@ func (l *Lock) Release(ctx context.Context, backend Backend) error {
 	prev, err := backend.Get(ctx, l.key)
 	if err != nil {
 		if trace.IsNotFound(err) {
-			return trace.CompareFailed("cannot release lock %s (expired)", l.id)
+			return trace.CompareFailed("cannot release lock %s (expired)", string(l.id))
 		}
 		return trace.Wrap(err)
 	}
 
 	if !bytes.Equal(prev.Value, l.id) {
-		return trace.CompareFailed("cannot release lock %s (ownership changed)", l.id)
+		return trace.CompareFailed("cannot release lock %s (ownership changed)", string(l.id))
 	}
 
 	if err := backend.Delete(ctx, l.key); err != nil {
@@ -141,13 +141,13 @@ func (l *Lock) resetTTL(ctx context.Context, backend Backend) error {
 	prev, err := backend.Get(ctx, l.key)
 	if err != nil {
 		if trace.IsNotFound(err) {
-			return trace.CompareFailed("cannot refresh lock %s (expired)", l.id)
+			return trace.CompareFailed("cannot refresh lock %s (expired)", string(l.id))
 		}
 		return trace.Wrap(err)
 	}
 
 	if !bytes.Equal(prev.Value, l.id) {
-		return trace.CompareFailed("cannot refresh lock %s (ownership changed)", l.id)
+		return trace.CompareFailed("cannot refresh lock %s (ownership changed)", string(l.id))
 	}
 
 	next := *prev
@@ -155,7 +155,7 @@ func (l *Lock) resetTTL(ctx context.Context, backend Backend) error {
 
 	_, err = backend.CompareAndSwap(ctx, *prev, next)
 	if err != nil {
-		return trace.WrapWithMessage(err, "failed to fresh lock %s (cas failed)", l.id)
+		return trace.WrapWithMessage(err, "failed to fresh lock %s (cas failed)", string(l.id))
 	}
 
 	return nil
