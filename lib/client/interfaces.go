@@ -250,9 +250,12 @@ func (k *Key) clientTLSConfig(cipherSuites []uint16, tlsCertRaw []byte, clusters
 	return tlsConfig, nil
 }
 
-// ClientCertPool returns x509.CertPool containing trusted CA.
+// clientCertPool returns x509.CertPool containing trusted CA.
 func (k *Key) clientCertPool(clusters ...string) (*x509.CertPool, error) {
-	pool := x509.NewCertPool()
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 	for _, caPEM := range k.TLSCAs() {
 		cert, err := tlsca.ParseCertificatePEM(caPEM)
 		if err != nil {
