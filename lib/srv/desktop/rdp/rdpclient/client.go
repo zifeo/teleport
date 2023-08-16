@@ -443,6 +443,8 @@ func (c *Client) start() {
 						m.KeyCode, m.State, errCode)
 					return
 				}
+			case tdp.SyncKeys:
+
 			case tdp.ClipboardData:
 				if len(m) > 0 {
 					data, err := utils.UnsafeSliceData(m)
