@@ -743,6 +743,7 @@ func NewTestTLSServer(cfg TestTLSServerConfig) (*TestTLSServer, error) {
 		return nil, trace.Wrap(err)
 	}
 	tlsConfig.Time = cfg.AuthServer.Clock().Now
+	tlsConfig.SessionTicketsDisabled = true
 
 	accessPoint, err := NewAdminAuthServer(srv.AuthServer.AuthServer, srv.AuthServer.AuditLog)
 	if err != nil {
