@@ -3,7 +3,7 @@ kind: ClusterConfig
 metadata:
   name:
   region:
-  version: "1.23"
+  version: "1.27"
 
 iam:
   withOIDC: true
