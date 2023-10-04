@@ -22,6 +22,8 @@ limitations under the License.
 import (
 	"os"
 	"strings"
+
+	"github.com/gravitational/trace"
 )
 
 const lockPostfix = ".lock.tmp"
@@ -45,4 +47,34 @@ func getPlatformLockFilePath(path string) string {
 func getHardLinkCount(fi os.FileInfo) (uint64, bool) {
 	// Although hardlinks on Windows are possible, Go does not currently expose the hardlinks associated to a file on windows
 	return 0, false
+}
+
+// On Windows we can't unlink a file and then write to it, we have to overwrite it first.
+// However, doing just that would cause problems - we have code that expects
+// that if a file exists, then its contents must be well-formed.
+// To remedy this, we rename the file before writing data to it.
+func removeWithOverwrite(filePath string, fi os.FileInfo) error {
+	renamedFilePath := filePath + ".tmp"
+
+	err := os.Rename(filePath, renamedFilePath)
+	if err != nil {
+		// Attempt to delete the original file anyway.
+		return trace.ConvertSystemError(os.Remove(filePath))
+	}
+
+	file, err := openOrRemoveOnFailure(renamedFilePath)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer file.Close()
+
+	overwriteErr := overwriteFile(file, fi)
+	removeErr := os.Remove(renamedFilePath)
+	if overwriteErr != nil {
+		return trace.Wrap(overwriteErr)
+	}
+	if removeErr != nil {
+		return trace.ConvertSystemError(os.Remove(renamedFilePath))
+	}
+	return nil
 }

@@ -22,6 +22,8 @@ package utils
 import (
 	"os"
 	"syscall"
+
+	"github.com/gravitational/trace"
 )
 
 // On non-windows we just lock the target file itself.
@@ -37,4 +39,24 @@ func getHardLinkCount(fi os.FileInfo) (uint64, bool) {
 	} else {
 		return 0, false
 	}
+}
+
+// On non-windows we unlink the file and then overwrite it.
+func removeWithOverwrite(filePath string, fi os.FileInfo) error {
+	file, err := openOrRemoveOnFailure(filePath)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer file.Close()
+
+	removeErr := os.Remove(filePath)
+	overwriteErr := overwriteFile(file, fi)
+
+	if removeErr != nil {
+		return trace.ConvertSystemError(removeErr)
+	}
+	if overwriteErr != nil {
+		return trace.Wrap(overwriteErr)
+	}
+	return nil
 }

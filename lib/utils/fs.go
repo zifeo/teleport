@@ -294,66 +294,58 @@ func RemoveAllSecure(path string) error {
 func RemoveSecure(filePath string) error {
 	info, err := os.Lstat(filePath)
 	if err != nil && os.IsNotExist(err) {
-		return err
+		return trace.ConvertSystemError(err)
 	}
 	// Don't fast return on other errors, still allow removeSecure to attempt removal.
-	return removeSecure(filePath, info)
+	return trace.Wrap(removeSecure(filePath, info))
 }
 
 func removeSecure(filePath string, fi os.FileInfo) error {
 	if fi.Mode().Type()&os.ModeSymlink != 0 {
-		return os.Remove(filePath)
-	}
-	f, openErr := os.OpenFile(filePath, os.O_WRONLY, 0)
-	switch {
-	case os.IsNotExist(openErr):
-		return trace.ConvertSystemError(openErr)
-	case openErr != nil:
-		// Attempt delete anyway.
 		return trace.ConvertSystemError(os.Remove(filePath))
 	}
-	defer f.Close()
+	return trace.Wrap(removeWithOverwrite(filePath, fi))
+}
 
-	if runtime.GOOS == "windows" {
-		// Windows can't unlink the file before overwriting.
-		if f != nil {
-			for i := 0; i < 3; i++ {
-				if err := overwriteFile(f, fi); err != nil {
-					break
-				}
-			}
-		}
-		return trace.ConvertSystemError(os.Remove(filePath))
-	} else {
-		removeErr := os.Remove(filePath)
-		if f != nil {
-			for i := 0; i < 3; i++ {
-				if err := overwriteFile(f, fi); err != nil {
-					break
-				}
-			}
-		}
-		return trace.ConvertSystemError(removeErr)
+func openOrRemoveOnFailure(filePath string) (*os.File, error) {
+	file, err := os.OpenFile(filePath, os.O_WRONLY, 0)
+	switch {
+	case os.IsNotExist(err):
+		return nil, trace.ConvertSystemError(err)
+	case err != nil:
+		// Attempt to delete anyway.
+		return nil, trace.ConvertSystemError(os.Remove(filePath))
 	}
+	return file, nil
 }
 
 func overwriteFile(f *os.File, fi os.FileInfo) error {
-	// Rounding up to 4k to hide the original file size. 4k was chosen because it's a common block size.
-	const block = 4096
-	size := fi.Size() / block * block
-	if fi.Size()%block != 0 {
-		size += block
+	overwrite := func() error {
+		// Rounding up to 4k to hide the original file size. 4k was chosen because it's a common block size.
+		const block = 4096
+		size := fi.Size() / block * block
+		if fi.Size()%block != 0 {
+			size += block
+		}
+
+		_, copyErr := io.CopyN(f, rand.Reader, size)
+
+		// Attempt sync regardless of above error
+		syncErr := f.Sync() // sync to ensure commit to hardware
+		if copyErr != nil {
+			return trace.Wrap(copyErr)
+		} else if syncErr != nil {
+			return trace.Wrap(syncErr)
+		}
+		return nil
 	}
 
-	_, copyErr := io.CopyN(f, rand.Reader, size)
-
-	// Attempt sync regardless of above error
-	syncErr := f.Sync() // sync to ensure commit to hardware
-	if copyErr != nil {
-		return trace.Wrap(copyErr)
-	} else if syncErr != nil {
-		return trace.Wrap(syncErr)
+	for i := 0; i < 3; i++ {
+		if err := overwrite(); err != nil {
+			return trace.Wrap(err)
+		}
 	}
+
 	return nil
 }
 
