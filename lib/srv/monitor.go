@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -472,6 +472,14 @@ func newTrackingChannel(ch ssh.Channel, t ActivityTracker) ssh.Channel {
 	}
 }
 
+func (ch trackingChannel) WriteTo(w io.Writer) (n int64, err error) {
+	return io.Copy(activityWriter{Writer: w, t: ch.t}, ch.Channel)
+}
+
+func (ch trackingChannel) ReadFrom(r io.Reader) (n int64, err error) {
+	return io.Copy(activityWriter{Writer: ch.Channel, t: ch.t}, r)
+}
+
 func (ch trackingChannel) Read(buf []byte) (int, error) {
 	n, err := ch.Channel.Read(buf)
 	ch.t.UpdateClientActivity()
@@ -519,19 +527,35 @@ func NewTrackingReadConn(cfg TrackingReadConnConfig) (*TrackingReadConn, error) 
 		return nil, trace.Wrap(err)
 	}
 	return &TrackingReadConn{
-		cfg:        cfg,
-		mtx:        sync.RWMutex{},
-		Conn:       cfg.Conn,
-		lastActive: time.Time{},
+		cfg:  cfg,
+		Conn: cfg.Conn,
 	}, nil
 }
 
 // TrackingReadConn allows to wrap net.Conn and keeps track of the latest conn read activity.
 type TrackingReadConn struct {
 	cfg TrackingReadConnConfig
-	mtx sync.RWMutex
 	net.Conn
-	lastActive time.Time
+	lastActive atomic.Int64
+}
+
+type activityWriter struct {
+	io.Writer
+	t ActivityTracker
+}
+
+func (w activityWriter) Write(p []byte) (int, error) {
+	n, err := w.Writer.Write(p)
+	w.t.UpdateClientActivity()
+	return n, err
+}
+
+func (t *TrackingReadConn) WriteTo(w io.Writer) (n int64, err error) {
+	return io.Copy(activityWriter{Writer: w, t: t}, t.Conn)
+}
+
+func (t *TrackingReadConn) ReadFrom(r io.Reader) (n int64, err error) {
+	return io.Copy(activityWriter{Writer: t.Conn, t: t}, r)
 }
 
 // Read reads data from the connection.
@@ -562,16 +586,13 @@ func (t *TrackingReadConn) CloseWithCause(cause error) error {
 
 // GetClientLastActive returns time when client was last active
 func (t *TrackingReadConn) GetClientLastActive() time.Time {
-	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-	return t.lastActive
+	active := t.lastActive.Load()
+	return time.Unix(0, active)
 }
 
 // UpdateClientActivity sets last recorded client activity
 func (t *TrackingReadConn) UpdateClientActivity() {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	t.lastActive = t.cfg.Clock.Now().UTC()
+	t.lastActive.Store(t.cfg.Clock.Now().UTC().UnixNano())
 }
 
 // GetDisconnectExpiredCertFromIdentity calculates the proper value for DisconnectExpiredCert

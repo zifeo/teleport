@@ -151,7 +151,7 @@ func (s *TrackingConn) Write(b []byte) (n int, err error) {
 // It's thread-safe if the underlying io.Reader is thread-safe.
 type TrackingReader struct {
 	r     io.Reader
-	count uint64
+	count atomic.Uint64
 }
 
 // NewTrackingReader creates a TrackingReader around r.
@@ -161,12 +161,12 @@ func NewTrackingReader(r io.Reader) *TrackingReader {
 
 // Count returns the total number of bytes read so far.
 func (r *TrackingReader) Count() uint64 {
-	return atomic.LoadUint64(&r.count)
+	return r.count.Load()
 }
 
 func (r *TrackingReader) Read(b []byte) (int, error) {
 	n, err := r.r.Read(b)
-	atomic.AddUint64(&r.count, uint64(n))
+	r.count.Add(uint64(n))
 
 	// This has to use the original error type or else utilities using the connection
 	// (like io.Copy, which is used by the oxy forwarder) may incorrectly categorize

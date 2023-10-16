@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -66,7 +67,7 @@ type ConnectionContext struct {
 	cancel context.CancelFunc
 
 	// clientLastActive records the last time there was activity from the client.
-	clientLastActive time.Time
+	lastActive atomic.Int64
 
 	clock clockwork.Clock
 }
@@ -211,16 +212,13 @@ func (c *ConnectionContext) decrSessions() {
 
 // GetClientLastActive returns time when client was last active.
 func (c *ConnectionContext) GetClientLastActive() time.Time {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.clientLastActive
+	active := c.lastActive.Load()
+	return time.Unix(0, active)
 }
 
 // UpdateClientActivity sets last recorded client activity associated with this context.
 func (c *ConnectionContext) UpdateClientActivity() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.clientLastActive = c.clock.Now().UTC()
+	c.lastActive.Store(c.clock.Now().UTC().UnixNano())
 }
 
 // AddCloser adds any closer in ctx that will be called

@@ -32,6 +32,14 @@ type CombinedReadWriteCloser struct {
 	w io.WriteCloser
 }
 
+func (o CombinedReadWriteCloser) WriteTo(w io.Writer) (n int64, err error) {
+	return io.Copy(w, o.r)
+}
+
+func (o CombinedReadWriteCloser) ReadFrom(r io.Reader) (n int64, err error) {
+	return io.Copy(o.w, r)
+}
+
 func (o CombinedReadWriteCloser) Read(p []byte) (int, error) {
 	return o.r.Read(p)
 }
