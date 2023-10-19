@@ -116,7 +116,6 @@ func (tf *TextFormatter) CheckAndSetDefaults() error {
 // Format formats each log line as configured in teleport config file
 func (tf *TextFormatter) Format(e *log.Entry) ([]byte, error) {
 	var data []byte
-	caller := tf.FormatCaller()
 	w := &writer{}
 
 	// write timestamp first if enabled
@@ -171,13 +170,21 @@ func (tf *TextFormatter) Format(e *log.Entry) ([]byte, error) {
 		w.writeField(e.Message, noColor)
 	}
 
+	caller := e.Data[callerField]
+	delete(e.Data, callerField)
 	if len(e.Data) > 0 {
 		w.writeMap(e.Data)
 	}
 
 	// write caller last if enabled
-	if tf.callerEnabled && caller != "" {
-		w.writeField(caller, noColor)
+	if tf.callerEnabled {
+		if caller == nil {
+			caller = tf.FormatCaller()
+		}
+
+		if caller != "" {
+			w.writeField(caller, noColor)
+		}
 	}
 
 	w.WriteByte('\n')
@@ -235,7 +242,7 @@ func (j *JSONFormatter) CheckAndSetDefaults() error {
 
 // Format implements logrus.Formatter interface
 func (j *JSONFormatter) Format(e *log.Entry) ([]byte, error) {
-	if j.callerEnabled {
+	if j.callerEnabled && e.Data[callerField] == nil {
 		path := formatCallerWithPathAndLine()
 		e.Data[callerField] = path
 	}

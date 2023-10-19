@@ -18,14 +18,17 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	stdlog "log"
+	"log/slog"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -67,6 +70,8 @@ func InitLogger(purpose LoggingPurpose, level logrus.Level, verbose ...bool) {
 		logrus.SetFormatter(NewDefaultTextFormatter(trace.IsTerminal(os.Stderr)))
 		logrus.SetOutput(os.Stderr)
 	}
+
+	slog.SetDefault(slog.New(NewLogrusHandler(logrus.StandardLogger())))
 }
 
 // InitLoggerForTests initializes the standard logger for tests.
@@ -566,4 +571,128 @@ func FormatAlert(alert types.ClusterAlert) string {
 		}
 	}
 	return buf.String()
+}
+
+const (
+	logrusErrorLevel = slog.LevelError
+	logrusWarnLevel  = slog.LevelWarn
+	logrusInfoLevel  = slog.LevelInfo
+	logrusDebugLevel = slog.LevelDebug
+	logrusTraceLevel = slog.LevelDebug - 1
+)
+
+type LogrusHandler struct {
+	logger *logrus.Logger
+	groups []string
+	attrs  []slog.Attr
+}
+
+func NewLogrusHandler(logger *logrus.Logger) *LogrusHandler {
+	return &LogrusHandler{logger: logger}
+}
+
+func (l *LogrusHandler) clone() *LogrusHandler {
+	return &LogrusHandler{
+		logger: l.logger,
+		groups: slices.Clip(l.groups),
+		attrs:  slices.Clip(l.attrs),
+	}
+}
+
+func (l *LogrusHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	switch l.logger.GetLevel() {
+	case logrus.TraceLevel:
+		return true
+	case logrus.DebugLevel:
+		return level >= slog.LevelDebug
+	case logrus.InfoLevel:
+		return level >= slog.LevelInfo
+	case logrus.WarnLevel:
+		return level >= slog.LevelWarn
+	case logrus.ErrorLevel:
+		return level >= slog.LevelError
+	case logrus.FatalLevel:
+		return level >= slog.LevelError+1
+	default:
+		return false
+	}
+
+}
+
+func (l *LogrusHandler) Handle(ctx context.Context, r slog.Record) error {
+	log := logrus.NewEntry(l.logger)
+	if !r.Time.IsZero() {
+		log = log.WithTime(r.Time)
+	}
+
+	fields := logrus.Fields{}
+	for _, attr := range l.attrs {
+		if attr.Key != "" {
+			fields[attr.Key] = attr.Value.Any()
+		}
+	}
+
+	r.Attrs(func(attr slog.Attr) bool {
+		if attr.Key != "" {
+			fields[attr.Key] = attr.Value.Any()
+		}
+		return true
+	})
+
+	fs := runtime.CallersFrames([]uintptr{r.PC})
+	f, _ := fs.Next()
+
+	count := 0
+	idx := strings.LastIndexFunc(f.File, func(r rune) bool {
+		if r == '/' {
+			count++
+		}
+
+		return count == 2
+	})
+
+	fields["caller"] = fmt.Sprintf("%s:%d", f.File[idx+1:], f.Line)
+
+	log = log.WithFields(fields)
+
+	if r.Level <= logrusTraceLevel {
+		log.Trace(r.Message)
+	} else if r.Level <= logrusDebugLevel {
+		log.Debug(r.Message)
+	} else if r.Level <= logrusInfoLevel {
+		log.Info(r.Message)
+	} else if r.Level <= logrusWarnLevel {
+		log.Warn(r.Message)
+	} else if r.Level <= logrusErrorLevel {
+		log.Error(r.Message)
+	} else {
+		log.Fatal(r.Message)
+	}
+
+	return nil
+}
+
+func (l *LogrusHandler) groupPrefix() string {
+	const groupSep = ":"
+	if len(l.groups) > 0 {
+		return strings.Join(l.groups, groupSep) + groupSep
+	}
+	return ""
+}
+
+func (l *LogrusHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	newHandler := l.clone()
+	for _, a := range attrs {
+		newHandler.attrs = append(newHandler.attrs, slog.Attr{
+			Key:   l.groupPrefix() + a.Key,
+			Value: a.Value,
+		})
+	}
+	return newHandler
+}
+
+func (l *LogrusHandler) WithGroup(name string) slog.Handler {
+	newHandler := l.clone()
+	newHandler.groups = append(newHandler.groups, name)
+	return newHandler
 }

@@ -25,6 +25,7 @@ import (
 	"errors"
 	"io"
 	stdlog "log"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -722,6 +723,7 @@ func applyLogConfig(loggerConfig Log, cfg *servicecfg.Config) error {
 	}
 
 	cfg.Log = logger
+	cfg.Logger = slog.New(utils.NewLogrusHandler(logger))
 	return nil
 }
 
