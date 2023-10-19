@@ -17,6 +17,7 @@ package servicecfg
 
 import (
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -225,6 +226,8 @@ type Config struct {
 
 	// Log optionally specifies the logger
 	Log utils.Logger
+
+	Logger *slog.Logger
 
 	// PluginRegistry allows adding enterprise logic to Teleport services
 	PluginRegistry plugin.Registry

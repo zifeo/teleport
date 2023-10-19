@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -393,7 +394,8 @@ type TeleportProcess struct {
 	id string
 
 	// log is a process-local log entry.
-	log logrus.FieldLogger
+	log    logrus.FieldLogger
+	logger *slog.Logger
 
 	// keyPairs holds private/public key pairs used
 	// to get signed host certificates from auth server
@@ -804,6 +806,8 @@ func NewTeleport(cfg *servicecfg.Config) (*TeleportProcess, error) {
 		"pid":           fmt.Sprintf("%v.%v", os.Getpid(), processID),
 	}))
 
+	cfg.Logger = cfg.Logger.With("pid", fmt.Sprintf("%v.%v", os.Getpid(), processID))
+
 	// If FIPS mode was requested make sure binary is build against BoringCrypto.
 	if cfg.FIPS {
 		if !modules.GetModules().IsBoringBinary() {
@@ -838,7 +842,7 @@ func NewTeleport(cfg *servicecfg.Config) (*TeleportProcess, error) {
 		}
 	}
 
-	supervisor := NewSupervisor(processID, cfg.Log)
+	supervisor := NewSupervisor(processID, cfg.Logger)
 	storage, err := auth.NewProcessStorage(supervisor.ExitContext(), filepath.Join(cfg.DataDir, teleport.ComponentProcess))
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -937,17 +941,14 @@ func NewTeleport(cfg *servicecfg.Config) (*TeleportProcess, error) {
 		importedDescriptors:    cfg.FileDescriptors,
 		storage:                storage,
 		id:                     processID,
-		log:                    cfg.Log,
+		log:                    cfg.Log.WithField(trace.Component, teleport.Component(teleport.ComponentProcess, processID)),
+		logger:                 cfg.Logger.With(trace.Component, teleport.Component(teleport.ComponentProcess, processID)),
 		keyPairs:               make(map[keyPairKey]KeyPair),
 		cloudLabels:            cloudLabels,
 		TracingProvider:        tracing.NoopProvider(),
 	}
 
 	process.registerExpectedServices(cfg)
-
-	process.log = cfg.Log.WithFields(logrus.Fields{
-		trace.Component: teleport.Component(teleport.ComponentProcess, process.id),
-	})
 
 	// if user started auth and another service (without providing the auth address for
 	// that service, the address of the in-process auth will be used
@@ -3070,7 +3071,8 @@ func (process *TeleportProcess) initDiagnosticService() error {
 	}
 
 	if process.Config.Debug {
-		process.log.Infof("Adding diagnostic debugging handlers. To connect with profiler, use `go tool pprof %v`.", process.Config.DiagnosticAddr.Addr)
+		process.log.WithField("diag_addr", process.Config.DiagnosticAddr.Addr).Info("Adding diagnostic debugging handlers. To connect with profiler, use `go tool pprof diag_addr`.")
+		process.logger.Info("Adding diagnostic debugging handlers. To connect with profiler, use `go tool pprof diag_addr`.", "diag_addr", process.Config.DiagnosticAddr.Addr)
 
 		mux.HandleFunc("/debug/pprof/", pprof.Index)
 		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)

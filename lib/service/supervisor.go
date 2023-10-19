@@ -19,11 +19,11 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/gravitational/trace"
-	"github.com/sirupsen/logrus"
 
 	"github.com/gravitational/teleport"
 )
@@ -163,11 +163,11 @@ type LocalSupervisor struct {
 	id            string
 
 	// log specifies the logger
-	log logrus.FieldLogger
+	log *slog.Logger
 }
 
 // NewSupervisor returns new instance of initialized supervisor
-func NewSupervisor(id string, parentLog logrus.FieldLogger) Supervisor {
+func NewSupervisor(id string, parentLog *slog.Logger) Supervisor {
 	ctx := context.TODO()
 
 	closeContext, cancel := context.WithCancel(ctx)
@@ -198,7 +198,7 @@ func NewSupervisor(id string, parentLog logrus.FieldLogger) Supervisor {
 
 		reloadContext: reloadContext,
 		signalReload:  signalReload,
-		log:           parentLog.WithField(trace.Component, teleport.Component(teleport.ComponentProcess, id)),
+		log:           parentLog.With(trace.Component, teleport.Component(teleport.ComponentProcess, id)),
 	}
 	go srv.fanOut()
 	return srv
@@ -216,7 +216,7 @@ func (e *Event) String() string {
 }
 
 func (s *LocalSupervisor) Register(srv Service) {
-	s.log.WithField("service", srv.Name()).Debug("Adding service to supervisor.")
+	s.log.Debug("Adding service to supervisor.", "service", srv.Name())
 	s.Lock()
 	defer s.Unlock()
 	s.services = append(s.services, srv)
@@ -248,7 +248,7 @@ func (s *LocalSupervisor) RegisterCriticalFunc(name string, fn Func) {
 
 // RemoveService removes service from supervisor tracking list
 func (s *LocalSupervisor) RemoveService(srv Service) error {
-	l := s.log.WithField("service", srv.Name())
+	l := s.log.With("service", srv.Name())
 	s.Lock()
 	defer s.Unlock()
 	for i, el := range s.services {
@@ -258,7 +258,7 @@ func (s *LocalSupervisor) RemoveService(srv Service) error {
 			return nil
 		}
 	}
-	l.Warning("Service is completed but not found.")
+	l.Warn("Service is completed but not found.")
 	return trace.NotFound("service %v is not found", srv)
 }
 
@@ -276,7 +276,7 @@ func (s *LocalSupervisor) serve(srv Service) {
 	go func() {
 		defer s.wg.Done()
 		defer s.RemoveService(srv)
-		l := s.log.WithField("service", srv.Name())
+		l := s.log.With("service", srv.Name())
 		l.Debug("Service has started.")
 		err := srv.Serve()
 		if err != nil {
@@ -284,7 +284,7 @@ func (s *LocalSupervisor) serve(srv Service) {
 				l.Info("Teleport process has shut down.")
 			} else {
 				if s.ExitContext().Err() == nil {
-					l.WithError(err).Warning("Teleport process has exited with error.")
+					l.Warn("Teleport process has exited with error.", "error", err)
 				}
 				s.BroadcastEvent(Event{
 					Name:    ServiceExitedWithErrorEvent,
@@ -301,7 +301,7 @@ func (s *LocalSupervisor) Start() error {
 	s.state = stateStarted
 
 	if len(s.services) == 0 {
-		s.log.Warning("Supervisor has no services to run. Exiting.")
+		s.log.Warn("Supervisor has no services to run. Exiting.")
 		return nil
 	}
 
@@ -387,7 +387,7 @@ func (s *LocalSupervisor) BroadcastEvent(event Event) {
 	// Log all events other than recovered events to prevent the logs from
 	// being flooded.
 	if event.String() != TeleportOKEvent {
-		s.log.WithField("event", event.String()).Debug("Broadcasting event.")
+		s.log.Debug("Broadcasting event.", "event", event.String())
 	}
 
 	go func() {
@@ -409,12 +409,9 @@ func (s *LocalSupervisor) BroadcastEvent(event Event) {
 					return
 				}
 			}(mappedEvent)
-			s.log.WithFields(logrus.Fields{
-				"in":  event.String(),
-				"out": m.String(),
-			}).Debug("Broadcasting mapped event.")
+			s.log.Debug("Broadcasting mapped event.", "in", event, "out", m)
 		} else if err != nil {
-			s.log.Debugf("Teleport not yet ready: %v", err)
+			s.log.Debug("Teleport not yet ready", "error", err)
 		}
 	}
 }
