@@ -18,11 +18,14 @@ package utils
 
 import (
 	"crypto/x509"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/gravitational/trace"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -149,5 +152,18 @@ func TestAllowWhitespace(t *testing.T) {
 
 	for i, tt := range tests {
 		require.Equal(t, tt.out, AllowWhitespace(tt.in), fmt.Sprintf("test case %v", i))
+	}
+}
+
+func BenchmarkLogger(b *testing.B) {
+	b.ReportAllocs()
+	InitLogger(LoggingForDaemon, logrus.DebugLevel)
+	logger := slog.With(trace.Component, "test")
+	addr := NetAddr{Addr: "127.0.0.1:1234", AddrNetwork: "tcp"}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		l := logger.With("test", 123).With("animal", "llama").With("error", errors.New("you can't do that"))
+		l.Info("Adding diagnostic debugging handlers. To connect with profiler, use `go tool pprof diag_addr`.", "diag_addr", &addr)
 	}
 }
