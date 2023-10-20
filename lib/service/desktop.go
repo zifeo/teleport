@@ -18,12 +18,12 @@ package service
 
 import (
 	"crypto/tls"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 
 	"github.com/gravitational/trace"
-	"github.com/sirupsen/logrus"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/types"
@@ -42,9 +42,7 @@ import (
 )
 
 func (process *TeleportProcess) initWindowsDesktopService() {
-	log := process.log.WithFields(logrus.Fields{
-		trace.Component: teleport.Component(teleport.ComponentWindowsDesktop, process.id),
-	})
+	log := process.logger.With(trace.Component, teleport.Component(teleport.ComponentWindowsDesktop, process.id))
 	process.RegisterWithAuthServer(types.RoleWindowsDesktop, WindowsDesktopIdentityEvent)
 	process.RegisterCriticalFunc("windows_desktop.init", func() error {
 		conn, err := process.WaitForConnector(WindowsDesktopIdentityEvent, log)
@@ -60,10 +58,10 @@ func (process *TeleportProcess) initWindowsDesktopService() {
 	})
 }
 
-func (process *TeleportProcess) initWindowsDesktopServiceRegistered(log *logrus.Entry, conn *Connector) (retErr error) {
+func (process *TeleportProcess) initWindowsDesktopServiceRegistered(log *slog.Logger, conn *Connector) (retErr error) {
 	defer func() {
 		if err := process.closeImportedDescriptors(teleport.ComponentWindowsDesktop); err != nil {
-			log.WithError(err).Warn("Failed closing imported file descriptors.")
+			log.Warn("Failed closing imported file descriptors.", "error", err)
 		}
 	}()
 	cfg := process.Config
@@ -140,10 +138,13 @@ func (process *TeleportProcess) initWindowsDesktopServiceRegistered(log *logrus.
 		log.Info("Using a reverse tunnel to register and handle proxy connections")
 	}
 
+	// TODO(tross) remove once dependent services are converted to use slog
+	logger := process.log.WithField(trace.Component, teleport.Component(teleport.ComponentWindowsDesktop, process.id))
+
 	lockWatcher, err := services.NewLockWatcher(process.ExitContext(), services.LockWatcherConfig{
 		ResourceWatcherConfig: services.ResourceWatcherConfig{
 			Component: teleport.ComponentWindowsDesktop,
-			Log:       log,
+			Log:       logger,
 			Clock:     cfg.Clock,
 			Client:    conn.Client,
 		},
@@ -158,7 +159,7 @@ func (process *TeleportProcess) initWindowsDesktopServiceRegistered(log *logrus.
 		ClusterName: clusterName,
 		AccessPoint: accessPoint,
 		LockWatcher: lockWatcher,
-		Logger:      log,
+		Logger:      logger,
 		// Device authorization breaks browser-based access.
 		DisableDeviceAuthorization: true,
 	})
@@ -178,7 +179,7 @@ func (process *TeleportProcess) initWindowsDesktopServiceRegistered(log *logrus.
 		if info.ServerName != "" {
 			clusterName, err = apiutils.DecodeClusterName(info.ServerName)
 			if err != nil && !trace.IsNotFound(err) {
-				log.Debugf("Ignoring unsupported cluster name %q.", info.ServerName)
+				log.Debug("Ignoring unsupported cluster.", "cluster_name", info.ServerName)
 			}
 		}
 		pool, _, err := auth.DefaultClientCertPool(accessPoint, clusterName)
@@ -208,7 +209,7 @@ func (process *TeleportProcess) initWindowsDesktopServiceRegistered(log *logrus.
 
 	srv, err := desktop.NewWindowsService(desktop.WindowsServiceConfig{
 		DataDir:      process.Config.DataDir,
-		Log:          log,
+		Log:          logger,
 		Clock:        process.Clock,
 		Authorizer:   authorizer,
 		Emitter:      conn.Client,
@@ -247,7 +248,7 @@ func (process *TeleportProcess) initWindowsDesktopServiceRegistered(log *logrus.
 		if useTunnel {
 			log.Info("Starting Windows desktop service via proxy reverse tunnel.")
 		} else {
-			log.Infof("Starting Windows desktop service on %v.", listener.Addr())
+			log.Info("Starting Windows desktop service.", "address", listener.Addr())
 		}
 		process.BroadcastEvent(Event{Name: WindowsDesktopReady, Payload: nil})
 

@@ -17,11 +17,11 @@ limitations under the License.
 package service
 
 import (
+	"log/slog"
 	"net"
 	"net/http"
 
 	"github.com/gravitational/trace"
-	"github.com/sirupsen/logrus"
 
 	"github.com/gravitational/teleport"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
@@ -36,9 +36,7 @@ import (
 )
 
 func (process *TeleportProcess) initKubernetes() {
-	log := process.log.WithFields(logrus.Fields{
-		trace.Component: teleport.Component(teleport.ComponentKube, process.id),
-	})
+	log := process.logger.With(trace.Component, teleport.Component(teleport.ComponentKube, process.id))
 
 	process.RegisterWithAuthServer(types.RoleKube, KubeIdentityEvent)
 	process.RegisterCriticalFunc("kube.init", func() error {
@@ -59,11 +57,11 @@ func (process *TeleportProcess) initKubernetes() {
 	})
 }
 
-func (process *TeleportProcess) initKubernetesService(log *logrus.Entry, conn *Connector) (retErr error) {
+func (process *TeleportProcess) initKubernetesService(log *slog.Logger, conn *Connector) (retErr error) {
 	// clean up unused descriptors passed for proxy, but not used by it
 	defer func() {
 		if err := process.closeImportedDescriptors(teleport.ComponentKube); err != nil {
-			log.WithError(err).Warn("Failed closing imported file descriptors.")
+			log.Warn("Failed closing imported file descriptors.", "error", err)
 		}
 	}()
 	cfg := process.Config
@@ -148,11 +146,14 @@ func (process *TeleportProcess) initKubernetesService(log *logrus.Entry, conn *C
 		log.Info("Started reverse tunnel client.")
 	}
 
+	// TODO(tross) remove once dependent services are converted to use slog
+	logger := process.log.WithField(trace.Component, teleport.Component(teleport.ComponentKube, process.id))
+
 	var dynLabels *labels.Dynamic
 	if len(cfg.Kube.DynamicLabels) != 0 {
 		dynLabels, err = labels.NewDynamic(process.ExitContext(), &labels.DynamicConfig{
 			Labels: cfg.Kube.DynamicLabels,
-			Log:    log,
+			Log:    logger,
 		})
 		if err != nil {
 			return trace.Wrap(err)
@@ -169,7 +170,7 @@ func (process *TeleportProcess) initKubernetesService(log *logrus.Entry, conn *C
 	lockWatcher, err := services.NewLockWatcher(process.ExitContext(), services.LockWatcherConfig{
 		ResourceWatcherConfig: services.ResourceWatcherConfig{
 			Component: teleport.ComponentKube,
-			Log:       log,
+			Log:       logger,
 			Client:    conn.Client,
 		},
 	})
@@ -182,7 +183,7 @@ func (process *TeleportProcess) initKubernetesService(log *logrus.Entry, conn *C
 		ClusterName: teleportClusterName,
 		AccessPoint: accessPoint,
 		LockWatcher: lockWatcher,
-		Logger:      log,
+		Logger:      logger,
 	})
 	if err != nil {
 		return trace.Wrap(err)
@@ -236,7 +237,7 @@ func (process *TeleportProcess) initKubernetesService(log *logrus.Entry, conn *C
 		StaticLabels:         cfg.Kube.StaticLabels,
 		DynamicLabels:        dynLabels,
 		CloudLabels:          process.cloudLabels,
-		Log:                  log,
+		Log:                  logger,
 		PROXYProtocolMode:    multiplexer.PROXYProtocolOff, // Kube service doesn't need to process unsigned PROXY headers.
 	})
 	if err != nil {
@@ -251,7 +252,7 @@ func (process *TeleportProcess) initKubernetesService(log *logrus.Entry, conn *C
 		if conn.UseTunnel() {
 			log.Info("Starting Kube service via proxy reverse tunnel.")
 		} else {
-			log.Infof("Starting Kube service on %v.", listener.Addr())
+			log.Info("Starting Kube service.", "address", listener.Addr())
 		}
 		process.BroadcastEvent(Event{Name: KubernetesReady, Payload: nil})
 		err := kubeServer.Serve(listener)

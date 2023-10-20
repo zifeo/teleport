@@ -200,12 +200,12 @@ func TestDynamicClientReuse(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, process.Close()) })
 
 	// wait for instance connector
-	iconn, err := process.WaitForConnector(InstanceIdentityEvent, process.log)
+	iconn, err := process.WaitForConnector(InstanceIdentityEvent, process.logger)
 	require.NoError(t, err)
 	require.NotNil(t, iconn)
 
 	// wait for proxy connector
-	pconn, err := process.WaitForConnector(ProxyIdentityEvent, process.log)
+	pconn, err := process.WaitForConnector(ProxyIdentityEvent, process.logger)
 	require.NoError(t, err)
 	require.NotNil(t, pconn)
 
@@ -217,7 +217,7 @@ func TestDynamicClientReuse(t *testing.T) {
 	// configued set.
 	process.RegisterWithAuthServer(types.RoleNode, SSHIdentityEvent)
 
-	nconn, err := process.WaitForConnector(SSHIdentityEvent, process.log)
+	nconn, err := process.WaitForConnector(SSHIdentityEvent, process.logger)
 	require.NoError(t, err)
 	require.NotNil(t, nconn)
 

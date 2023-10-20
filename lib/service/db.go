@@ -47,8 +47,9 @@ func (process *TeleportProcess) initDatabases() {
 func (process *TeleportProcess) initDatabaseService() (retErr error) {
 	log := process.log.WithField(trace.Component, teleport.Component(
 		teleport.ComponentDatabase, process.id))
+	logger := process.logger.With(trace.Component, teleport.Component(teleport.ComponentDatabase, process.id))
 
-	conn, err := process.WaitForConnector(DatabasesIdentityEvent, log)
+	conn, err := process.WaitForConnector(DatabasesIdentityEvent, logger)
 	if conn == nil {
 		return trace.Wrap(err)
 	}
@@ -115,7 +116,7 @@ func (process *TeleportProcess) initDatabaseService() (retErr error) {
 	}
 	defer func() {
 		if retErr != nil {
-			warnOnErr(asyncEmitter.Close(), process.log)
+			warnOnErr(asyncEmitter.Close(), process.logger)
 		}
 	}()
 
@@ -168,7 +169,7 @@ func (process *TeleportProcess) initDatabaseService() (retErr error) {
 	}
 	defer func() {
 		if retErr != nil {
-			warnOnErr(dbService.Close(), process.log)
+			warnOnErr(dbService.Close(), logger)
 		}
 	}()
 
@@ -204,19 +205,19 @@ func (process *TeleportProcess) initDatabaseService() (retErr error) {
 		if dbService != nil {
 			if payload == nil {
 				log.Info("Shutting down immediately.")
-				warnOnErr(dbService.Close(), log)
+				warnOnErr(dbService.Close(), logger)
 			} else {
 				log.Info("Shutting down gracefully.")
-				warnOnErr(dbService.Shutdown(payloadContext(payload, log)), log)
+				warnOnErr(dbService.Shutdown(payloadContext(payload, logger)), logger)
 			}
 		}
 		if asyncEmitter != nil {
-			warnOnErr(asyncEmitter.Close(), log)
+			warnOnErr(asyncEmitter.Close(), logger)
 		}
 		if agentPool != nil {
 			agentPool.Stop()
 		}
-		warnOnErr(conn.Close(), log)
+		warnOnErr(conn.Close(), logger)
 		log.Info("Exited.")
 	})
 

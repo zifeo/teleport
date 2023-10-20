@@ -34,8 +34,7 @@ func (process *TeleportProcess) initDiscovery() {
 }
 
 func (process *TeleportProcess) initDiscoveryService() error {
-	log := process.log.WithField(trace.Component, teleport.Component(
-		teleport.ComponentDiscovery, process.id))
+	log := process.logger.With(trace.Component, teleport.Component(teleport.ComponentDiscovery, process.id))
 
 	conn, err := process.WaitForConnector(DiscoveryIdentityEvent, log)
 	if conn == nil {
@@ -79,7 +78,7 @@ func (process *TeleportProcess) initDiscoveryService() error {
 			discoveryService.Stop()
 		}
 		if asyncEmitter != nil {
-			warnOnErr(asyncEmitter.Close(), process.log)
+			warnOnErr(asyncEmitter.Close(), log)
 		}
 		warnOnErr(conn.Close(), log)
 		log.Info("Exited.")
@@ -90,7 +89,7 @@ func (process *TeleportProcess) initDiscoveryService() error {
 	if err := discoveryService.Start(); err != nil {
 		return trace.Wrap(err)
 	}
-	log.Infof("Discovery service has successfully started")
+	log.Info("Discovery service has successfully started")
 
 	if err := discoveryService.Wait(); err != nil {
 		return trace.Wrap(err)

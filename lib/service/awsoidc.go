@@ -100,7 +100,7 @@ func (process *TeleportProcess) initDeployServiceUpdater() error {
 		return trace.Wrap(err)
 	}
 
-	process.log.Infof("The new service has started successfully. Checking for deploy service updates every %v.", updateDeployAgentsInterval)
+	process.logger.Info("The new deploy service has started successfully.", "update_interval", updateDeployAgentsInterval)
 	return trace.Wrap(updater.Run(process.GracefulExitContext()))
 }
 
