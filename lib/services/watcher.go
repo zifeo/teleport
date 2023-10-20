@@ -111,7 +111,14 @@ func newResourceWatcher(ctx context.Context, collector resourceCollector, cfg Re
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	cfg.Log = cfg.Log.WithField("resource-kind", collector.resourceKinds())
+
+	watches := collector.resourceKinds()
+	kinds := make([]string, 0, len(watches))
+	for _, w := range watches {
+		kinds = append(kinds, w.Kind)
+	}
+
+	cfg.Log = cfg.Log.WithField("resource_kinds", kinds)
 	ctx, cancel := context.WithCancel(ctx)
 	p := &resourceWatcher{
 		ResourceWatcherConfig: cfg,
