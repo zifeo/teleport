@@ -25,7 +25,6 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -253,6 +252,16 @@ func (j *JSONFormatter) Format(e *log.Entry) ([]byte, error) {
 
 	delete(e.Data, trace.Component)
 
+	if j.callerEnabled {
+		if v, ok := e.Data[callerField]; ok {
+			switch caller := v.(type) {
+			case string:
+			case source:
+				e.Data[callerField] = caller.String()
+			}
+		}
+	}
+
 	return j.JSONFormatter.Format(e)
 }
 
@@ -267,9 +276,9 @@ func NewTestJSONFormatter() *JSONFormatter {
 func (w *writer) writeError(value interface{}) {
 	switch err := value.(type) {
 	case trace.Error:
-		w.WriteString(fmt.Sprintf("[%v]", err.DebugReport()))
+		fmt.Fprintf(w, "[%v]", err.DebugReport())
 	default:
-		w.WriteString(fmt.Sprintf("[%v]", value))
+		fmt.Fprintf(w, "[%v]", value)
 	}
 }
 
@@ -303,20 +312,33 @@ func (w *writer) writeKeyValue(key string, value interface{}) {
 }
 
 func (w *writer) writeValue(value interface{}, color int) {
-	var s string
 	switch v := value.(type) {
 	case string:
-		s = v
-		if needsQuoting(s) {
-			s = fmt.Sprintf("%q", v)
+		if needsQuoting(v) {
+			if color == noColor {
+				fmt.Fprintf(w, "%q", v)
+				return
+			}
+
+			fmt.Fprintf(w, "\x1b[%dm%q\x1b[0m", color, v)
+			return
 		}
+
+		if color == noColor {
+			fmt.Fprintf(w, v)
+			return
+		}
+
+		fmt.Fprintf(w, "\x1b[%dm%s\x1b[0m", color, v)
+		return
 	default:
-		s = fmt.Sprintf("%v", v)
+		if color == noColor {
+			fmt.Fprintf(w, "%v", v)
+			return
+		}
+
+		fmt.Fprintf(w, "\x1b[%dm%v\x1b[0m", color, v)
 	}
-	if color != noColor {
-		s = fmt.Sprintf("\x1b[%dm%s\x1b[0m", color, s)
-	}
-	w.WriteString(s)
 }
 
 func (w *writer) writeMap(m map[string]any) {
@@ -325,13 +347,14 @@ func (w *writer) writeMap(m map[string]any) {
 	}
 	keys := make([]string, 0, len(m))
 	for key := range m {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
 		if key == trace.Component {
 			continue
 		}
+		keys = append(keys, key)
+	}
+
+	slices.Sort(keys)
+	for _, key := range keys {
 		switch value := m[key].(type) {
 		case map[string]any:
 			w.writeMap(value)

@@ -28,7 +28,6 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -98,6 +97,8 @@ func NewLoggerForTests() *logrus.Logger {
 	logger.SetFormatter(NewTestJSONFormatter())
 	logger.SetLevel(logrus.DebugLevel)
 	logger.SetOutput(os.Stderr)
+
+	slog.SetDefault(slog.New(NewLogrusHandler(logger)))
 	return logger
 }
 
@@ -460,7 +461,7 @@ type logWrapper struct {
 // needsQuoting returns true if any non-printable characters are found.
 func needsQuoting(text string) bool {
 	for _, r := range text {
-		if !strconv.IsPrint(r) {
+		if !unicode.IsPrint(r) {
 			return true
 		}
 	}
@@ -583,20 +584,11 @@ const (
 
 type LogrusHandler struct {
 	logger *logrus.Logger
-	groups []string
-	attrs  []slog.Attr
+	entry  *logrus.Entry
 }
 
 func NewLogrusHandler(logger *logrus.Logger) *LogrusHandler {
 	return &LogrusHandler{logger: logger}
-}
-
-func (l *LogrusHandler) clone() *LogrusHandler {
-	return &LogrusHandler{
-		logger: l.logger,
-		groups: slices.Clip(l.groups),
-		attrs:  slices.Clip(l.attrs),
-	}
 }
 
 func (l *LogrusHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -616,20 +608,24 @@ func (l *LogrusHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	default:
 		return false
 	}
+}
 
+type source struct {
+	file string
+	line int
+}
+
+func (s source) String() string {
+	return fmt.Sprintf("%s:%d", s.file, s.line)
 }
 
 func (l *LogrusHandler) Handle(ctx context.Context, r slog.Record) error {
-	log := logrus.NewEntry(l.logger)
-	if !r.Time.IsZero() {
-		log = log.WithTime(r.Time)
-	}
-
-	fields := logrus.Fields{}
-	for _, attr := range l.attrs {
-		if attr.Key != "" {
-			fields[attr.Key] = attr.Value.Any()
-		}
+	const caller = "caller"
+	var fields logrus.Fields
+	if l.entry == nil {
+		fields = logrus.Fields{}
+	} else {
+		fields = l.entry.Data
 	}
 
 	r.Attrs(func(attr slog.Attr) bool {
@@ -651,48 +647,58 @@ func (l *LogrusHandler) Handle(ctx context.Context, r slog.Record) error {
 		return count == 2
 	})
 
-	fields["caller"] = fmt.Sprintf("%s:%d", f.File[idx+1:], f.Line)
+	fields[caller] = source{
+		file: f.File[idx+1:],
+		line: f.Line,
+	}
 
-	log = log.WithFields(fields)
+	entry := l.entry
+	if entry == nil {
+		entry = l.logger.WithFields(fields)
+	}
 
 	if r.Level <= logrusTraceLevel {
-		log.Trace(r.Message)
+		entry.Trace(r.Message)
 	} else if r.Level <= logrusDebugLevel {
-		log.Debug(r.Message)
+		entry.Debug(r.Message)
 	} else if r.Level <= logrusInfoLevel {
-		log.Info(r.Message)
+		entry.Info(r.Message)
 	} else if r.Level <= logrusWarnLevel {
-		log.Warn(r.Message)
+		entry.Warn(r.Message)
 	} else if r.Level <= logrusErrorLevel {
-		log.Error(r.Message)
+		entry.Error(r.Message)
 	} else {
-		log.Fatal(r.Message)
+		entry.Fatal(r.Message)
 	}
 
 	return nil
 }
 
-func (l *LogrusHandler) groupPrefix() string {
-	const groupSep = ":"
-	if len(l.groups) > 0 {
-		return strings.Join(l.groups, groupSep) + groupSep
-	}
-	return ""
+func (l *LogrusHandler) WithGroup(name string) slog.Handler {
+	return l
 }
 
 func (l *LogrusHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	newHandler := l.clone()
-	for _, a := range attrs {
-		newHandler.attrs = append(newHandler.attrs, slog.Attr{
-			Key:   l.groupPrefix() + a.Key,
-			Value: a.Value,
-		})
+	var fields logrus.Fields
+	if l.entry == nil {
+		fields = logrus.Fields{}
+	} else {
+		fields = l.entry.Data
 	}
-	return newHandler
-}
 
-func (l *LogrusHandler) WithGroup(name string) slog.Handler {
-	newHandler := l.clone()
-	newHandler.groups = append(newHandler.groups, name)
-	return newHandler
+	for _, attr := range attrs {
+		if attr.Key != "" {
+			fields[attr.Key] = attr.Value.Any()
+		}
+	}
+
+	entry := l.entry
+	if entry == nil {
+		entry = l.logger.WithFields(fields)
+	}
+
+	return &LogrusHandler{
+		logger: l.logger,
+		entry:  entry,
+	}
 }
