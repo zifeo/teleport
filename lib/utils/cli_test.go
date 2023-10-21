@@ -20,12 +20,13 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gravitational/trace"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -156,14 +157,61 @@ func TestAllowWhitespace(t *testing.T) {
 }
 
 func BenchmarkLogger(b *testing.B) {
-	b.ReportAllocs()
-	InitLogger(LoggingForDaemon, logrus.DebugLevel)
-	logger := slog.With(trace.Component, "test")
+	textLogger := slog.New(NewSLogTextHandler(io.Discard, slog.LevelDebug, NewDefaultTextFormatter(true))).With(trace.Component, "test")
+	jsonLogger := slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{
+		Level:     slog.LevelDebug,
+		AddSource: true,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			switch a.Key {
+			case trace.Component:
+				a.Key = "component"
+			case slog.LevelKey:
+				a.Value = slog.StringValue(strings.ToLower(a.Value.String()))
+			case slog.TimeKey:
+				a.Key = "timestamp"
+				a.Value = slog.StringValue(a.Value.Time().Format(time.RFC3339))
+			case slog.SourceKey:
+				s := a.Value.Any().(*slog.Source)
+				count := 0
+				idx := strings.LastIndexFunc(s.File, func(r rune) bool {
+					if r == '/' {
+						count++
+					}
+
+					return count == 2
+				})
+				a = slog.String("caller", fmt.Sprintf("%s:%d", s.File[idx+1:], s.Line))
+			case slog.MessageKey:
+				a.Key = "message"
+			}
+
+			return a
+		},
+	})).With(trace.Component, "test")
+
 	addr := NetAddr{Addr: "127.0.0.1:1234", AddrNetwork: "tcp"}
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		l := logger.With("test", 123).With("animal", "llama").With("error", errors.New("you can't do that"))
-		l.Info("Adding diagnostic debugging handlers. To connect with profiler, use `go tool pprof diag_addr`.", "diag_addr", &addr)
-	}
+	err := errors.New("you can't do that")
+
+	b.Run("text", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			textLogger.
+				With("test", 123, "animal", "llama").
+				With("error", err).
+				Info("Adding diagnostic debugging handlers. To connect with profiler, use `go tool pprof diag_addr`\n.", "diag_addr", &addr)
+		}
+	})
+
+	b.Run("json", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			jsonLogger.
+				With("test", 123, "animal", "llama").
+				With("error", err).
+				Info("Adding diagnostic debugging handlers. To connect with profiler, use `go tool pprof <diag_addr>`.", "diag_addr", &addr)
+		}
+	})
+
 }

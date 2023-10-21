@@ -53,24 +53,43 @@ const (
 func InitLogger(purpose LoggingPurpose, level logrus.Level, verbose ...bool) {
 	logrus.StandardLogger().ReplaceHooks(make(logrus.LevelHooks))
 	logrus.SetLevel(level)
+
+	slogLevel := slog.LevelInfo // Info by default
+	switch level {
+	case logrus.TraceLevel:
+		slogLevel = slog.LevelDebug - 1
+	case logrus.DebugLevel:
+		slogLevel = slog.LevelDebug
+	case logrus.InfoLevel:
+		slogLevel = slog.LevelInfo
+	case logrus.WarnLevel:
+		slogLevel = slog.LevelWarn
+	case logrus.ErrorLevel:
+		slogLevel = slog.LevelError
+	}
+
+	enableColors := trace.IsTerminal(os.Stderr)
 	switch purpose {
 	case LoggingForCLI:
 		// If debug logging was asked for on the CLI, then write logs to stderr.
 		// Otherwise, discard all logs.
 		if level == logrus.DebugLevel {
-			debugFormatter := NewDefaultTextFormatter(trace.IsTerminal(os.Stderr))
+			debugFormatter := NewDefaultTextFormatter(enableColors)
 			debugFormatter.timestampEnabled = true
 			logrus.SetFormatter(debugFormatter)
 			logrus.SetOutput(os.Stderr)
+			slog.SetDefault(slog.New(NewSLogTextHandler(os.Stderr, slogLevel, debugFormatter)))
 		} else {
 			logrus.SetOutput(io.Discard)
+			slog.SetDefault(slog.New(NewSLogTextHandler(io.Discard, slogLevel, nil)))
 		}
 	case LoggingForDaemon:
-		logrus.SetFormatter(NewDefaultTextFormatter(trace.IsTerminal(os.Stderr)))
+		textFormatter := NewDefaultTextFormatter(enableColors)
+		logrus.SetFormatter(NewDefaultTextFormatter(enableColors))
 		logrus.SetOutput(os.Stderr)
+		slog.SetDefault(slog.New(NewSLogTextHandler(os.Stderr, slogLevel, textFormatter)))
 	}
 
-	slog.SetDefault(slog.New(NewLogrusHandler(logrus.StandardLogger())))
 }
 
 // InitLoggerForTests initializes the standard logger for tests.
@@ -584,7 +603,7 @@ const (
 
 type LogrusHandler struct {
 	logger *logrus.Logger
-	entry  *logrus.Entry
+	goas   []groupOrAttrs
 }
 
 func NewLogrusHandler(logger *logrus.Logger) *LogrusHandler {
@@ -621,13 +640,21 @@ func (s source) String() string {
 
 func (l *LogrusHandler) Handle(ctx context.Context, r slog.Record) error {
 	const caller = "caller"
-	var fields logrus.Fields
-	if l.entry == nil {
-		fields = logrus.Fields{}
-	} else {
-		fields = l.entry.Data
+	fields := logrus.Fields{}
+
+	goas := l.goas
+	if r.NumAttrs() == 0 {
+		// If the record has no Attrs, remove groups at the end of the list; they are empty.
+		for len(goas) > 0 && goas[len(goas)-1].group != "" {
+			goas = goas[:len(goas)-1]
+		}
 	}
 
+	for _, goa := range goas {
+		for _, attr := range goa.attrs {
+			fields[attr.Key] = attr.Value.Any()
+		}
+	}
 	r.Attrs(func(attr slog.Attr) bool {
 		if attr.Key != "" {
 			fields[attr.Key] = attr.Value.Any()
@@ -635,27 +662,26 @@ func (l *LogrusHandler) Handle(ctx context.Context, r slog.Record) error {
 		return true
 	})
 
-	fs := runtime.CallersFrames([]uintptr{r.PC})
-	f, _ := fs.Next()
+	if r.PC != 0 {
+		fs := runtime.CallersFrames([]uintptr{r.PC})
+		f, _ := fs.Next()
 
-	count := 0
-	idx := strings.LastIndexFunc(f.File, func(r rune) bool {
-		if r == '/' {
-			count++
+		count := 0
+		idx := strings.LastIndexFunc(f.File, func(r rune) bool {
+			if r == '/' {
+				count++
+			}
+
+			return count == 2
+		})
+
+		fields[caller] = source{
+			file: f.File[idx+1:],
+			line: f.Line,
 		}
-
-		return count == 2
-	})
-
-	fields[caller] = source{
-		file: f.File[idx+1:],
-		line: f.Line,
 	}
 
-	entry := l.entry
-	if entry == nil {
-		entry = l.logger.WithFields(fields)
-	}
+	entry := l.logger.WithFields(fields)
 
 	if r.Level <= logrusTraceLevel {
 		entry.Trace(r.Message)
@@ -679,26 +705,13 @@ func (l *LogrusHandler) WithGroup(name string) slog.Handler {
 }
 
 func (l *LogrusHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	var fields logrus.Fields
-	if l.entry == nil {
-		fields = logrus.Fields{}
-	} else {
-		fields = l.entry.Data
+	if len(attrs) == 0 {
+		return l
 	}
 
-	for _, attr := range attrs {
-		if attr.Key != "" {
-			fields[attr.Key] = attr.Value.Any()
-		}
-	}
-
-	entry := l.entry
-	if entry == nil {
-		entry = l.logger.WithFields(fields)
-	}
-
-	return &LogrusHandler{
-		logger: l.logger,
-		entry:  entry,
-	}
+	h2 := *l
+	h2.goas = make([]groupOrAttrs, len(l.goas)+1)
+	copy(h2.goas, l.goas)
+	h2.goas[len(h2.goas)-1] = groupOrAttrs{attrs: attrs}
+	return &h2
 }
