@@ -256,7 +256,6 @@ type AccessChecker interface {
 // host SSH certificate, TLS certificate, or user information stored in the
 // backend.
 type AccessInfo struct {
-	Username string
 	// Roles is the list of cluster local roles for the identity.
 	Roles []string
 	// Traits is the set of traits for the identity.
@@ -290,70 +289,25 @@ type accessChecker struct {
 //     clusters.
 //   - `access RoleGetter` should be a RoleGetter which will be used to fetch the
 //     full RoleSet
-func NewAccessChecker(info *AccessInfo, localCluster string, access RoleGetter, opts ...AccessCheckerOption) (AccessChecker, error) {
-	o := &accessCheckerOptions{}
-	for _, opt := range opts {
-		opt(o)
-	}
+func NewAccessChecker(info *AccessInfo, localCluster string, access RoleGetter) (AccessChecker, error) {
 	roleSet, err := FetchRoles(info.Roles, access, info.Traits)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	rbacChecker := &accessChecker{
+	return &accessChecker{
 		info:         info,
 		localCluster: localCluster,
 		RoleSet:      roleSet,
-	}
-	// TODO(jakule): access checking in TAG is not implemented yet, always use RBAC.
-	if !o.isTAGEnabled || true {
-		return rbacChecker, nil
-	}
-
-	return &accessCheckerTAG{
-		info:          info,
-		localCluster:  localCluster,
-		accessChecker: rbacChecker,
-		tagEndpoint:   o.tagEndpoint,
 	}, nil
-}
-
-type AccessCheckerOption func(*accessCheckerOptions)
-
-type accessCheckerOptions struct {
-	// isTAGEnabled is true if the Teleport Access Graph is enabled.
-	isTAGEnabled bool
-	// tagEndpoint is the endpoint of the Teleport Access Graph.
-	tagEndpoint string
-}
-
-func WithTAG(endpoint string) AccessCheckerOption {
-	return func(o *accessCheckerOptions) {
-		o.isTAGEnabled = true
-		o.tagEndpoint = endpoint
-	}
 }
 
 // NewAccessCheckerWithRoleSet is similar to NewAccessChecker, but accepts the
 // full RoleSet rather than a RoleGetter.
-func NewAccessCheckerWithRoleSet(info *AccessInfo, localCluster string, roleSet RoleSet, opts ...AccessCheckerOption) AccessChecker {
-	o := &accessCheckerOptions{}
-	for _, opt := range opts {
-		opt(o)
-	}
-	rbacChecker := &accessChecker{
+func NewAccessCheckerWithRoleSet(info *AccessInfo, localCluster string, roleSet RoleSet) AccessChecker {
+	return &accessChecker{
 		info:         info,
 		localCluster: localCluster,
 		RoleSet:      roleSet,
-	}
-	if !o.isTAGEnabled {
-		return rbacChecker
-	}
-
-	return &accessCheckerTAG{
-		info:          info,
-		localCluster:  localCluster,
-		accessChecker: rbacChecker,
-		tagEndpoint:   o.tagEndpoint,
 	}
 }
 
@@ -386,8 +340,7 @@ func NewAccessCheckerForRemoteCluster(ctx context.Context, localAccessInfo *Acce
 	}
 
 	remoteAccessInfo := &AccessInfo{
-		Username: remoteUser.GetName(),
-		Traits:   remoteUser.GetTraits(),
+		Traits: remoteUser.GetTraits(),
 		// Will fill this in with the names of the remote/mapped roles we got
 		// from GetCurrentUserRoles.
 		Roles: make([]string, 0, len(remoteRoles)),
@@ -1029,7 +982,7 @@ func (a *accessChecker) HostSudoers(s types.Server) ([]string, error) {
 // AccessInfoFromLocalCertificate returns a new AccessInfo populated from the
 // given ssh certificate. Should only be used for cluster local users as roles
 // will not be mapped.
-func AccessInfoFromLocalCertificate(cert *ssh.Certificate, username string) (*AccessInfo, error) {
+func AccessInfoFromLocalCertificate(cert *ssh.Certificate) (*AccessInfo, error) {
 	traits, err := ExtractTraitsFromCert(cert)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -1046,7 +999,6 @@ func AccessInfoFromLocalCertificate(cert *ssh.Certificate, username string) (*Ac
 	}
 
 	return &AccessInfo{
-		Username:           username,
 		Roles:              roles,
 		Traits:             traits,
 		AllowedResourceIDs: allowedResourceIDs,
@@ -1056,7 +1008,7 @@ func AccessInfoFromLocalCertificate(cert *ssh.Certificate, username string) (*Ac
 // AccessInfoFromRemoteCertificate returns a new AccessInfo populated from the
 // given remote cluster user's ssh certificate. Remote roles will be mapped to
 // local roles based on the given roleMap.
-func AccessInfoFromRemoteCertificate(cert *ssh.Certificate, roleMap types.RoleMap, username string) (*AccessInfo, error) {
+func AccessInfoFromRemoteCertificate(cert *ssh.Certificate, roleMap types.RoleMap) (*AccessInfo, error) {
 	// Old-style SSH certificates don't have traits in metadata.
 	traits, err := ExtractTraitsFromCert(cert)
 	if err != nil && !trace.IsNotFound(err) {
@@ -1093,7 +1045,6 @@ func AccessInfoFromRemoteCertificate(cert *ssh.Certificate, roleMap types.RoleMa
 	}
 
 	return &AccessInfo{
-		Username:           username,
 		Roles:              roles,
 		Traits:             traits,
 		AllowedResourceIDs: allowedResourceIDs,
@@ -1127,7 +1078,6 @@ func AccessInfoFromLocalIdentity(identity tlsca.Identity, access UserGetter) (*A
 	}
 
 	return &AccessInfo{
-		Username:           identity.Username,
 		Roles:              roles,
 		Traits:             traits,
 		AllowedResourceIDs: allowedResourceIDs,
@@ -1177,7 +1127,6 @@ func AccessInfoFromRemoteIdentity(identity tlsca.Identity, roleMap types.RoleMap
 	allowedResourceIDs := identity.AllowedResourceIDs
 
 	return &AccessInfo{
-		Username:           identity.Username,
 		Roles:              roles,
 		Traits:             traits,
 		AllowedResourceIDs: allowedResourceIDs,
@@ -1222,8 +1171,7 @@ func AccessInfoFromUserState(user UserState) *AccessInfo {
 	roles := user.GetRoles()
 	traits := user.GetTraits()
 	return &AccessInfo{
-		Username: user.GetName(),
-		Roles:    roles,
-		Traits:   traits,
+		Roles:  roles,
+		Traits: traits,
 	}
 }

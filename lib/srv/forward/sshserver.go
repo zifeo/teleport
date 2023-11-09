@@ -253,13 +253,6 @@ type ServerConfig struct {
 	// IsAgentlessNode indicates whether the targetServer is a Node with an OpenSSH server (no teleport agent).
 	// This includes Nodes whose sub kind is OpenSSH and OpenSSHEphemeralKey.
 	IsAgentlessNode bool
-
-	AccessGraph AccessGraph
-}
-
-type AccessGraph struct {
-	Enabled  bool
-	Endpoint string
 }
 
 // CheckDefaults makes sure all required parameters are passed in.
@@ -387,9 +380,6 @@ func New(c ServerConfig) (*Server, error) {
 		TargetServer: c.TargetServer,
 		FIPS:         c.FIPS,
 		Clock:        c.Clock,
-	}
-	if c.AccessGraph.Enabled {
-		authHandlerConfig.Opts = append(authHandlerConfig.Opts, services.WithTAG(c.AccessGraph.Endpoint))
 	}
 
 	s.authHandlers, err = srv.NewAuthHandlers(&authHandlerConfig)

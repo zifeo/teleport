@@ -65,13 +65,6 @@ type AuthorizerOpts struct {
 	// It is meant for services that do explicit device authorization, like the
 	// Auth Server APIs. Most services should not set this field.
 	DisableDeviceAuthorization bool
-	AccessGraph                AccessGraphConfig
-}
-
-type AccessGraphConfig struct {
-	Enabled  bool
-	UseAuth  bool
-	Endpoint string
 }
 
 // NewAuthorizer returns new authorizer using backends
@@ -92,7 +85,6 @@ func NewAuthorizer(opts AuthorizerOpts) (Authorizer, error) {
 		lockWatcher:                opts.LockWatcher,
 		logger:                     logger,
 		disableDeviceAuthorization: opts.DisableDeviceAuthorization,
-		accessGraph:                opts.AccessGraph,
 	}, nil
 }
 
@@ -146,7 +138,6 @@ type authorizer struct {
 	lockWatcher                *services.LockWatcher
 	disableDeviceAuthorization bool
 	logger                     logrus.FieldLogger
-	accessGraph                AccessGraphConfig
 }
 
 // Context is authorization context
@@ -171,7 +162,6 @@ type Context struct {
 	// disableDeviceAuthorization disables device verification.
 	// Inherited from the authorizer that creates the context.
 	disableDeviceAuthorization bool
-	opts                       []services.AccessCheckerOption
 }
 
 // LockTargets returns a list of LockTargets inferred from the context's
@@ -231,13 +221,11 @@ func (c *Context) WithExtraRoles(access services.RoleGetter, clusterName string,
 	}
 
 	accessInfo := &services.AccessInfo{
-		Username:           c.User.GetName(),
 		Roles:              newRoleNames,
 		Traits:             c.User.GetTraits(),
 		AllowedResourceIDs: c.Checker.GetAllowedResourceIDs(),
 	}
-
-	checker, err := services.NewAccessChecker(accessInfo, clusterName, access, c.opts...)
+	checker, err := services.NewAccessChecker(accessInfo, clusterName, access)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -400,11 +388,7 @@ func CheckIPPinning(ctx context.Context, identity tlsca.Identity, pinSourceIP bo
 
 // authorizeLocalUser returns authz context based on the username
 func (a *authorizer) authorizeLocalUser(ctx context.Context, u LocalUser) (*Context, error) {
-	var opt []services.AccessCheckerOption
-	if a.accessGraph.Enabled && a.accessGraph.UseAuth {
-		opt = append(opt, services.WithTAG(a.accessGraph.Endpoint))
-	}
-	return ContextForLocalUser(ctx, u, a.accessPoint, a.clusterName, a.disableDeviceAuthorization, opt...)
+	return ContextForLocalUser(ctx, u, a.accessPoint, a.clusterName, a.disableDeviceAuthorization)
 }
 
 // authorizeRemoteUser returns checker based on cert authority roles
@@ -562,7 +546,6 @@ func (a *authorizer) authorizeRemoteBuiltinRole(r RemoteBuiltinRole) (*Context, 
 	roles := []string{string(types.RoleRemoteProxy)}
 	user.SetRoles(roles)
 	checker := services.NewAccessCheckerWithRoleSet(&services.AccessInfo{
-		Username:           user.GetName(),
 		Roles:              roles,
 		Traits:             nil,
 		AllowedResourceIDs: nil,
@@ -989,7 +972,6 @@ func ContextForBuiltinRole(r BuiltinRole, recConfig types.SessionRecordingConfig
 	}
 	user.SetRoles(roles)
 	checker := services.NewAccessCheckerWithRoleSet(&services.AccessInfo{
-		Username:           user.GetName(),
 		Roles:              roles,
 		Traits:             nil,
 		AllowedResourceIDs: nil,
@@ -1004,7 +986,7 @@ func ContextForBuiltinRole(r BuiltinRole, recConfig types.SessionRecordingConfig
 }
 
 // ContextForLocalUser returns a context with the local user info embedded.
-func ContextForLocalUser(ctx context.Context, u LocalUser, accessPoint AuthorizerAccessPoint, clusterName string, disableDeviceAuthz bool, opts ...services.AccessCheckerOption) (*Context, error) {
+func ContextForLocalUser(ctx context.Context, u LocalUser, accessPoint AuthorizerAccessPoint, clusterName string, disableDeviceAuthz bool) (*Context, error) {
 	// User has to be fetched to check if it's a blocked username
 	user, err := accessPoint.GetUser(ctx, u.Username, false)
 	if err != nil {
@@ -1014,7 +996,7 @@ func ContextForLocalUser(ctx context.Context, u LocalUser, accessPoint Authorize
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	accessChecker, err := services.NewAccessChecker(accessInfo, clusterName, accessPoint, opts...)
+	accessChecker, err := services.NewAccessChecker(accessInfo, clusterName, accessPoint)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -1034,7 +1016,6 @@ func ContextForLocalUser(ctx context.Context, u LocalUser, accessPoint Authorize
 		Identity:                   u,
 		UnmappedIdentity:           u,
 		disableDeviceAuthorization: disableDeviceAuthz,
-		opts:                       opts,
 	}, nil
 }
 

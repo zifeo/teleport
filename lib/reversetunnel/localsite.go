@@ -421,10 +421,6 @@ func (s *localSite) dialAndForward(params reversetunnelclient.DialParams) (_ net
 		TargetHostname:           params.Address,
 		TargetServer:             params.TargetServer,
 		Clock:                    s.clock,
-		AccessGraph: forward.AccessGraph{
-			Endpoint: s.srv.AccessGraph.Endpoint,
-			Enabled:  s.srv.AccessGraph.Enabled,
-		},
 	}
 	// Ensure the hostname is set correctly if we have details of the target
 	if params.TargetServer != nil {

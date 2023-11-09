@@ -634,8 +634,7 @@ func TestAuthorizeWithVerbs(t *testing.T) {
 			name: "regular auth with verbs",
 			delegate: AuthorizerFunc(func(ctx context.Context) (*Context, error) {
 				accessChecker, err := services.NewAccessChecker(&services.AccessInfo{
-					Username: "test",
-					Roles:    []string{"test"},
+					Roles: []string{"test"},
 				}, "test-cluster", accessService)
 				require.NoError(t, err)
 				return &Context{

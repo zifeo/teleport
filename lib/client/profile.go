@@ -577,7 +577,6 @@ func ProfileNameFromProxyAddress(store ProfileStore, proxyAddr string) (string, 
 // AccessInfo returns the complete services.AccessInfo for this profile.
 func (p *ProfileStatus) AccessInfo() *services.AccessInfo {
 	return &services.AccessInfo{
-		Username:           p.Username,
 		Roles:              p.Roles,
 		Traits:             p.Traits,
 		AllowedResourceIDs: p.AllowedResourceIDs,

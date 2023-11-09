@@ -93,8 +93,6 @@ type AuthHandlerConfig struct {
 	// for TLS certificate verification.
 	// Defaults to real clock if unspecified
 	Clock clockwork.Clock
-
-	Opts []services.AccessCheckerOption
 }
 
 func (c *AuthHandlerConfig) CheckAndSetDefaults() error {
@@ -586,8 +584,7 @@ func (a *ahLoginChecker) canLoginWithRBAC(cert *ssh.Certificate, ca types.CertAu
 	if err != nil {
 		return trace.Wrap(err)
 	}
-
-	accessChecker, err := services.NewAccessChecker(accessInfo, clusterName, a.c.AccessPoint, a.c.Opts...)
+	accessChecker, err := services.NewAccessChecker(accessInfo, clusterName, a.c.AccessPoint)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -596,7 +593,6 @@ func (a *ahLoginChecker) canLoginWithRBAC(cert *ssh.Certificate, ca types.CertAu
 	if err != nil {
 		return trace.Wrap(err)
 	}
-
 	state := accessChecker.GetAccessState(authPref)
 	_, state.MFAVerified = cert.Extensions[teleport.CertExtensionMFAVerified]
 
@@ -646,9 +642,9 @@ func fetchAccessInfo(cert *ssh.Certificate, ca types.CertAuthority, teleportUser
 	var accessInfo *services.AccessInfo
 	var err error
 	if clusterName == ca.GetClusterName() {
-		accessInfo, err = services.AccessInfoFromLocalCertificate(cert, teleportUser)
+		accessInfo, err = services.AccessInfoFromLocalCertificate(cert)
 	} else {
-		accessInfo, err = services.AccessInfoFromRemoteCertificate(cert, ca.CombinedMapping(), teleportUser)
+		accessInfo, err = services.AccessInfoFromRemoteCertificate(cert, ca.CombinedMapping())
 	}
 	return accessInfo, trace.Wrap(err)
 }
