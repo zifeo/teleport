@@ -33,6 +33,7 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
+	AccessGraphService_HasAccess_FullMethodName    = "/accessgraph.v1alpha.AccessGraphService/HasAccess"
 	AccessGraphService_Query_FullMethodName        = "/accessgraph.v1alpha.AccessGraphService/Query"
 	AccessGraphService_GetFile_FullMethodName      = "/accessgraph.v1alpha.AccessGraphService/GetFile"
 	AccessGraphService_EventsStream_FullMethodName = "/accessgraph.v1alpha.AccessGraphService/EventsStream"
@@ -42,6 +43,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AccessGraphServiceClient interface {
+	// HasAccess checks if a user has access to a resource.
+	HasAccess(ctx context.Context, in *HasAccessRequest, opts ...grpc.CallOption) (*HasAccessResponse, error)
 	// Query queries the access graph.
 	// Currently only used by WebUI.
 	Query(ctx context.Context, in *QueryRequest, opts ...grpc.CallOption) (*QueryResponse, error)
@@ -62,6 +65,15 @@ type accessGraphServiceClient struct {
 
 func NewAccessGraphServiceClient(cc grpc.ClientConnInterface) AccessGraphServiceClient {
 	return &accessGraphServiceClient{cc}
+}
+
+func (c *accessGraphServiceClient) HasAccess(ctx context.Context, in *HasAccessRequest, opts ...grpc.CallOption) (*HasAccessResponse, error) {
+	out := new(HasAccessResponse)
+	err := c.cc.Invoke(ctx, AccessGraphService_HasAccess_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *accessGraphServiceClient) Query(ctx context.Context, in *QueryRequest, opts ...grpc.CallOption) (*QueryResponse, error) {
@@ -120,6 +132,8 @@ func (x *accessGraphServiceEventsStreamClient) CloseAndRecv() (*EventsStreamResp
 // All implementations must embed UnimplementedAccessGraphServiceServer
 // for forward compatibility
 type AccessGraphServiceServer interface {
+	// HasAccess checks if a user has access to a resource.
+	HasAccess(context.Context, *HasAccessRequest) (*HasAccessResponse, error)
 	// Query queries the access graph.
 	// Currently only used by WebUI.
 	Query(context.Context, *QueryRequest) (*QueryResponse, error)
@@ -139,6 +153,9 @@ type AccessGraphServiceServer interface {
 type UnimplementedAccessGraphServiceServer struct {
 }
 
+func (UnimplementedAccessGraphServiceServer) HasAccess(context.Context, *HasAccessRequest) (*HasAccessResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HasAccess not implemented")
+}
 func (UnimplementedAccessGraphServiceServer) Query(context.Context, *QueryRequest) (*QueryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Query not implemented")
 }
@@ -159,6 +176,24 @@ type UnsafeAccessGraphServiceServer interface {
 
 func RegisterAccessGraphServiceServer(s grpc.ServiceRegistrar, srv AccessGraphServiceServer) {
 	s.RegisterService(&AccessGraphService_ServiceDesc, srv)
+}
+
+func _AccessGraphService_HasAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HasAccessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccessGraphServiceServer).HasAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccessGraphService_HasAccess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccessGraphServiceServer).HasAccess(ctx, req.(*HasAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _AccessGraphService_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -230,6 +265,10 @@ var AccessGraphService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "accessgraph.v1alpha.AccessGraphService",
 	HandlerType: (*AccessGraphServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "HasAccess",
+			Handler:    _AccessGraphService_HasAccess_Handler,
+		},
 		{
 			MethodName: "Query",
 			Handler:    _AccessGraphService_Query_Handler,

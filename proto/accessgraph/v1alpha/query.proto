@@ -23,6 +23,8 @@ option go_package = "github.com/gravitational/teleport/gen/proto/go/accessgraph/
 
 // AccessGraphService is a service for interacting the access graph service.
 service AccessGraphService {
+  // HasAccess checks if a user has access to a resource.
+  rpc HasAccess(HasAccessRequest) returns (HasAccessResponse);
   // Query queries the access graph.
   // Currently only used by WebUI.
   rpc Query(QueryRequest) returns (QueryResponse);
@@ -36,6 +38,18 @@ service AccessGraphService {
   // Once Teleport finishes syncing the current state, it sends a sync command
   // to the access graph service and resumes sending events.
   rpc EventsStream(stream EventsStreamRequest) returns (EventsStreamResponse);
+}
+
+// HasAccessRequest is a request to check if a user has access to a resource.
+message HasAccessRequest {
+  string user = 1;
+  string resource = 2;
+  string resource_kind = 3;
+}
+
+// HasAccessResponse is a response to a HasAccess request.
+message HasAccessResponse {
+  bool has_access = 1;
 }
 
 // Node is a node in the access graph.
