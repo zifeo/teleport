@@ -19,7 +19,6 @@ package services
 import (
 	"net/url"
 
-	"github.com/coreos/go-oidc/jose"
 	"github.com/gravitational/trace"
 
 	"github.com/gravitational/teleport/api/types"
@@ -27,7 +26,7 @@ import (
 )
 
 // GetClaimNames returns a list of claim names from the claim values
-func GetClaimNames(claims jose.Claims) []string {
+func GetClaimNames(claims map[string]any) []string {
 	var out []string
 	for claim := range claims {
 		out = append(out, claim)
@@ -36,21 +35,59 @@ func GetClaimNames(claims jose.Claims) []string {
 }
 
 // OIDCClaimsToTraits converts OIDC-style claims into teleport-specific trait format
-func OIDCClaimsToTraits(claims jose.Claims) map[string][]string {
+func OIDCClaimsToTraits(claims map[string]any) map[string][]string {
 	traits := make(map[string][]string)
 
 	for claimName := range claims {
-		claimValue, ok, _ := claims.StringClaim(claimName)
-		if ok {
+		if claimValue, ok, _ := stringClaim(claims, claimName); ok {
 			traits[claimName] = []string{claimValue}
+			continue
 		}
-		claimValues, ok, _ := claims.StringsClaim(claimName)
-		if ok {
+
+		if claimValues, ok, _ := stringsClaim(claims, claimName); ok {
 			traits[claimName] = claimValues
 		}
 	}
 
 	return traits
+}
+
+func stringsClaim(claims map[string]any, name string) ([]string, bool, error) {
+	cl, ok := claims[name]
+	if !ok {
+		return nil, false, nil
+	}
+
+	switch v := cl.(type) {
+	case []string:
+		return v, true, nil
+	case []any:
+		var ret []string
+		for _, vv := range v {
+			str, ok := vv.(string)
+			if !ok {
+				return nil, false, trace.BadParameter("unable to parse claim as string array: %v", name)
+			}
+			ret = append(ret, str)
+		}
+		return ret, true, nil
+	default:
+		return nil, false, trace.BadParameter("unable to parse claim as string array: %v", name)
+	}
+}
+
+func stringClaim(claims map[string]any, name string) (string, bool, error) {
+	cl, ok := claims[name]
+	if !ok {
+		return "", false, nil
+	}
+
+	switch v := cl.(type) {
+	case string:
+		return v, true, nil
+	default:
+		return "", false, trace.BadParameter("unable to parse claim as string: %v", name)
+	}
 }
 
 // GetRedirectURL gets a redirect URL for the given connector. If the connector
