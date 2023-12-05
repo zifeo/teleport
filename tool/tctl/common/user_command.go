@@ -48,7 +48,7 @@ import (
 // It implements CLICommand interface
 type UserCommand struct {
 	config                    *servicecfg.Config
-	login                     string
+	Login                     string
 	allowedLogins             []string
 	allowedWindowsLogins      []string
 	allowedKubeUsers          []string
@@ -59,7 +59,7 @@ type UserCommand struct {
 	allowedAWSRoleARNs        []string
 	allowedAzureIdentities    []string
 	allowedGCPServiceAccounts []string
-	allowedRoles              []string
+	AllowedRoles              []string
 	hostUserUID               string
 	hostUserUIDProvided       bool
 	hostUserGID               string
@@ -85,7 +85,7 @@ func (u *UserCommand) Initialize(app *kingpin.Application, config *servicecfg.Co
 	users := app.Command("users", "Manage user accounts.")
 
 	u.userAdd = users.Command("add", "Generate a user invitation token "+helpPrefix+".")
-	u.userAdd.Arg("account", "Teleport user account name").Required().StringVar(&u.login)
+	u.userAdd.Arg("account", "Teleport user account name").Required().StringVar(&u.Login)
 
 	u.userAdd.Flag("logins", "List of allowed SSH logins for the new user").StringsVar(&u.allowedLogins)
 	u.userAdd.Flag("windows-logins", "List of allowed Windows logins for the new user").StringsVar(&u.allowedWindowsLogins)
@@ -100,7 +100,7 @@ func (u *UserCommand) Initialize(app *kingpin.Application, config *servicecfg.Co
 	u.userAdd.Flag("host-user-uid", "UID for auto provisioned host users to use").IsSetByUser(&u.hostUserUIDProvided).StringVar(&u.hostUserUID)
 	u.userAdd.Flag("host-user-gid", "GID for auto provisioned host users to use").IsSetByUser(&u.hostUserGIDProvided).StringVar(&u.hostUserGID)
 
-	u.userAdd.Flag("roles", "List of roles for the new user to assume").Required().StringsVar(&u.allowedRoles)
+	u.userAdd.Flag("roles", "List of roles for the new user to assume").Required().StringsVar(&u.AllowedRoles)
 
 	u.userAdd.Flag("ttl", fmt.Sprintf("Set expiration time for token, default is %v, maximum is %v",
 		defaults.SignupTokenTTL, defaults.MaxSignupTokenTTL)).
@@ -109,9 +109,9 @@ func (u *UserCommand) Initialize(app *kingpin.Application, config *servicecfg.Co
 	u.userAdd.Alias(AddUserHelp)
 
 	u.userUpdate = users.Command("update", "Update user account.")
-	u.userUpdate.Arg("account", "Teleport user account name").Required().StringVar(&u.login)
+	u.userUpdate.Arg("account", "Teleport user account name").Required().StringVar(&u.Login)
 	u.userUpdate.Flag("set-roles", "List of roles for the user to assume, replaces current roles").
-		StringsVar(&u.allowedRoles)
+		StringsVar(&u.AllowedRoles)
 	u.userUpdate.Flag("set-logins", "List of allowed SSH logins for the user, replaces current logins").
 		StringsVar(&u.allowedLogins)
 	u.userUpdate.Flag("set-windows-logins", "List of allowed Windows logins for the user, replaces current Windows logins").
@@ -140,10 +140,10 @@ func (u *UserCommand) Initialize(app *kingpin.Application, config *servicecfg.Co
 
 	u.userDelete = users.Command("rm", "Deletes user accounts.").Alias("del")
 	u.userDelete.Arg("logins", "Comma-separated list of user logins to delete").
-		Required().StringVar(&u.login)
+		Required().StringVar(&u.Login)
 
 	u.userResetPassword = users.Command("reset", "Reset user password and generate a new token "+helpPrefix+".")
-	u.userResetPassword.Arg("account", "Teleport user account name").Required().StringVar(&u.login)
+	u.userResetPassword.Arg("account", "Teleport user account name").Required().StringVar(&u.Login)
 	u.userResetPassword.Flag("ttl", fmt.Sprintf("Set expiration time for token, default is %v, maximum is %v",
 		defaults.ChangePasswordTokenTTL, defaults.MaxChangePasswordTokenTTL)).
 		Default(fmt.Sprintf("%v", defaults.ChangePasswordTokenTTL)).DurationVar(&u.ttl)
@@ -172,7 +172,7 @@ func (u *UserCommand) TryRun(ctx context.Context, cmd string, client auth.Client
 // ResetPassword resets user password and generates a token to setup new password
 func (u *UserCommand) ResetPassword(ctx context.Context, client auth.ClientI) error {
 	req := auth.CreateUserTokenRequest{
-		Name: u.login,
+		Name: u.Login,
 		TTL:  u.ttl,
 		Type: auth.UserTokenTypeResetPassword,
 	}
@@ -235,12 +235,12 @@ func (u *UserCommand) printResetPasswordToken(token types.UserToken, format stri
 // Add implements `tctl users add` for the enterprise edition. Unlike the OSS
 // version, this one requires --roles flag to be set
 func (u *UserCommand) Add(ctx context.Context, client auth.ClientI) error {
-	u.allowedRoles = flattenSlice(u.allowedRoles)
+	u.AllowedRoles = flattenSlice(u.AllowedRoles)
 	u.allowedLogins = flattenSlice(u.allowedLogins)
 	u.allowedWindowsLogins = flattenSlice(u.allowedWindowsLogins)
 
 	// Validate roles (server does not do this yet).
-	for _, roleName := range u.allowedRoles {
+	for _, roleName := range u.AllowedRoles {
 		if _, err := client.GetRole(ctx, roleName); err != nil {
 			return trace.Wrap(err)
 		}
@@ -289,26 +289,26 @@ func (u *UserCommand) Add(ctx context.Context, client auth.ClientI) error {
 		constants.TraitHostUserGID:        {u.hostUserGID},
 	}
 
-	user, err := types.NewUser(u.login)
+	user, err := types.NewUser(u.Login)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	user.SetTraits(traits)
-	user.SetRoles(u.allowedRoles)
+	user.SetRoles(u.AllowedRoles)
 
 	if _, err := client.CreateUser(ctx, user); err != nil {
 		if trace.IsAlreadyExists(err) {
 			fmt.Printf(`NOTE: To update an existing local user:
 > tctl users update %v --set-roles %v # replace roles
 
-`, u.login, strings.Join(u.allowedRoles, ","))
+`, u.Login, strings.Join(u.AllowedRoles, ","))
 		}
 		return trace.Wrap(err)
 	}
 
 	token, err := client.CreateResetPasswordToken(ctx, auth.CreateUserTokenRequest{
-		Name: u.login,
+		Name: u.Login,
 		TTL:  u.ttl,
 		Type: auth.UserTokenTypeResetPasswordInvite,
 	})
@@ -357,14 +357,14 @@ func printTokenAsText(token types.UserToken, messageFormat string) error {
 
 // Update updates existing user
 func (u *UserCommand) Update(ctx context.Context, client auth.ClientI) error {
-	user, err := client.GetUser(ctx, u.login, false)
+	user, err := client.GetUser(ctx, u.Login, false)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	updateMessages := make(map[string][]string)
-	if len(u.allowedRoles) > 0 {
-		roles := flattenSlice(u.allowedRoles)
+	if len(u.AllowedRoles) > 0 {
+		roles := flattenSlice(u.AllowedRoles)
 		for _, role := range roles {
 			if _, err := client.GetRole(ctx, role); err != nil {
 				return trace.Wrap(err)
@@ -508,7 +508,7 @@ func (u *UserCommand) List(ctx context.Context, client auth.ClientI) error {
 // Delete deletes teleport user(s). User IDs are passed as a comma-separated
 // list in UserCommand.login
 func (u *UserCommand) Delete(ctx context.Context, client auth.ClientI) error {
-	for _, l := range strings.Split(u.login, ",") {
+	for _, l := range strings.Split(u.Login, ",") {
 		if err := client.DeleteUser(ctx, l); err != nil {
 			return trace.Wrap(err)
 		}
