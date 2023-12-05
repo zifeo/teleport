@@ -37,14 +37,9 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/gravitational/teleport/api/breaker"
-	"github.com/gravitational/teleport/api/client/proto"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/auth/authclient"
-	"github.com/gravitational/teleport/lib/auth/mocku2f"
-	wancli "github.com/gravitational/teleport/lib/auth/webauthncli"
-	wantypes "github.com/gravitational/teleport/lib/auth/webauthntypes"
-	libclient "github.com/gravitational/teleport/lib/client"
 	"github.com/gravitational/teleport/lib/cloud"
 	"github.com/gravitational/teleport/lib/config"
 	"github.com/gravitational/teleport/lib/service"
@@ -337,57 +332,5 @@ func waitForDatabases(t *testing.T, auth *service.TeleportProcess, dbs []service
 		case <-ctx.Done():
 			t.Fatal("databases not registered after 10s")
 		}
-	}
-}
-
-func setupWebAuthn(t *testing.T, authServer *auth.Server, username string) libclient.WebauthnLoginFunc {
-	t.Helper()
-	ctx := context.Background()
-
-	const origin = "https://127.0.0.1"
-	device, err := mocku2f.Create()
-	require.NoError(t, err)
-	device.SetPasswordless()
-
-	token, err := authServer.CreateResetPasswordToken(ctx, auth.CreateUserTokenRequest{
-		Name: username,
-	})
-	require.NoError(t, err)
-
-	tokenID := token.GetName()
-	res, err := authServer.CreateRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
-		TokenID:     tokenID,
-		DeviceType:  proto.DeviceType_DEVICE_TYPE_WEBAUTHN,
-		DeviceUsage: proto.DeviceUsage_DEVICE_USAGE_PASSWORDLESS,
-	})
-	require.NoError(t, err)
-	cc := wantypes.CredentialCreationFromProto(res.GetWebauthn())
-
-	userWebID := res.GetWebauthn().PublicKey.User.Id
-
-	ccr, err := device.SignCredentialCreation(origin, cc)
-	require.NoError(t, err)
-	_, err = authServer.ChangeUserAuthentication(ctx, &proto.ChangeUserAuthenticationRequest{
-		TokenID: tokenID,
-		NewMFARegisterResponse: &proto.MFARegisterResponse{
-			Response: &proto.MFARegisterResponse_Webauthn{
-				Webauthn: wantypes.CredentialCreationResponseToProto(ccr),
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	return func(ctx context.Context, origin string, assertion *wantypes.CredentialAssertion, prompt wancli.LoginPrompt, opts *wancli.LoginOpts) (*proto.MFAAuthenticateResponse, string, error) {
-		car, err := device.SignAssertion(origin, assertion)
-		if err != nil {
-			return nil, "", err
-		}
-		car.AssertionResponse.UserHandle = userWebID
-
-		return &proto.MFAAuthenticateResponse{
-			Response: &proto.MFAAuthenticateResponse_Webauthn{
-				Webauthn: wantypes.CredentialAssertionResponseToProto(car),
-			},
-		}, "", nil
 	}
 }

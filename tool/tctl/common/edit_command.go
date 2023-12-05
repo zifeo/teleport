@@ -112,8 +112,8 @@ func (e *EditCommand) editResource(ctx context.Context, client auth.ClientI) err
 		refs:        services.Refs{e.ref},
 		format:      teleport.YAML,
 		stdout:      f,
-		Filename:    f.Name(),
-		Force:       true,
+		filename:    f.Name(),
+		force:       true,
 		withSecrets: true,
 	}
 	rc.Initialize(e.app, e.config)
@@ -160,7 +160,7 @@ func (e *EditCommand) editResource(ctx context.Context, client auth.ClientI) err
 		return trace.NotImplemented("renaming resources is not supported with tctl edit")
 	}
 
-	f, err = utils.OpenFileAllowingUnsafeLinks(rc.Filename)
+	f, err = utils.OpenFileAllowingUnsafeLinks(rc.filename)
 	if err != nil {
 		return trace.Wrap(err)
 	}
