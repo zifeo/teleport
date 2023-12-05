@@ -49,9 +49,9 @@ type EditCommand struct {
 	config *servicecfg.Config
 	ref    services.Ref
 
-	// editor is used by tests to inject the editing mechanism
+	// Editor is used by tests to inject the editing mechanism
 	// so that different scenarios can be asserted.
-	editor func(filename string) error
+	Editor func(filename string) error
 }
 
 func (e *EditCommand) Initialize(app *kingpin.Application, config *servicecfg.Config) {
@@ -76,8 +76,8 @@ func (e *EditCommand) TryRun(ctx context.Context, cmd string, client auth.Client
 }
 
 func (e *EditCommand) runEditor(ctx context.Context, name string) error {
-	if e.editor != nil {
-		return trace.Wrap(e.editor(name))
+	if e.Editor != nil {
+		return trace.Wrap(e.Editor(name))
 	}
 
 	textEditor := getTextEditor()
@@ -112,8 +112,8 @@ func (e *EditCommand) editResource(ctx context.Context, client auth.ClientI) err
 		refs:        services.Refs{e.ref},
 		format:      teleport.YAML,
 		stdout:      f,
-		filename:    f.Name(),
-		force:       true,
+		Filename:    f.Name(),
+		Force:       true,
 		withSecrets: true,
 	}
 	rc.Initialize(e.app, e.config)
@@ -160,7 +160,7 @@ func (e *EditCommand) editResource(ctx context.Context, client auth.ClientI) err
 		return trace.NotImplemented("renaming resources is not supported with tctl edit")
 	}
 
-	f, err = utils.OpenFileAllowingUnsafeLinks(rc.filename)
+	f, err = utils.OpenFileAllowingUnsafeLinks(rc.Filename)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -191,7 +191,6 @@ func (e *EditCommand) editResource(ctx context.Context, client auth.ClientI) err
 	}
 
 	return trace.BadParameter("updating resources of type %q is not supported", raw.Kind)
-
 }
 
 // getTextEditor returns the text editor to be used for editing the resource.

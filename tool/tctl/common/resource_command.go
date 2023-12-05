@@ -73,13 +73,13 @@ type ResourceCommand struct {
 	format      string
 	namespace   string
 	withSecrets bool
-	force       bool
+	Force       bool
 	confirm     bool
 	ttl         string
 	labels      string
 
-	// filename is the name of the resource, used for 'create'
-	filename string
+	// Filename is the name of the resource, used for 'create'
+	Filename string
 
 	// CLI subcommands:
 	deleteCmd *kingpin.CmdClause
@@ -153,8 +153,8 @@ func (rc *ResourceCommand) Initialize(app *kingpin.Application, config *servicec
 	rc.config = config
 
 	rc.createCmd = app.Command("create", "Create or update a Teleport resource from a YAML file.")
-	rc.createCmd.Arg("filename", "resource definition file, empty for stdin").StringVar(&rc.filename)
-	rc.createCmd.Flag("force", "Overwrite the resource if already exists").Short('f').BoolVar(&rc.force)
+	rc.createCmd.Arg("filename", "resource definition file, empty for stdin").StringVar(&rc.Filename)
+	rc.createCmd.Flag("force", "Overwrite the resource if already exists").Short('f').BoolVar(&rc.Force)
 	rc.createCmd.Flag("confirm", "Confirm an unsafe or temporary resource update").Hidden().BoolVar(&rc.confirm)
 
 	rc.updateCmd = app.Command("update", "Update resource fields.")
@@ -286,10 +286,10 @@ func (rc *ResourceCommand) GetAll(ctx context.Context, client auth.ClientI) erro
 // Create updates or inserts one or many resources
 func (rc *ResourceCommand) Create(ctx context.Context, client auth.ClientI) (err error) {
 	var reader io.Reader
-	if rc.filename == "" {
+	if rc.Filename == "" {
 		reader = os.Stdin
 	} else {
-		f, err := utils.OpenFileAllowingUnsafeLinks(rc.filename)
+		f, err := utils.OpenFileAllowingUnsafeLinks(rc.Filename)
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -343,7 +343,7 @@ func (rc *ResourceCommand) createTrustedCluster(ctx context.Context, client auth
 	}
 
 	exists := (err == nil)
-	if !rc.force && exists {
+	if !rc.Force && exists {
 		return trace.AlreadyExists("trusted cluster %q already exists", name)
 	}
 
@@ -353,7 +353,7 @@ func (rc *ResourceCommand) createTrustedCluster(ctx context.Context, client auth
 		// this means the user tried to upsert a cluster whose exact match already
 		// exists in the backend, nothing needs to occur other than happy message
 		// that the trusted cluster has been created.
-		if rc.force && trace.IsAlreadyExists(err) {
+		if rc.Force && trace.IsAlreadyExists(err) {
 			out = tc
 		} else {
 			return trace.Wrap(err)
@@ -362,7 +362,7 @@ func (rc *ResourceCommand) createTrustedCluster(ctx context.Context, client auth
 	if out.GetName() != tc.GetName() {
 		fmt.Printf("WARNING: trusted cluster %q resource has been renamed to match remote cluster name %q\n", name, out.GetName())
 	}
-	fmt.Printf("trusted cluster %q has been %v\n", out.GetName(), UpsertVerb(exists, rc.force))
+	fmt.Printf("trusted cluster %q has been %v\n", out.GetName(), UpsertVerb(exists, rc.Force))
 	return nil
 }
 
@@ -386,7 +386,7 @@ func (rc *ResourceCommand) createGithubConnector(ctx context.Context, client aut
 		return trace.Wrap(err)
 	}
 
-	if rc.force {
+	if rc.Force {
 		upserted, err := client.UpsertGithubConnector(ctx, connector)
 		if err != nil {
 			return trace.Wrap(err)
@@ -515,7 +515,7 @@ func (rc *ResourceCommand) createUser(ctx context.Context, client auth.ClientI, 
 	exists := (err == nil)
 
 	if exists {
-		if !rc.force {
+		if !rc.Force {
 			return trace.AlreadyExists("user %q already exists", userName)
 		}
 
@@ -564,7 +564,7 @@ func (rc *ResourceCommand) createAuthPreference(ctx context.Context, client auth
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if err := checkCreateResourceWithOrigin(storedAuthPref, "cluster auth preference", rc.force, rc.confirm); err != nil {
+	if err := checkCreateResourceWithOrigin(storedAuthPref, "cluster auth preference", rc.Force, rc.confirm); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -586,7 +586,7 @@ func (rc *ResourceCommand) createClusterNetworkingConfig(ctx context.Context, cl
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if err := checkCreateResourceWithOrigin(storedNetConfig, "cluster networking configuration", rc.force, rc.confirm); err != nil {
+	if err := checkCreateResourceWithOrigin(storedNetConfig, "cluster networking configuration", rc.Force, rc.confirm); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -607,7 +607,7 @@ func (rc *ResourceCommand) createClusterMaintenanceConfig(ctx context.Context, c
 		return trace.Wrap(err)
 	}
 
-	if rc.force {
+	if rc.Force {
 		// max nonce forces "upsert" behavior
 		cmc.Nonce = math.MaxUint64
 	}
@@ -631,7 +631,7 @@ func (rc *ResourceCommand) createSessionRecordingConfig(ctx context.Context, cli
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if err := checkCreateResourceWithOrigin(storedRecConfig, "session recording configuration", rc.force, rc.confirm); err != nil {
+	if err := checkCreateResourceWithOrigin(storedRecConfig, "session recording configuration", rc.Force, rc.confirm); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -649,7 +649,7 @@ func (rc *ResourceCommand) createExternalAuditStorage(ctx context.Context, clien
 		return trace.Wrap(err)
 	}
 	externalAuditClient := client.ExternalAuditStorageClient()
-	if rc.force {
+	if rc.Force {
 		if _, err := externalAuditClient.UpsertDraftExternalAuditStorage(ctx, draft); err != nil {
 			return trace.Wrap(err)
 		}
@@ -678,14 +678,14 @@ func (rc *ResourceCommand) createLock(ctx context.Context, client auth.ClientI, 
 	}
 
 	exists := (err == nil)
-	if !rc.force && exists {
+	if !rc.Force && exists {
 		return trace.AlreadyExists("lock %q already exists", name)
 	}
 
 	if err := client.UpsertLock(ctx, lock); err != nil {
 		return trace.Wrap(err)
 	}
-	fmt.Printf("lock %q has been %s\n", name, UpsertVerb(exists, rc.force))
+	fmt.Printf("lock %q has been %s\n", name, UpsertVerb(exists, rc.Force))
 	return nil
 }
 
@@ -724,7 +724,7 @@ func (rc *ResourceCommand) createApp(ctx context.Context, client auth.ClientI, r
 	}
 	if err := client.CreateApp(ctx, app); err != nil {
 		if trace.IsAlreadyExists(err) {
-			if !rc.force {
+			if !rc.Force {
 				return trace.AlreadyExists("application %q already exists", app.GetName())
 			}
 			if err := client.UpdateApp(ctx, app); err != nil {
@@ -746,7 +746,7 @@ func (rc *ResourceCommand) createKubeCluster(ctx context.Context, client auth.Cl
 	}
 	if err := client.CreateKubernetesCluster(ctx, cluster); err != nil {
 		if trace.IsAlreadyExists(err) {
-			if !rc.force {
+			if !rc.Force {
 				return trace.AlreadyExists("kubernetes cluster %q already exists", cluster.GetName())
 			}
 			if err := client.UpdateKubernetesCluster(ctx, cluster); err != nil {
@@ -769,7 +769,7 @@ func (rc *ResourceCommand) createDatabase(ctx context.Context, client auth.Clien
 	database.SetOrigin(types.OriginDynamic)
 	if err := client.CreateDatabase(ctx, database); err != nil {
 		if trace.IsAlreadyExists(err) {
-			if !rc.force {
+			if !rc.Force {
 				return trace.AlreadyExists("database %q already exists", database.GetName())
 			}
 			if err := client.UpdateDatabase(ctx, database); err != nil {
@@ -849,7 +849,7 @@ func (rc *ResourceCommand) createOIDCConnector(ctx context.Context, client auth.
 		return trace.Wrap(err)
 	}
 
-	if rc.force {
+	if rc.Force {
 		upserted, err := client.UpsertOIDCConnector(ctx, conn)
 		if err != nil {
 			return trace.Wrap(err)
@@ -1058,7 +1058,7 @@ func (rc *ResourceCommand) createIntegration(ctx context.Context, client auth.Cl
 	exists := (err == nil)
 
 	if exists {
-		if !rc.force {
+		if !rc.Force {
 			return trace.AlreadyExists("Integration %q already exists", integration.GetName())
 		}
 
@@ -1101,7 +1101,7 @@ func (rc *ResourceCommand) createDiscoveryConfig(ctx context.Context, client aut
 
 	remote := client.DiscoveryConfigClient()
 
-	if rc.force {
+	if rc.Force {
 		if _, err := remote.UpsertDiscoveryConfig(ctx, discoveryConfig); err != nil {
 			return trace.Wrap(err)
 		}
@@ -1156,7 +1156,7 @@ func (rc *ResourceCommand) createServerInfo(ctx context.Context, client auth.Cli
 	}
 
 	exists := (err == nil)
-	if !rc.force && exists {
+	if !rc.Force && exists {
 		return trace.AlreadyExists("server info %q already exists", name)
 	}
 
@@ -1165,7 +1165,7 @@ func (rc *ResourceCommand) createServerInfo(ctx context.Context, client auth.Cli
 		return trace.Wrap(err)
 	}
 	fmt.Printf("Server info %q has been %s\n",
-		name, UpsertVerb(exists, rc.force),
+		name, UpsertVerb(exists, rc.Force),
 	)
 	return nil
 }
@@ -1634,7 +1634,7 @@ func (rc *ResourceCommand) UpdateFields(ctx context.Context, clt auth.ClientI) e
 
 // IsForced returns true if -f flag was passed
 func (rc *ResourceCommand) IsForced() bool {
-	return rc.force
+	return rc.Force
 }
 
 // getCollection lists all resources of a given type
