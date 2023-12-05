@@ -156,7 +156,7 @@ func (k *Key) signAny(claims any) (string, error) {
 	}
 
 	// Create a signer with configured private key and algorithm.
-	var signer interface{}
+	var signer any
 	switch k.config.PrivateKey.(type) {
 	case *rsa.PrivateKey:
 		signer = k.config.PrivateKey

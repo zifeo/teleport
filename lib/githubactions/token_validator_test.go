@@ -90,7 +90,7 @@ func (f *fakeIDP) issuer() string {
 
 func (f *fakeIDP) handleOpenIDConfig(w http.ResponseWriter, r *http.Request) {
 	// mimic https://token.actions.githubusercontent.com/.well-known/openid-configuration
-	response := map[string]interface{}{
+	response := map[string]any{
 		"claims_supported": []string{
 			"sub",
 			"aud",
@@ -164,7 +164,7 @@ func (f *fakeIDP) issueToken(
 		NotBefore: jwt.NewNumericDate(issuedAt),
 		Expiry:    jwt.NewNumericDate(expiry),
 	}
-	customClaims := map[string]interface{}{
+	customClaims := map[string]any{
 		"actor": actor,
 	}
 	token, err := jwt.Signed(f.signer).

@@ -90,7 +90,7 @@ func firestoreParams() backend.Params {
 		endpoint = e
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"collection_name":                       collection,
 		"project_id":                            projectID,
 		"endpoint":                              endpoint,
@@ -105,7 +105,7 @@ func ensureTestsEnabled(t *testing.T) {
 	}
 }
 
-func ensureEmulatorRunning(t *testing.T, cfg map[string]interface{}) {
+func ensureEmulatorRunning(t *testing.T, cfg map[string]any) {
 	endpoint, _ := cfg["endpoint"].(string)
 	if endpoint == "" {
 		return
@@ -157,7 +157,7 @@ func TestFirestoreDB(t *testing.T) {
 }
 
 // newBackend creates a self-closing firestore backend
-func newBackend(t *testing.T, cfg map[string]interface{}) *Backend {
+func newBackend(t *testing.T, cfg map[string]any) *Backend {
 	clock := clockwork.NewFakeClock()
 
 	uut, err := New(context.Background(), cfg, Options{Clock: clock})

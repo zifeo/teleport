@@ -35,7 +35,7 @@ func TestJSON(t *testing.T) {
 	type testCase struct {
 		name  string
 		json  string
-		event interface{}
+		event any
 	}
 	testCases := []testCase{
 		{
@@ -268,20 +268,20 @@ func TestJSON(t *testing.T) {
 				UserMetadata: apievents.UserMetadata{
 					User: "bob@example.com",
 				},
-				IdentityAttributes: apievents.MustEncodeMap(map[string]interface{}{
+				IdentityAttributes: apievents.MustEncodeMap(map[string]any{
 					"followers_url": "https://api.github.com/users/bob/followers",
 					"err":           nil,
 					"public_repos":  20,
 					"site_admin":    false,
-					"app_metadata":  map[string]interface{}{"roles": []interface{}{"example/admins", "example/devc"}},
-					"emails": []interface{}{
-						map[string]interface{}{
+					"app_metadata":  map[string]any{"roles": []any{"example/admins", "example/devc"}},
+					"emails": []any{
+						map[string]any{
 							"email":      "bob@example.com",
 							"primary":    true,
 							"verified":   true,
 							"visibility": "public",
 						},
-						map[string]interface{}{
+						map[string]any{
 							"email":      "bob@alternative.com",
 							"primary":    false,
 							"verified":   true,

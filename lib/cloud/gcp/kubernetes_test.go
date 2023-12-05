@@ -52,7 +52,7 @@ func Test_gcpGKEClient_ListClusters(t *testing.T) {
 		fields        fields
 		args          args
 		want          []GKECluster
-		errValidation func(t require.TestingT, err error, msgAndArgs ...interface{})
+		errValidation func(t require.TestingT, err error, msgAndArgs ...any)
 	}{
 		{
 			name: "list wildcard region",
@@ -268,7 +268,7 @@ func Test_gcpGKEClient_GetClusterRestConfig(t *testing.T) {
 		args               args
 		expectedCfg        *rest.Config
 		expectedExpiration time.Time
-		errValidation      func(t require.TestingT, err error, msgAndArgs ...interface{})
+		errValidation      func(t require.TestingT, err error, msgAndArgs ...any)
 	}{
 		{
 			name: "missing cluster",

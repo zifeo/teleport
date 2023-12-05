@@ -45,7 +45,7 @@ import (
 
 // clusterAppsGet returns a list of applications in a form the UI can present.
 // This includes Application Servers as well as SAML IdP Service providers.
-func (h *Handler) clusterAppsGet(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (interface{}, error) {
+func (h *Handler) clusterAppsGet(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (any, error) {
 	identity, err := sctx.GetIdentity()
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -156,7 +156,7 @@ type CreateAppSessionResponse struct {
 // its valid FQDN.
 //
 // GET /v1/webapi/apps/:fqdnHint/:clusterName/:publicAddr
-func (h *Handler) getAppFQDN(w http.ResponseWriter, r *http.Request, p httprouter.Params, ctx *SessionContext) (interface{}, error) {
+func (h *Handler) getAppFQDN(w http.ResponseWriter, r *http.Request, p httprouter.Params, ctx *SessionContext) (any, error) {
 	req := GetAppFQDNRequest{
 		FQDNHint:    p.ByName("fqdnHint"),
 		ClusterName: p.ByName("clusterName"),
@@ -190,7 +190,7 @@ func (h *Handler) getAppFQDN(w http.ResponseWriter, r *http.Request, p httproute
 // createAppSession creates a new application session.
 //
 // POST /v1/webapi/sessions/app
-func (h *Handler) createAppSession(w http.ResponseWriter, r *http.Request, p httprouter.Params, ctx *SessionContext) (interface{}, error) {
+func (h *Handler) createAppSession(w http.ResponseWriter, r *http.Request, p httprouter.Params, ctx *SessionContext) (any, error) {
 	var req resolveAppParams
 	if err := httplib.ReadJSON(r, &req); err != nil {
 		return nil, trace.Wrap(err)

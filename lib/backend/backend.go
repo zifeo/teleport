@@ -257,7 +257,7 @@ type Config struct {
 // Params type defines a flexible unified back-end configuration API.
 // It is just a map of key/value pairs which gets populated by `storage` section
 // in Teleport YAML config.
-type Params map[string]interface{}
+type Params map[string]any
 
 // GetString returns a string value stored in Params map, or an empty string
 // if nothing is found

@@ -230,7 +230,7 @@ func TestLimiter_UnaryServerInterceptor(t *testing.T) {
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/method",
 	}
-	handler := func(context.Context, interface{}) (interface{}, error) { return nil, nil }
+	handler := func(context.Context, any) (any, error) { return nil, nil }
 
 	unaryInterceptor := limiter.UnaryServerInterceptor()
 
@@ -297,7 +297,7 @@ func TestLimiter_StreamServerInterceptor(t *testing.T) {
 		ctx: ctx,
 	}
 	info := &grpc.StreamServerInfo{}
-	handler := func(srv interface{}, stream grpc.ServerStream) error { return nil }
+	handler := func(srv any, stream grpc.ServerStream) error { return nil }
 
 	// pass at least once
 	err = limiter.StreamServerInterceptor(nil, ss, info, handler)

@@ -168,10 +168,10 @@ func TestVerifyAttestation(t *testing.T) {
 			name: fmt.Sprintf("OK format=%v simple check", format),
 			obj: protocol.AttestationObject{
 				Format: format,
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					"alg": webauthncose.AlgES256,
 					"sig": sig,
-					"x5c": []interface{}{
+					"x5c": []any{
 						secureKeyDevCert.Raw,
 					},
 				},
@@ -189,10 +189,10 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "OK format=packed root-signed secure key",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					"alg": webauthncose.AlgES256,
 					"sig": sig,
-					"x5c": []interface{}{secureKeyDevCert.Raw},
+					"x5c": []any{secureKeyDevCert.Raw},
 				},
 			},
 		},
@@ -201,9 +201,9 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "OK format=fido-u2f root-signed secure key",
 			obj: protocol.AttestationObject{
 				Format: "fido-u2f",
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					"sig": sig,
-					"x5c": []interface{}{secureKeyDevCert.Raw},
+					"x5c": []any{secureKeyDevCert.Raw},
 				},
 			},
 		},
@@ -212,8 +212,8 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "OK format=apple Touch ID attestation",
 			obj: protocol.AttestationObject{
 				Format: "apple",
-				AttStatement: map[string]interface{}{
-					"x5c": []interface{}{
+				AttStatement: map[string]any{
+					"x5c": []any{
 						platformDevCert.Raw,
 						platformIntermediateCACert.Raw,
 					},
@@ -225,7 +225,7 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK format=packed self-attestation",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					"sig": sig,
 					// "x5c" not present.
 				},
@@ -238,7 +238,7 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK format=none",
 			obj: protocol.AttestationObject{
 				Format:       "none",
-				AttStatement: map[string]interface{}{},
+				AttStatement: map[string]any{},
 			},
 			wantErr: true,
 		},
@@ -246,10 +246,10 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "OK allowed device series",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					"alg": webauthncose.AlgES256,
 					"sig": sig,
-					"x5c": []interface{}{
+					"x5c": []any{
 						series2DevCert.Raw,
 						series2CACert.Raw,
 					},
@@ -260,10 +260,10 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK denied device series",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					"alg": webauthncose.AlgES256,
 					"sig": sig,
-					"x5c": []interface{}{
+					"x5c": []any{
 						series1DevCert.Raw,
 						series1CACert.Raw, // series1CA prohibited by config
 					},
@@ -275,10 +275,10 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK unknown device",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					"alg": webauthncose.AlgES256,
 					"sig": sig,
-					"x5c": []interface{}{
+					"x5c": []any{
 						unknownDevCert.Raw,
 					},
 				},
@@ -289,7 +289,7 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK format not supported",
 			obj: protocol.AttestationObject{
 				Format:       "notsupported",
-				AttStatement: map[string]interface{}{},
+				AttStatement: map[string]any{},
 			},
 			wantErr: true,
 		},
@@ -297,8 +297,8 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK x5c empty",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
-					"x5c": []interface{}{},
+				AttStatement: map[string]any{
+					"x5c": []any{},
 				},
 			},
 			wantErr: true,
@@ -307,7 +307,7 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK x5c with wrong type",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					// want []interface{} instead of [][]byte.
 					"x5c": [][]byte{secureKeyDevCert.Raw},
 				},
@@ -318,9 +318,9 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK x5c cert with wrong type",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
+				AttStatement: map[string]any{
 					// want []byte instead of string.
-					"x5c": []interface{}{string(secureKeyDevCert.Raw)},
+					"x5c": []any{string(secureKeyDevCert.Raw)},
 				},
 			},
 			wantErr: true,
@@ -329,8 +329,8 @@ func TestVerifyAttestation(t *testing.T) {
 			name: "NOK x5c invalid cert",
 			obj: protocol.AttestationObject{
 				Format: "packed",
-				AttStatement: map[string]interface{}{
-					"x5c": []interface{}{[]byte("not a certificate")},
+				AttStatement: map[string]any{
+					"x5c": []any{[]byte("not a certificate")},
 				},
 			},
 			wantErr: true,

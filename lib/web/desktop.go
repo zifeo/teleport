@@ -65,7 +65,7 @@ func (h *Handler) desktopConnectHandle(
 	p httprouter.Params,
 	sctx *SessionContext,
 	site reversetunnelclient.RemoteSite,
-) (interface{}, error) {
+) (any, error) {
 	desktopName := p.ByName("desktopName")
 	if desktopName == "" {
 		return nil, trace.BadParameter("missing desktopName in request URL")
@@ -561,7 +561,7 @@ func createCertificateBlob(certData []byte) []byte {
 	return buf.Bytes()
 }
 
-func (h *Handler) desktopAccessScriptConfigureHandle(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
+func (h *Handler) desktopAccessScriptConfigureHandle(w http.ResponseWriter, r *http.Request, p httprouter.Params) (any, error) {
 	tokenStr := p.ByName("token")
 	if tokenStr == "" {
 		return "", trace.BadParameter("invalid token")
@@ -628,14 +628,14 @@ func (h *Handler) desktopAccessScriptConfigureHandle(w http.ResponseWriter, r *h
 	return nil, trace.Wrap(err)
 }
 
-func (h *Handler) desktopAccessScriptInstallADDSHandle(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
+func (h *Handler) desktopAccessScriptInstallADDSHandle(w http.ResponseWriter, r *http.Request, p httprouter.Params) (any, error) {
 	httplib.SetScriptHeaders(w.Header())
 	w.WriteHeader(http.StatusOK)
 	_, err := io.WriteString(w, scripts.DesktopAccessScriptInstallADDS)
 	return nil, trace.Wrap(err)
 }
 
-func (h *Handler) desktopAccessScriptInstallADCSHandle(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
+func (h *Handler) desktopAccessScriptInstallADCSHandle(w http.ResponseWriter, r *http.Request, p httprouter.Params) (any, error) {
 	httplib.SetScriptHeaders(w.Header())
 	w.WriteHeader(http.StatusOK)
 	_, err := io.WriteString(w, scripts.DesktopAccessScriptInstallADCS)

@@ -603,7 +603,7 @@ func ipv6HostToIP(addr [4]uint32) net.IP {
 }
 
 // unmarshalEvent will unmarshal the perf event.
-func unmarshalEvent(data []byte, v interface{}) error {
+func unmarshalEvent(data []byte, v any) error {
 	err := binary.Read(bytes.NewBuffer(data), binary.LittleEndian, v)
 	if err != nil {
 		return trace.Wrap(err)

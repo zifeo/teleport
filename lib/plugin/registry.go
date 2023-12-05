@@ -29,11 +29,11 @@ type Plugin interface {
 	// GetName returns plugin name
 	GetName() string
 	// RegisterProxyWebHandlers registers new methods with the ProxyWebHandler
-	RegisterProxyWebHandlers(handler interface{}) error
+	RegisterProxyWebHandlers(handler any) error
 	// RegisterAuthWebHandlers registers new methods with the Auth Web Handler
-	RegisterAuthWebHandlers(service interface{}) error
+	RegisterAuthWebHandlers(service any) error
 	// RegisterAuthServices registers new services on the AuthServer
-	RegisterAuthServices(ctx context.Context, server interface{}) error
+	RegisterAuthServices(ctx context.Context, server any) error
 }
 
 // Registry is the plugin registry
@@ -43,11 +43,11 @@ type Registry interface {
 	// Add adds plugin to the registry
 	Add(plugin Plugin) error
 	// RegisterProxyWebHandlers registers Teleport Proxy web handlers
-	RegisterProxyWebHandlers(handler interface{}) error
+	RegisterProxyWebHandlers(handler any) error
 	// RegisterAuthWebHandlers registers Teleport Auth web handlers
-	RegisterAuthWebHandlers(handler interface{}) error
+	RegisterAuthWebHandlers(handler any) error
 	// RegisterAuthServices registers Teleport AuthServer services
-	RegisterAuthServices(ctx context.Context, server interface{}) error
+	RegisterAuthServices(ctx context.Context, server any) error
 }
 
 // NewRegistry creates an instance of the Registry
@@ -88,7 +88,7 @@ func (r *registry) Add(p Plugin) error {
 }
 
 // RegisterProxyWebHandlers registers Teleport Proxy web handlers
-func (r *registry) RegisterProxyWebHandlers(handler interface{}) error {
+func (r *registry) RegisterProxyWebHandlers(handler any) error {
 	for _, p := range r.plugins {
 		if err := p.RegisterProxyWebHandlers(handler); err != nil {
 			return trace.Wrap(err, "plugin %v failed to register", p.GetName())
@@ -99,7 +99,7 @@ func (r *registry) RegisterProxyWebHandlers(handler interface{}) error {
 }
 
 // RegisterAuthWebHandlers registers Teleport Auth web handlers
-func (r *registry) RegisterAuthWebHandlers(handler interface{}) error {
+func (r *registry) RegisterAuthWebHandlers(handler any) error {
 	for _, p := range r.plugins {
 		if err := p.RegisterAuthWebHandlers(handler); err != nil {
 			return trace.Wrap(err, "plugin %v failed to register", p.GetName())
@@ -109,7 +109,7 @@ func (r *registry) RegisterAuthWebHandlers(handler interface{}) error {
 	return nil
 }
 
-func (r *registry) RegisterAuthServices(ctx context.Context, server interface{}) error {
+func (r *registry) RegisterAuthServices(ctx context.Context, server any) error {
 	for _, p := range r.plugins {
 		if err := p.RegisterAuthServices(ctx, server); err != nil {
 			return trace.Wrap(err, "plugin %v failed to register", p.GetName())

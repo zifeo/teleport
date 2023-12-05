@@ -1894,7 +1894,7 @@ func IsRedshiftClusterAvailable(cluster *redshift.Cluster) bool {
 // Note that this function checks some common values but not necessarily covers
 // everything. For types that have other known status values, separate
 // functions (e.g. IsRDSClusterAvailable) can be implemented.
-func IsAWSResourceAvailable(r interface{}, status *string) bool {
+func IsAWSResourceAvailable(r any, status *string) bool {
 	switch strings.ToLower(aws.StringValue(status)) {
 	case "available", "modifying", "snapshotting", "active":
 		return true

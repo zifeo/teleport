@@ -241,7 +241,7 @@ func (c *SessionContext) GetUserClient(ctx context.Context, site reversetunnelcl
 // A [singleflight.Group] is leveraged to prevent duplicate requests for remote
 // clients at the same time to race.
 func (c *SessionContext) remoteClient(ctx context.Context, site reversetunnelclient.RemoteSite) (auth.ClientI, error) {
-	cltI, err, _ := c.remoteClientGroup.Do(site.GetName(), func() (interface{}, error) {
+	cltI, err, _ := c.remoteClientGroup.Do(site.GetName(), func() (any, error) {
 		// check if we already have a connection to this cluster
 		if clt, ok := c.remoteClientCache.getRemoteClient(site); ok {
 			return clt, nil

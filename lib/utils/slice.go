@@ -44,7 +44,7 @@ func NewSliceSyncPool(sliceSize int64) *SliceSyncPool {
 		sliceSize: sliceSize,
 		zeroSlice: make([]byte, sliceSize),
 	}
-	s.New = func() interface{} {
+	s.New = func() any {
 		slice := make([]byte, s.sliceSize)
 		return &slice
 	}
@@ -96,7 +96,7 @@ func NewBufferSyncPool(size int64) *BufferSyncPool {
 	return &BufferSyncPool{
 		size: size,
 		Pool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return bytes.NewBuffer(make([]byte, size))
 			},
 		},

@@ -872,7 +872,7 @@ func TestAuthorizeWithVerbs(t *testing.T) {
 			delegate: AuthorizerFunc(func(ctx context.Context) (*Context, error) {
 				return nil, trace.ConnectionProblem(errors.New("err msg"), "err msg")
 			}),
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.True(t, trace.IsConnectionProblem(err))
 				require.Equal(t, "failed to connect to the database", err.Error())
 			},
@@ -882,7 +882,7 @@ func TestAuthorizeWithVerbs(t *testing.T) {
 			delegate: AuthorizerFunc(func(ctx context.Context) (*Context, error) {
 				return nil, trace.NotFound("err msg")
 			}),
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.True(t, trace.IsNotFound(err))
 				require.Equal(t, "access denied\n\taccess denied\n\t\terr msg", trace.UserMessage(err))
 			},
@@ -892,7 +892,7 @@ func TestAuthorizeWithVerbs(t *testing.T) {
 			delegate: AuthorizerFunc(func(ctx context.Context) (*Context, error) {
 				return nil, trace.AccessDenied("access denied")
 			}),
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.ErrorIs(t, err, trace.AccessDenied("access denied"))
 			},
 		},
@@ -901,7 +901,7 @@ func TestAuthorizeWithVerbs(t *testing.T) {
 			delegate: AuthorizerFunc(func(ctx context.Context) (*Context, error) {
 				return nil, keys.NewPrivateKeyPolicyError("error")
 			}),
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.ErrorIs(t, err, keys.NewPrivateKeyPolicyError("error"))
 			},
 		},

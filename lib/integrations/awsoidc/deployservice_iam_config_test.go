@@ -31,15 +31,15 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-var badParameterCheck = func(t require.TestingT, err error, msgAndArgs ...interface{}) {
+var badParameterCheck = func(t require.TestingT, err error, msgAndArgs ...any) {
 	require.True(t, trace.IsBadParameter(err), `expected "bad parameter", but got %v`, err)
 }
 
-var alreadyExistsCheck = func(t require.TestingT, err error, msgAndArgs ...interface{}) {
+var alreadyExistsCheck = func(t require.TestingT, err error, msgAndArgs ...any) {
 	require.True(t, trace.IsAlreadyExists(err), `expected "already exists", but got %v`, err)
 }
 
-var notFounCheck = func(t require.TestingT, err error, msgAndArgs ...interface{}) {
+var notFounCheck = func(t require.TestingT, err error, msgAndArgs ...any) {
 	require.True(t, trace.IsNotFound(err), `expected "not found", but got %v`, err)
 }
 

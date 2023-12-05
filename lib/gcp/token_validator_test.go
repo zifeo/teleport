@@ -78,7 +78,7 @@ func (f *fakeIDP) issuer() string {
 }
 
 func (f *fakeIDP) handleOpenIDConfig(w http.ResponseWriter, r *http.Request) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"claims_supported": []string{
 			"sub",
 			"aud",
@@ -220,7 +220,7 @@ func TestIDTokenValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid service account email: gserviceaccount.com domain",
-			assertError: func(tt require.TestingT, err error, i ...interface{}) {
+			assertError: func(tt require.TestingT, err error, i ...any) {
 				require.Error(tt, err, i...)
 				require.Contains(tt, err.Error(), "invalid email claim")
 			},
@@ -238,7 +238,7 @@ func TestIDTokenValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid service account email: gserviceaccount.coma domain",
-			assertError: func(tt require.TestingT, err error, i ...interface{}) {
+			assertError: func(tt require.TestingT, err error, i ...any) {
 				require.Error(tt, err, i...)
 				require.Contains(tt, err.Error(), "invalid email claim")
 			},
@@ -256,7 +256,7 @@ func TestIDTokenValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid service account email: google domain",
-			assertError: func(tt require.TestingT, err error, i ...interface{}) {
+			assertError: func(tt require.TestingT, err error, i ...any) {
 				require.Error(tt, err, i...)
 				require.Contains(tt, err.Error(), "invalid email claim")
 			},
@@ -274,7 +274,7 @@ func TestIDTokenValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "empty service account email",
-			assertError: func(tt require.TestingT, err error, i ...interface{}) {
+			assertError: func(tt require.TestingT, err error, i ...any) {
 				require.Error(tt, err, i...)
 				require.Contains(tt, err.Error(), "invalid email claim")
 			},

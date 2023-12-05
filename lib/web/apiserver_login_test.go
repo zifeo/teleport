@@ -171,7 +171,7 @@ func TestWebauthnLogin_webWithPrivateKeyEnabledError(t *testing.T) {
 	require.NoError(t, err)
 
 	modules.SetTestModules(t, &modules.TestModules{
-		MockAttestHardwareKey: func(_ context.Context, _ interface{}, policy keys.PrivateKeyPolicy, _ *keys.AttestationStatement, _ crypto.PublicKey, _ time.Duration) (keys.PrivateKeyPolicy, error) {
+		MockAttestHardwareKey: func(_ context.Context, _ any, policy keys.PrivateKeyPolicy, _ *keys.AttestationStatement, _ crypto.PublicKey, _ time.Duration) (keys.PrivateKeyPolicy, error) {
 			return "", keys.NewPrivateKeyPolicyError(policy)
 		},
 	})

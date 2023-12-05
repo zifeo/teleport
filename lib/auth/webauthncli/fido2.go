@@ -503,7 +503,7 @@ func fido2Register(
 	}, nil
 }
 
-func makeAttStatement(attestation *libfido2.Attestation) (string, map[string]interface{}, error) {
+func makeAttStatement(attestation *libfido2.Attestation) (string, map[string]any, error) {
 	const fidoU2F = "fido-u2f"
 	const none = "none"
 	const packed = "packed"
@@ -530,9 +530,9 @@ func makeAttStatement(attestation *libfido2.Attestation) (string, map[string]int
 		return "", nil, trace.BadParameter("attestation %q without certificate", format)
 	}
 
-	m := map[string]interface{}{
+	m := map[string]any{
 		"sig": sig,
-		"x5c": []interface{}{cert},
+		"x5c": []any{cert},
 	}
 	if format == packed {
 		m["alg"] = int64(attestation.CredentialType)

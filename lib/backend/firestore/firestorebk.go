@@ -891,7 +891,7 @@ func (b *Backend) deleteDocuments(docs []*firestore.DocumentSnapshot) error {
 }
 
 // ConvertGRPCError converts gRPC errors
-func ConvertGRPCError(err error, args ...interface{}) error {
+func ConvertGRPCError(err error, args ...any) error {
 	if err == nil {
 		return nil
 	}

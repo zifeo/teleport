@@ -162,7 +162,7 @@ func (o *DatabaseOutput) Describe() []FileDescription {
 	return fds
 }
 
-func (o *DatabaseOutput) MarshalYAML() (interface{}, error) {
+func (o *DatabaseOutput) MarshalYAML() (any, error) {
 	type raw DatabaseOutput
 	return withTypeHeader((*raw)(o), DatabaseOutputType)
 }

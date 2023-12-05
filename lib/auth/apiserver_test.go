@@ -170,7 +170,7 @@ func TestUpsertUser(t *testing.T) {
 		}, {
 			desc: "role that doesn't exist",
 			role: "some-other-role",
-			assertErr: func(t require.TestingT, err error, args ...interface{}) {
+			assertErr: func(t require.TestingT, err error, args ...any) {
 				require.True(t, trace.IsNotFound(err))
 			},
 		},

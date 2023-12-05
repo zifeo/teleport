@@ -49,10 +49,10 @@ import (
 const timeoutMessage = "unable to complete the request due to a timeout, please try again in a few minutes"
 
 // HandlerFunc specifies HTTP handler function that returns error
-type HandlerFunc func(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error)
+type HandlerFunc func(w http.ResponseWriter, r *http.Request, p httprouter.Params) (any, error)
 
 // StdHandlerFunc specifies HTTP handler function that returns error
-type StdHandlerFunc func(w http.ResponseWriter, r *http.Request) (interface{}, error)
+type StdHandlerFunc func(w http.ResponseWriter, r *http.Request) (any, error)
 
 // ErrorWriter is a function responsible for writing the error into response
 // body.
@@ -167,7 +167,7 @@ func WithCSRFProtection(fn HandlerFunc) httprouter.Handle {
 
 // ReadJSON reads HTTP json request and unmarshals it
 // into passed interface{} obj
-func ReadJSON(r *http.Request, val interface{}) error {
+func ReadJSON(r *http.Request, val any) error {
 	// Check content type to mitigate CSRF attack.
 	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {

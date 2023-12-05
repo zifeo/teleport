@@ -331,7 +331,7 @@ func (h *Handler) ensureBucket() error {
 	return nil
 }
 
-func convertGCSError(err error, args ...interface{}) error {
+func convertGCSError(err error, args ...any) error {
 	if err == nil {
 		return nil
 	}

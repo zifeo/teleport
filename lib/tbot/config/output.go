@@ -59,7 +59,7 @@ type Output interface {
 	Init(ctx context.Context) error
 	// MarshalYAML enables the yaml package to correctly marshal the Output as
 	// YAML.
-	MarshalYAML() (interface{}, error)
+	MarshalYAML() (any, error)
 	// Describe returns a list of all files that will be created by an Output,
 	// this enables commands like `tbot init` to pre-create and configure these
 	// files with the correct permissions

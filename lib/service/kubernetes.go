@@ -267,7 +267,7 @@ func (process *TeleportProcess) initKubernetesService(log *logrus.Entry, conn *C
 	})
 
 	// Cleanup, when process is exiting.
-	process.OnExit("kube.shutdown", func(payload interface{}) {
+	process.OnExit("kube.shutdown", func(payload any) {
 		// Clean up items in reverse order from their initialization.
 		if payload != nil {
 			// Graceful shutdown.

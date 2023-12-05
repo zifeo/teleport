@@ -54,7 +54,7 @@ func (h *Handler) selectConnectionUpgrade(r *http.Request) (string, ConnectionHa
 }
 
 // connectionUpgrade handles connection upgrades.
-func (h *Handler) connectionUpgrade(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
+func (h *Handler) connectionUpgrade(w http.ResponseWriter, r *http.Request, p httprouter.Params) (any, error) {
 	upgradeType, upgradeHandler, err := h.selectConnectionUpgrade(r)
 	if err != nil {
 		return nil, trace.Wrap(err)

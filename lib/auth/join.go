@@ -94,7 +94,7 @@ func (a *Server) checkTokenJoinRequestCommon(ctx context.Context, req *types.Reg
 type joinAttributeSourcer interface {
 	// JoinAuditAttributes returns a series of attributes that can be inserted into
 	// audit events related to a specific join.
-	JoinAuditAttributes() (map[string]interface{}, error)
+	JoinAuditAttributes() (map[string]any, error)
 }
 
 func setRemoteAddrFromContext(ctx context.Context, req *types.RegisterUsingTokenRequest) error {

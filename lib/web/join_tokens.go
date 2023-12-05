@@ -89,7 +89,7 @@ func automaticUpgrades(features proto.Features) bool {
 	return features.AutomaticUpgrades && features.Cloud
 }
 
-func (h *Handler) createTokenHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params, ctx *SessionContext) (interface{}, error) {
+func (h *Handler) createTokenHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params, ctx *SessionContext) (any, error) {
 	var req types.ProvisionTokenSpecV2
 	if err := httplib.ReadJSON(r, &req); err != nil {
 		return nil, trace.Wrap(err)
@@ -208,7 +208,7 @@ func (h *Handler) createTokenHandle(w http.ResponseWriter, r *http.Request, para
 	}, nil
 }
 
-func (h *Handler) getNodeJoinScriptHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params) (interface{}, error) {
+func (h *Handler) getNodeJoinScriptHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params) (any, error) {
 	httplib.SetScriptHeaders(w.Header())
 
 	settings := scriptSettings{
@@ -234,7 +234,7 @@ func (h *Handler) getNodeJoinScriptHandle(w http.ResponseWriter, r *http.Request
 	return nil, nil
 }
 
-func (h *Handler) getAppJoinScriptHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params) (interface{}, error) {
+func (h *Handler) getAppJoinScriptHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params) (any, error) {
 	httplib.SetScriptHeaders(w.Header())
 	queryValues := r.URL.Query()
 
@@ -276,7 +276,7 @@ func (h *Handler) getAppJoinScriptHandle(w http.ResponseWriter, r *http.Request,
 	return nil, nil
 }
 
-func (h *Handler) getDatabaseJoinScriptHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params) (interface{}, error) {
+func (h *Handler) getDatabaseJoinScriptHandle(w http.ResponseWriter, r *http.Request, params httprouter.Params) (any, error) {
 	httplib.SetScriptHeaders(w.Header())
 
 	settings := scriptSettings{
@@ -403,7 +403,7 @@ func getJoinScript(ctx context.Context, settings scriptSettings, m nodeAPIGetter
 
 	// This section relies on Go's default zero values to make sure that the settings
 	// are correct when not installing an app.
-	err = scripts.InstallNodeBashScript.Execute(&buf, map[string]interface{}{
+	err = scripts.InstallNodeBashScript.Execute(&buf, map[string]any{
 		"token":    settings.token,
 		"hostname": hostname,
 		"port":     portStr,

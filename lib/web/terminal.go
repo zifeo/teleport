@@ -1065,7 +1065,7 @@ func (t *TerminalStream) handleWindowResize(ctx context.Context, envelope Envelo
 		return
 	}
 
-	var e map[string]interface{}
+	var e map[string]any
 	err := json.Unmarshal([]byte(envelope.Payload), &e)
 	if err != nil {
 		t.log.Warnf("Failed to parse resize payload: %v", err)

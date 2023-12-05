@@ -42,7 +42,7 @@ type TestModules struct {
 
 	defaultModules
 
-	MockAttestHardwareKey func(_ context.Context, _ interface{}, policy keys.PrivateKeyPolicy, _ *keys.AttestationStatement, _ crypto.PublicKey, _ time.Duration) (keys.PrivateKeyPolicy, error)
+	MockAttestHardwareKey func(_ context.Context, _ any, policy keys.PrivateKeyPolicy, _ *keys.AttestationStatement, _ crypto.PublicKey, _ time.Duration) (keys.PrivateKeyPolicy, error)
 }
 
 // SetTestModules sets the value returned from GetModules to testModules
@@ -89,7 +89,7 @@ func (m *TestModules) BuildType() string {
 }
 
 // AttestHardwareKey attests a hardware key.
-func (m *TestModules) AttestHardwareKey(ctx context.Context, obj interface{}, policy keys.PrivateKeyPolicy, as *keys.AttestationStatement, pk crypto.PublicKey, d time.Duration) (keys.PrivateKeyPolicy, error) {
+func (m *TestModules) AttestHardwareKey(ctx context.Context, obj any, policy keys.PrivateKeyPolicy, as *keys.AttestationStatement, pk crypto.PublicKey, d time.Duration) (keys.PrivateKeyPolicy, error) {
 	if m.MockAttestHardwareKey != nil {
 		return m.MockAttestHardwareKey(ctx, obj, policy, as, pk, d)
 	}

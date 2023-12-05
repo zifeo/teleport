@@ -33,7 +33,7 @@ import (
 )
 
 // discoveryconfigCreate creates a DiscoveryConfig
-func (h *Handler) discoveryconfigCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (interface{}, error) {
+func (h *Handler) discoveryconfigCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (any, error) {
 	var req ui.DiscoveryConfig
 	if err := httplib.ReadJSON(r, &req); err != nil {
 		return nil, trace.Wrap(err)
@@ -76,7 +76,7 @@ func (h *Handler) discoveryconfigCreate(w http.ResponseWriter, r *http.Request, 
 }
 
 // discoveryconfigUpdate updates the DiscoveryConfig based on its name
-func (h *Handler) discoveryconfigUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (interface{}, error) {
+func (h *Handler) discoveryconfigUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (any, error) {
 	dcName := p.ByName("name")
 	if dcName == "" {
 		return nil, trace.BadParameter("a discoveryconfig name is required")
@@ -115,7 +115,7 @@ func (h *Handler) discoveryconfigUpdate(w http.ResponseWriter, r *http.Request, 
 }
 
 // discoveryconfigDelete removes a DiscoveryConfig based on its name
-func (h *Handler) discoveryconfigDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (interface{}, error) {
+func (h *Handler) discoveryconfigDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (any, error) {
 	discoveryconfigName := p.ByName("name")
 	if discoveryconfigName == "" {
 		return nil, trace.BadParameter("a discoveryconfig name is required")
@@ -134,7 +134,7 @@ func (h *Handler) discoveryconfigDelete(w http.ResponseWriter, r *http.Request, 
 }
 
 // discoveryconfigGet returns a DiscoveryConfig based on its name
-func (h *Handler) discoveryconfigGet(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (interface{}, error) {
+func (h *Handler) discoveryconfigGet(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (any, error) {
 	discoveryconfigName := p.ByName("name")
 	if discoveryconfigName == "" {
 		return nil, trace.BadParameter("as discoveryconfig name is required")
@@ -154,7 +154,7 @@ func (h *Handler) discoveryconfigGet(w http.ResponseWriter, r *http.Request, p h
 }
 
 // discoveryconfigList returns a page of DiscoveryConfigs
-func (h *Handler) discoveryconfigList(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (interface{}, error) {
+func (h *Handler) discoveryconfigList(w http.ResponseWriter, r *http.Request, p httprouter.Params, sctx *SessionContext, site reversetunnelclient.RemoteSite) (any, error) {
 	clt, err := sctx.GetUserClient(r.Context(), site)
 	if err != nil {
 		return nil, trace.Wrap(err)

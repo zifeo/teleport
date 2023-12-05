@@ -52,5 +52,5 @@ type Destination interface {
 
 	// MarshalYAML enables the yaml package to correctly marshal the Destination
 	// as YAML including the type header.
-	MarshalYAML() (interface{}, error)
+	MarshalYAML() (any, error)
 }

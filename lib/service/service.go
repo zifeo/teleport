@@ -1015,7 +1015,7 @@ func NewTeleport(cfg *servicecfg.Config) (*TeleportProcess, error) {
 		}
 
 		process.RegisterCriticalFunc("upgradeewindow.export", exporter.Run)
-		process.OnExit("upgradewindow.export.stop", func(_ interface{}) {
+		process.OnExit("upgradewindow.export.stop", func(_ any) {
 			exporter.Close()
 		})
 
@@ -2068,7 +2068,7 @@ func (process *TeleportProcess) initAuthService() error {
 		}
 		// External integrations rely on this event:
 		process.BroadcastEvent(Event{Name: AuthIdentityEvent, Payload: connector})
-		process.OnExit("auth.broadcast", func(payload interface{}) {
+		process.OnExit("auth.broadcast", func(payload any) {
 			connector.Close()
 		})
 		return nil
@@ -2185,7 +2185,7 @@ func (process *TeleportProcess) initAuthService() error {
 	return nil
 }
 
-func payloadContext(payload interface{}, log logrus.FieldLogger) context.Context {
+func payloadContext(payload any, log logrus.FieldLogger) context.Context {
 	ctx, ok := payload.(context.Context)
 	if ok {
 		return ctx
@@ -2197,7 +2197,7 @@ func payloadContext(payload interface{}, log logrus.FieldLogger) context.Context
 // OnExit allows individual services to register a callback function which will be
 // called when Teleport Process is asked to exit. Usually services terminate themselves
 // when the callback is called
-func (process *TeleportProcess) OnExit(serviceName string, callback func(interface{})) {
+func (process *TeleportProcess) OnExit(serviceName string, callback func(any)) {
 	process.RegisterFunc(serviceName, func() error {
 		event, _ := process.WaitForEvent(context.TODO(), TeleportExitEvent)
 		callback(event.Payload)
@@ -2902,7 +2902,7 @@ func (process *TeleportProcess) initUploaderService() error {
 		return nil
 	})
 
-	process.OnExit("fileuploader.shutdown", func(payload interface{}) {
+	process.OnExit("fileuploader.shutdown", func(payload any) {
 		log.Infof("File uploader is shutting down.")
 		fileUploader.Close()
 		log.Infof("File uploader has shut down.")
@@ -2934,7 +2934,7 @@ func (process *TeleportProcess) initUploaderService() error {
 		return nil
 	})
 
-	process.OnExit("fileuploadcompleter.shutdown", func(payload interface{}) {
+	process.OnExit("fileuploadcompleter.shutdown", func(payload any) {
 		log.Infof("File upload completer is shutting down.")
 		uploadCompleter.Close()
 		log.Infof("File upload completer has shut down.")
@@ -3019,7 +3019,7 @@ func (process *TeleportProcess) initMetricsService() error {
 		return nil
 	})
 
-	process.OnExit("metrics.shutdown", func(payload interface{}) {
+	process.OnExit("metrics.shutdown", func(payload any) {
 		if payload == nil {
 			log.Infof("Shutting down immediately.")
 			warnOnErr(server.Close(), log)
@@ -3058,7 +3058,7 @@ func (process *TeleportProcess) initDiagnosticService() error {
 	}
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		roundtrip.ReplyJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+		roundtrip.ReplyJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	})
 
 	log := process.log.WithFields(logrus.Fields{
@@ -3096,21 +3096,21 @@ func (process *TeleportProcess) initDiagnosticService() error {
 		switch ps.getState() {
 		// 503
 		case stateDegraded:
-			roundtrip.ReplyJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			roundtrip.ReplyJSON(w, http.StatusServiceUnavailable, map[string]any{
 				"status": "teleport is in a degraded state, check logs for details",
 			})
 		// 400
 		case stateRecovering:
-			roundtrip.ReplyJSON(w, http.StatusBadRequest, map[string]interface{}{
+			roundtrip.ReplyJSON(w, http.StatusBadRequest, map[string]any{
 				"status": "teleport is recovering from a degraded state, check logs for details",
 			})
 		case stateStarting:
-			roundtrip.ReplyJSON(w, http.StatusBadRequest, map[string]interface{}{
+			roundtrip.ReplyJSON(w, http.StatusBadRequest, map[string]any{
 				"status": "teleport is starting and hasn't joined the cluster yet",
 			})
 		// 200
 		case stateOK:
-			roundtrip.ReplyJSON(w, http.StatusOK, map[string]interface{}{
+			roundtrip.ReplyJSON(w, http.StatusOK, map[string]any{
 				"status": "ok",
 			})
 		}
@@ -3141,7 +3141,7 @@ func (process *TeleportProcess) initDiagnosticService() error {
 		return nil
 	})
 
-	process.OnExit("diagnostic.shutdown", func(payload interface{}) {
+	process.OnExit("diagnostic.shutdown", func(payload any) {
 		if payload == nil {
 			log.Infof("Shutting down immediately.")
 			warnOnErr(server.Close(), log)
@@ -3178,7 +3178,7 @@ func (process *TeleportProcess) initTracingService() error {
 	}
 	process.TracingProvider = provider
 
-	process.OnExit("tracing.shutdown", func(payload interface{}) {
+	process.OnExit("tracing.shutdown", func(payload any) {
 		if payload == nil {
 			log.Info("Shutting down immediately.")
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -4675,7 +4675,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 	}
 
 	// execute this when process is asked to exit:
-	process.OnExit("proxy.shutdown", func(payload interface{}) {
+	process.OnExit("proxy.shutdown", func(payload any) {
 		// Close the listeners at the beginning of shutdown, because we are not
 		// really guaranteed to be capable to serve new requests if we're
 		// halfway through a shutdown, and double closing a listener is fine.
@@ -5399,7 +5399,7 @@ func (process *TeleportProcess) initApps() {
 		shouldSkipCleanup = true
 
 		// Execute this when process is asked to exit.
-		process.OnExit("apps.stop", func(payload interface{}) {
+		process.OnExit("apps.stop", func(payload any) {
 			if payload == nil {
 				log.Infof("Shutting down immediately.")
 				warnOnErr(appServer.Close(), log)
@@ -5632,7 +5632,7 @@ func (process *TeleportProcess) initDebugApp() {
 		server := httptest.NewServer(http.HandlerFunc(dumperHandler))
 		process.BroadcastEvent(Event{Name: DebugAppReady, Payload: server})
 
-		process.OnExit("debug.app.shutdown", func(payload interface{}) {
+		process.OnExit("debug.app.shutdown", func(payload any) {
 			server.Close()
 			process.log.Infof("Exited.")
 		})

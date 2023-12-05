@@ -351,7 +351,7 @@ const (
 )
 
 // Color formats the string in a terminal escape color
-func Color(color int, v interface{}) string {
+func Color(color int, v any) string {
 	return fmt.Sprintf("\x1b[%dm%v\x1b[0m", color, v)
 }
 
@@ -503,7 +503,7 @@ type stdlogAdapter struct {
 
 // LeveledOutputFunc describes a function that emits given
 // arguments at a specific level to an underlying logger
-type LeveledOutputFunc func(args ...interface{})
+type LeveledOutputFunc func(args ...any)
 
 // GetLevel returns the level of the underlying logger
 func (r *logWrapper) GetLevel() logrus.Level {

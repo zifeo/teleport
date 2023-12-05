@@ -601,7 +601,7 @@ func createAWSAccessProxySuite(t *testing.T, cred *credentials.Credentials) *Loc
 	return lp
 }
 
-func requireExpiredCertErr(t require.TestingT, err error, _ ...interface{}) {
+func requireExpiredCertErr(t require.TestingT, err error, _ ...any) {
 	if h, ok := t.(*testing.T); ok {
 		h.Helper()
 	}
@@ -611,7 +611,7 @@ func requireExpiredCertErr(t require.TestingT, err error, _ ...interface{}) {
 	require.Equal(t, x509.Expired, certErr.Reason)
 }
 
-func requireCertSubjectUserErr(t require.TestingT, err error, _ ...interface{}) {
+func requireCertSubjectUserErr(t require.TestingT, err error, _ ...any) {
 	if h, ok := t.(*testing.T); ok {
 		h.Helper()
 	}
@@ -619,7 +619,7 @@ func requireCertSubjectUserErr(t require.TestingT, err error, _ ...interface{}) 
 	require.ErrorContains(t, err, "certificate subject is for user")
 }
 
-func requireCertSubjectDatabaseErr(t require.TestingT, err error, _ ...interface{}) {
+func requireCertSubjectDatabaseErr(t require.TestingT, err error, _ ...any) {
 	if h, ok := t.(*testing.T); ok {
 		h.Helper()
 	}

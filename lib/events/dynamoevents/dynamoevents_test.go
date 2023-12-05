@@ -130,7 +130,7 @@ func TestSizeBreak(t *testing.T) {
 				Type: events.UserLoginEvent,
 				Time: tt.suite.Clock.Now().UTC().Add(time.Second * time.Duration(i)),
 			},
-			IdentityAttributes: apievents.MustEncodeMap(map[string]interface{}{"test.data": blob}),
+			IdentityAttributes: apievents.MustEncodeMap(map[string]any{"test.data": blob}),
 		})
 		require.NoError(t, err)
 	}
@@ -244,14 +244,14 @@ func TestFromWhereExpr(t *testing.T) {
 		R: &types.WhereExpr{Contains: types.WhereExpr2{L: &types.WhereExpr{Field: "participants"}, R: &types.WhereExpr{Literal: "test-user"}}},
 	}}
 
-	params := condFilterParams{attrNames: map[string]string{}, attrValues: map[string]interface{}{}}
+	params := condFilterParams{attrNames: map[string]string{}, attrValues: map[string]any{}}
 	expr, err := fromWhereExpr(cond, &params)
 	require.NoError(t, err)
 
 	require.Equal(t, "(NOT ((FieldsMap.#condName0 = :condValue0) OR (FieldsMap.#condName0 = :condValue1))) AND (contains(FieldsMap.#condName1, :condValue2))", expr)
 	require.Equal(t, condFilterParams{
 		attrNames:  map[string]string{"#condName0": "login", "#condName1": "participants"},
-		attrValues: map[string]interface{}{":condValue0": "root", ":condValue1": "admin", ":condValue2": "test-user"},
+		attrValues: map[string]any{":condValue0": "root", ":condValue1": "admin", ":condValue2": "test-user"},
 	}, params)
 }
 

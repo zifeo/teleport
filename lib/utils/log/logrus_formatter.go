@@ -295,7 +295,7 @@ func NewTestJSONFormatter() *JSONFormatter {
 	return formatter
 }
 
-func (w *writer) writeError(value interface{}) {
+func (w *writer) writeError(value any) {
 	switch err := value.(type) {
 	case trace.Error:
 		*w.b = fmt.Appendf(*w.b, "[%v]", err.DebugReport())
@@ -313,14 +313,14 @@ func padMax(in string, chars int) string {
 	}
 }
 
-func (w *writer) writeField(value interface{}, color int) {
+func (w *writer) writeField(value any, color int) {
 	if w.Len() > 0 {
 		w.WriteByte(' ')
 	}
 	w.writeValue(value, color)
 }
 
-func (w *writer) writeKeyValue(key string, value interface{}) {
+func (w *writer) writeKeyValue(key string, value any) {
 	if w.Len() > 0 {
 		w.WriteByte(' ')
 	}
@@ -333,7 +333,7 @@ func (w *writer) writeKeyValue(key string, value interface{}) {
 	w.writeValue(value, noColor)
 }
 
-func (w *writer) writeValue(value interface{}, color int) {
+func (w *writer) writeValue(value any, color int) {
 	if s, ok := value.(string); ok {
 		if color != noColor {
 			*w.b = fmt.Appendf(*w.b, "\u001B[%dm", color)

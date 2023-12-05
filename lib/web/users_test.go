@@ -328,7 +328,7 @@ func TestCRUDErrors(t *testing.T) {
 }
 
 // newRequest creates http request with given body
-func newRequest(t *testing.T, body interface{}) *http.Request {
+func newRequest(t *testing.T, body any) *http.Request {
 	reqBody, err := json.Marshal(body)
 	require.NoError(t, err)
 

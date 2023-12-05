@@ -242,7 +242,7 @@ func TestSession_newRecorder(t *testing.T) {
 		trace.Component: teleport.ComponentAuth,
 	})
 
-	isNotSessionWriter := func(t require.TestingT, i interface{}, i2 ...interface{}) {
+	isNotSessionWriter := func(t require.TestingT, i any, i2 ...any) {
 		require.NotNil(t, i)
 		_, ok := i.(*events.SessionWriter)
 		require.False(t, ok)
@@ -369,7 +369,7 @@ func TestSession_newRecorder(t *testing.T) {
 				},
 			},
 			errAssertion: require.NoError,
-			recAssertion: func(t require.TestingT, i interface{}, _ ...interface{}) {
+			recAssertion: func(t require.TestingT, i any, _ ...any) {
 				require.NotNil(t, i)
 				sw, ok := i.(apievents.Stream)
 				require.True(t, ok)
@@ -398,7 +398,7 @@ func TestSession_newRecorder(t *testing.T) {
 				},
 			},
 			errAssertion: require.NoError,
-			recAssertion: func(t require.TestingT, i interface{}, i2 ...interface{}) {
+			recAssertion: func(t require.TestingT, i any, i2 ...any) {
 				require.NotNil(t, i)
 				sw, ok := i.(apievents.Stream)
 				require.True(t, ok)

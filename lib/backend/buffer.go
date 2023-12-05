@@ -482,7 +482,7 @@ type walkFn func(w *BufferWatcher)
 // walkPath walks the tree above the longest matching prefix
 // and calls fn callback for every buffer watcher
 func (t *watcherTree) walkPath(key string, fn walkFn) {
-	t.Tree.WalkPath(key, func(prefix string, val interface{}) bool {
+	t.Tree.WalkPath(key, func(prefix string, val any) bool {
 		watchers := val.([]*BufferWatcher)
 		for _, w := range watchers {
 			fn(w)
@@ -493,7 +493,7 @@ func (t *watcherTree) walkPath(key string, fn walkFn) {
 
 // walk calls fn for every matching leaf of the tree
 func (t *watcherTree) walk(fn walkFn) {
-	t.Tree.Walk(func(prefix string, val interface{}) bool {
+	t.Tree.Walk(func(prefix string, val any) bool {
 		watchers := val.([]*BufferWatcher)
 		for _, w := range watchers {
 			fn(w)

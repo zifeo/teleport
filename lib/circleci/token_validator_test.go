@@ -57,7 +57,7 @@ func (f *fakeIDP) issueToken(
 		IssuedAt: jwt.NewNumericDate(issuedAt),
 		Expiry:   jwt.NewNumericDate(expiry),
 	}
-	customClaims := map[string]interface{}{
+	customClaims := map[string]any{
 		"oidc.circleci.com/project-id":  projectID,
 		"oidc.circleci.com/context-ids": contextIDs,
 	}
@@ -90,7 +90,7 @@ func newFakeIDP(t *testing.T, organizationID string) *fakeIDP {
 	t.Cleanup(srv.Close)
 	orgURL := "/org/" + organizationID
 	providerMux.HandleFunc(orgURL+"/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		response := map[string]interface{}{
+		response := map[string]any{
 			"claims_supported": []string{
 				"sub",
 				"aud",

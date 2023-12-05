@@ -3934,7 +3934,7 @@ func mustNewTokenFromSpec(
 	return tok
 }
 
-func requireAccessDenied(t require.TestingT, err error, i ...interface{}) {
+func requireAccessDenied(t require.TestingT, err error, i ...any) {
 	require.True(
 		t,
 		trace.IsAccessDenied(err),
@@ -3942,7 +3942,7 @@ func requireAccessDenied(t require.TestingT, err error, i ...interface{}) {
 	)
 }
 
-func requireBadParameter(t require.TestingT, err error, i ...interface{}) {
+func requireBadParameter(t require.TestingT, err error, i ...any) {
 	require.True(
 		t,
 		trace.IsBadParameter(err),
@@ -3950,7 +3950,7 @@ func requireBadParameter(t require.TestingT, err error, i ...interface{}) {
 	)
 }
 
-func requireNotFound(t require.TestingT, err error, i ...interface{}) {
+func requireNotFound(t require.TestingT, err error, i ...any) {
 	require.True(
 		t,
 		trace.IsNotFound(err),
@@ -4062,7 +4062,7 @@ func TestGRPCServer_CreateTokenV2(t *testing.T) {
 			name:     "already exists",
 			identity: TestUser(privilegedUser.GetName()),
 			token:    alreadyExistsToken,
-			requireError: func(t require.TestingT, err error, i ...interface{}) {
+			requireError: func(t require.TestingT, err error, i ...any) {
 				require.True(
 					t,
 					trace.IsAlreadyExists(err),

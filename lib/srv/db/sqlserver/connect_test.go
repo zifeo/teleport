@@ -65,7 +65,7 @@ func TestConnectorSelection(t *testing.T) {
 			},
 			// When using a non-Azure database, the connector should fail
 			// loading Kerberos credentials.
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, errBadKerberosConfig)
 			},
@@ -82,7 +82,7 @@ func TestConnectorSelection(t *testing.T) {
 			},
 			// When using a Azure database with AD configuration, the connector
 			// should fail loading Kerberos credentials.
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, errBadKerberosConfig)
 			},
@@ -96,7 +96,7 @@ func TestConnectorSelection(t *testing.T) {
 			// When using a Azure database without AD configuration, the
 			// connector should fail because it could not connect to the
 			// database.
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "unable to open tcp connection with host")
 			},
@@ -114,7 +114,7 @@ func TestConnectorSelection(t *testing.T) {
 			},
 			// RDS proxies cannot be accessed outside their VPC. So, this test
 			// case should not resolve their host.
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "no such host")
 			},
@@ -261,7 +261,7 @@ func TestConnectorKInitClient(t *testing.T) {
 				},
 			},
 			// When using a non-Azure database, the connector should attempt to get a kinit client
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.Error(t, err)
 				// we can't get a new TGT without an actual kerberos implementation, so we are relying on the existing
 				// credentials cache being expired
@@ -276,7 +276,7 @@ func TestConnectorKInitClient(t *testing.T) {
 				AD:       types.AD{},
 			},
 			// When using a non-Azure database, the connector should attempt to get a kinit client
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.Error(t, err)
 				// we can't get a new TGT without an actual kerberos implementation, so we are relying on the existing
 				// credentials cache being expired
@@ -295,7 +295,7 @@ func TestConnectorKInitClient(t *testing.T) {
 				},
 			},
 			// When using a non-Azure database, the connector should attempt to get a kinit client
-			errAssertion: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, _ ...any) {
 				require.Error(t, err)
 				// we can't get a new TGT without an actual kerberos implementation, so we are relying on the existing
 				// credentials cache being expired

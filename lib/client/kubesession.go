@@ -76,7 +76,7 @@ func NewKubeSession(ctx context.Context, tc *TeleportClient, meta types.SessionT
 		}
 
 		body, _ := io.ReadAll(resp.Body)
-		var respData map[string]interface{}
+		var respData map[string]any
 		if err := json.Unmarshal(body, &respData); err != nil {
 			return nil, trace.Wrap(err)
 		}

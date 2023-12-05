@@ -44,7 +44,7 @@ func TestTSHSupported(t *testing.T) {
 		name   string
 		out    []byte
 		err    error
-		expect func(t require.TestingT, err error, msgAndArgs ...interface{})
+		expect func(t require.TestingT, err error, msgAndArgs ...any)
 	}{
 		{
 			// Before `-f json` is supported

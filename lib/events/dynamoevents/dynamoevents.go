@@ -744,7 +744,7 @@ func getSubPageCheckpoint(e *event) (string, error) {
 func (l *Log) SearchSessionEvents(ctx context.Context, req events.SearchSessionEventsRequest) ([]apievents.AuditEvent, string, error) {
 	filter := searchEventsFilter{eventTypes: []string{events.SessionEndEvent, events.WindowsDesktopSessionEndEvent}}
 	if req.Cond != nil {
-		params := condFilterParams{attrValues: make(map[string]interface{}), attrNames: make(map[string]string)}
+		params := condFilterParams{attrValues: make(map[string]any), attrNames: make(map[string]string)}
 		expr, err := fromWhereExpr(req.Cond, &params)
 		if err != nil {
 			return nil, "", trace.Wrap(err)
@@ -762,7 +762,7 @@ type searchEventsFilter struct {
 }
 
 type condFilterParams struct {
-	attrValues map[string]interface{}
+	attrValues map[string]any
 	attrNames  map[string]string
 }
 
@@ -792,7 +792,7 @@ func fromWhereExpr(cond *types.WhereExpr, params *condFilterParams) (string, err
 		return fmt.Sprintf("NOT (%s)", inner), nil
 	}
 
-	addAttrValue := func(in interface{}) string {
+	addAttrValue := func(in any) string {
 		for k, v := range params.attrValues {
 			if in == v {
 				return k
@@ -1115,7 +1115,7 @@ dateLoop:
 	for i, date := range l.dates {
 		l.checkpoint.Date = date
 
-		attributes := map[string]interface{}{
+		attributes := map[string]any{
 			":date":  date,
 			":start": l.fromUTC.Unix(),
 			":end":   l.toUTC.Unix(),
@@ -1178,7 +1178,7 @@ func (l *eventsFetcher) QueryBySessionIDIndex(ctx context.Context, sessionID str
 		attributeNames = aws.StringMap(l.filter.condParams.attrNames)
 	}
 
-	attributes := map[string]interface{}{
+	attributes := map[string]any{
 		":id": sessionID,
 	}
 	for i, eventType := range l.filter.eventTypes {

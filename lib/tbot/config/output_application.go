@@ -111,7 +111,7 @@ func (o *ApplicationOutput) Describe() []FileDescription {
 	return fds
 }
 
-func (o *ApplicationOutput) MarshalYAML() (interface{}, error) {
+func (o *ApplicationOutput) MarshalYAML() (any, error) {
 	type raw ApplicationOutput
 	return withTypeHeader((*raw)(o), ApplicationOutputType)
 }

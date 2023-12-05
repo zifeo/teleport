@@ -2462,7 +2462,7 @@ type httpErrorResponse struct {
 
 func TestLogin_PrivateKeyEnabledError(t *testing.T) {
 	modules.SetTestModules(t, &modules.TestModules{
-		MockAttestHardwareKey: func(_ context.Context, _ interface{}, policy keys.PrivateKeyPolicy, _ *keys.AttestationStatement, _ crypto.PublicKey, _ time.Duration) (keys.PrivateKeyPolicy, error) {
+		MockAttestHardwareKey: func(_ context.Context, _ any, policy keys.PrivateKeyPolicy, _ *keys.AttestationStatement, _ crypto.PublicKey, _ time.Duration) (keys.PrivateKeyPolicy, error) {
 			return "", keys.NewPrivateKeyPolicyError(policy)
 		},
 	})
@@ -5456,7 +5456,7 @@ func TestChangeUserAuthentication_WithPrivacyPolicyEnabledError(t *testing.T) {
 		TestFeatures: modules.Features{
 			RecoveryCodes: true,
 		},
-		MockAttestHardwareKey: func(_ context.Context, _ interface{}, policy keys.PrivateKeyPolicy, _ *keys.AttestationStatement, _ crypto.PublicKey, _ time.Duration) (keys.PrivateKeyPolicy, error) {
+		MockAttestHardwareKey: func(_ context.Context, _ any, policy keys.PrivateKeyPolicy, _ *keys.AttestationStatement, _ crypto.PublicKey, _ time.Duration) (keys.PrivateKeyPolicy, error) {
 			return "", keys.NewPrivateKeyPolicyError(policy)
 		},
 	})
@@ -6808,7 +6808,7 @@ func TestCreateDatabase(t *testing.T) {
 				URI:      "someuri:3306",
 			},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "missing database name")
 			},
 		},
@@ -6820,7 +6820,7 @@ func TestCreateDatabase(t *testing.T) {
 				URI:      "someuri:3306",
 			},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "missing protocol")
 			},
 		},
@@ -6832,7 +6832,7 @@ func TestCreateDatabase(t *testing.T) {
 				URI:      "",
 			},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "missing uri")
 			},
 		},
@@ -6844,7 +6844,7 @@ func TestCreateDatabase(t *testing.T) {
 				URI:      "someuri",
 			},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "missing port in address")
 			},
 		},
@@ -6856,7 +6856,7 @@ func TestCreateDatabase(t *testing.T) {
 				URI:      "someuri:3306",
 			},
 			expectedStatus: http.StatusConflict,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsAlreadyExists(err), "expected already exists error, got %v", err)
 				require.Contains(t, err.Error(), `failed to create database ("duplicatedb" already exists), please use another name`)
 			},
@@ -6951,7 +6951,7 @@ func TestUpdateDatabase_Errors(t *testing.T) {
 				CACert: strPtr(""),
 			},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "missing CA certificate data")
 			},
 		},
@@ -6961,7 +6961,7 @@ func TestUpdateDatabase_Errors(t *testing.T) {
 				CACert: strPtr("Not a certificate"),
 			},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "could not parse provided CA as X.509 PEM certificate")
 			},
 		},
@@ -6974,7 +6974,7 @@ func TestUpdateDatabase_Errors(t *testing.T) {
 				},
 			},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "missing aws rds field resource id")
 			},
 		},
@@ -6986,7 +6986,7 @@ func TestUpdateDatabase_Errors(t *testing.T) {
 				},
 			},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "missing aws rds field account id")
 			},
 		},
@@ -6994,7 +6994,7 @@ func TestUpdateDatabase_Errors(t *testing.T) {
 			name:           "no fields defined",
 			req:            updateDatabaseRequest{},
 			expectedStatus: http.StatusBadRequest,
-			errAssert: func(tt require.TestingT, err error, i ...interface{}) {
+			errAssert: func(tt require.TestingT, err error, i ...any) {
 				require.ErrorContains(tt, err, "missing fields to update the database")
 			},
 		},
@@ -7403,7 +7403,7 @@ func (c *TestWebClient) RoundTrip(fn roundtrip.RoundTripFn) (*roundtrip.Response
 	return resp, err
 }
 
-func (s *WebSuite) login(clt *TestWebClient, cookieToken string, reqToken string, reqData interface{}) (*roundtrip.Response, error) {
+func (s *WebSuite) login(clt *TestWebClient, cookieToken string, reqToken string, reqData any) (*roundtrip.Response, error) {
 	return httplib.ConvertResponse(clt.RoundTrip(func() (*http.Response, error) {
 		data, err := json.Marshal(reqData)
 		if err != nil {
@@ -8203,7 +8203,7 @@ func (r *testProxy) makeDesktopSession(t *testing.T, pack *authPack, sessionID s
 	return ws
 }
 
-func login(t *testing.T, clt *TestWebClient, cookieToken, reqToken string, reqData interface{}) *roundtrip.Response {
+func login(t *testing.T, clt *TestWebClient, cookieToken, reqToken string, reqData any) *roundtrip.Response {
 	resp, err := httplib.ConvertResponse(clt.RoundTrip(func() (*http.Response, error) {
 		data, err := json.Marshal(reqData)
 		if err != nil {
@@ -8467,7 +8467,7 @@ func TestWithLimiterHandlerFunc(t *testing.T) {
 	})
 	require.NoError(t, err)
 	h := &Handler{limiter: limiter}
-	hf := h.WithLimiterHandlerFunc(func(http.ResponseWriter, *http.Request, httprouter.Params) (interface{}, error) {
+	hf := h.WithLimiterHandlerFunc(func(http.ResponseWriter, *http.Request, httprouter.Params) (any, error) {
 		return nil, nil
 	})
 
@@ -9522,7 +9522,7 @@ func Test_consumeTokenForAPICall(t *testing.T) {
 			getToken: func() (string, types.ProvisionToken) {
 				return "fake", nil
 			},
-			wantErr: func(t require.TestingT, err error, i ...interface{}) {
+			wantErr: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsNotFound(err))
 			},
 		},
@@ -9552,7 +9552,7 @@ func Test_consumeTokenForAPICall(t *testing.T) {
 				pc.tokens[tok.GetName()] = tok
 				return tok.GetName(), tok
 			},
-			wantErr: func(t require.TestingT, err error, i ...interface{}) {
+			wantErr: func(t require.TestingT, err error, i ...any) {
 				require.ErrorContains(t, err, "expired token")
 			},
 		},
@@ -9569,7 +9569,7 @@ func Test_consumeTokenForAPICall(t *testing.T) {
 				pc.tokens[tok.GetName()] = tok
 				return tok.GetName(), tok
 			},
-			wantErr: func(t require.TestingT, err error, i ...interface{}) {
+			wantErr: func(t require.TestingT, err error, i ...any) {
 				require.ErrorContains(t, err, "unexpected join method \"ec2\" for token \"ec2-token\"")
 			},
 		},

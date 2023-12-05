@@ -170,7 +170,7 @@ type ServicesTestSuite struct {
 	EventsS       types.Events
 	UsersS        services.UsersService
 	RestrictionsS services.Restrictions
-	ChangesC      chan interface{}
+	ChangesC      chan any
 	Clock         clockwork.FakeClock
 }
 

@@ -61,7 +61,7 @@ func dynamoDBTestTable() string {
 func TestDynamoDB(t *testing.T) {
 	ensureTestsEnabled(t)
 
-	dynamoCfg := map[string]interface{}{
+	dynamoCfg := map[string]any{
 		"table_name":         dynamoDBTestTable(),
 		"poll_stream_period": 300 * time.Millisecond,
 	}

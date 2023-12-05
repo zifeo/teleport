@@ -822,7 +822,7 @@ type getResult struct {
 // getRecords retrieves all keys by path
 func (b *Backend) getRecords(ctx context.Context, startKey, endKey string, limit int, lastEvaluatedKey map[string]*dynamodb.AttributeValue) (*getResult, error) {
 	query := "HashKey = :hashKey AND FullPath BETWEEN :fullPath AND :rangeEnd"
-	attrV := map[string]interface{}{
+	attrV := map[string]any{
 		":fullPath":  startKey,
 		":hashKey":   hashKey,
 		":timestamp": b.clock.Now().UTC().Unix(),

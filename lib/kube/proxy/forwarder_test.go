@@ -1756,7 +1756,7 @@ func TestKubernetesLicenseEnforcement(t *testing.T) {
 			features: proto.Features{
 				Kubernetes: false,
 			},
-			assertErrFunc: func(tt require.TestingT, err error, i ...interface{}) {
+			assertErrFunc: func(tt require.TestingT, err error, i ...any) {
 				require.Error(tt, err)
 				var kubeErr *kubeerrors.StatusError
 				require.ErrorAs(tt, err, &kubeErr)

@@ -212,7 +212,7 @@ func NewSupervisor(id string, parentLog logrus.FieldLogger) Supervisor {
 // by various goroutines in the supervisor
 type Event struct {
 	Name    string
-	Payload interface{}
+	Payload any
 }
 
 func (e *Event) String() string {

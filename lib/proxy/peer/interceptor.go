@@ -41,7 +41,7 @@ func (s *streamWrapper) CloseSend() error {
 	return err
 }
 
-func (s *streamWrapper) SendMsg(m interface{}) error {
+func (s *streamWrapper) SendMsg(m any) error {
 	err := s.ClientStream.SendMsg(m)
 	if err != nil {
 		s.decreaseCounter()
@@ -49,7 +49,7 @@ func (s *streamWrapper) SendMsg(m interface{}) error {
 	return err
 }
 
-func (s *streamWrapper) RecvMsg(m interface{}) error {
+func (s *streamWrapper) RecvMsg(m any) error {
 	err := s.ClientStream.RecvMsg(m)
 	if err != nil {
 		s.decreaseCounter()

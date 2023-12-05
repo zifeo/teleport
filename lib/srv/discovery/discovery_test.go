@@ -1071,7 +1071,7 @@ func TestDiscoveryServer_New(t *testing.T) {
 			desc:         "no matchers error",
 			cloudClients: &cloud.TestCloudClients{STS: &mocks.STSMock{}},
 			matchers:     Matchers{},
-			errAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, i ...any) {
 				require.ErrorIs(t, err, &trace.BadParameterError{Message: "no matchers or discovery group configured for discovery"})
 			},
 			discServerAssertion: require.Nil,
@@ -1093,7 +1093,7 @@ func TestDiscoveryServer_New(t *testing.T) {
 				},
 			},
 			errAssertion: require.NoError,
-			discServerAssertion: func(t require.TestingT, i interface{}, i2 ...interface{}) {
+			discServerAssertion: func(t require.TestingT, i any, i2 ...any) {
 				require.NotNil(t, i)
 				val, ok := i.(*Server)
 				require.True(t, ok)
@@ -1129,7 +1129,7 @@ func TestDiscoveryServer_New(t *testing.T) {
 				},
 			},
 			errAssertion: require.NoError,
-			discServerAssertion: func(t require.TestingT, i interface{}, i2 ...interface{}) {
+			discServerAssertion: func(t require.TestingT, i any, i2 ...any) {
 				require.NotNil(t, i)
 				val, ok := i.(*Server)
 				require.True(t, ok)

@@ -223,7 +223,7 @@ func TestGetServers(t *testing.T) {
 			name: "no matches for uuid",
 			site: testSite{cfg: &mostRecentCfg},
 			host: uuid.NewString(),
-			errAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsNotFound(err), i...)
 			},
 			serverAssertion: func(t *testing.T, srv types.Server) {
@@ -234,7 +234,7 @@ func TestGetServers(t *testing.T) {
 			name: "no matches for ec2 id",
 			site: testSite{cfg: &unambiguousCfg},
 			host: "123456789012-i-1234567890abcdef0",
-			errAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsNotFound(err), i...)
 			},
 			serverAssertion: func(t *testing.T, srv types.Server) {
@@ -245,7 +245,7 @@ func TestGetServers(t *testing.T) {
 			name: "ambiguous match fails",
 			site: testSite{cfg: &unambiguousCfg, nodes: servers},
 			host: "sheep",
-			errAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, i ...any) {
 				require.ErrorIs(t, err, trace.NotFound(teleport.NodeIsAmbiguous))
 			},
 			serverAssertion: func(t *testing.T, srv types.Server) {
@@ -326,7 +326,7 @@ func TestGetServers(t *testing.T) {
 			name: "case-insensitive ambiguous",
 			site: testSite{cfg: &unambiguousInsensitiveCfg, nodes: servers},
 			host: "platypus",
-			errAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, i ...any) {
 				require.ErrorIs(t, err, trace.NotFound(teleport.NodeIsAmbiguous))
 			},
 			serverAssertion: func(t *testing.T, srv types.Server) {

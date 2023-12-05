@@ -640,7 +640,7 @@ func (f ByTimeAndIndex) Swap(i, j int) {
 }
 
 // getTime converts json time to string
-func getTime(v interface{}) time.Time {
+func getTime(v any) time.Time {
 	sval, ok := v.(string)
 	if !ok {
 		return time.Time{}
@@ -652,7 +652,7 @@ func getTime(v interface{}) time.Time {
 	return t
 }
 
-func getEventIndex(v interface{}) float64 {
+func getEventIndex(v any) float64 {
 	switch val := v.(type) {
 	case float64:
 		return val

@@ -133,7 +133,7 @@ func (r requestByAssumedRoleTransport) RoundTrip(req *http.Request) (*http.Respo
 }
 
 func hasStatusCode(wantStatusCode int) require.ErrorAssertionFunc {
-	return func(t require.TestingT, err error, msgAndArgs ...interface{}) {
+	return func(t require.TestingT, err error, msgAndArgs ...any) {
 		var apiErr awserr.RequestFailure
 		require.ErrorAs(t, err, &apiErr, msgAndArgs...)
 		require.Equal(t, wantStatusCode, apiErr.StatusCode(), msgAndArgs...)

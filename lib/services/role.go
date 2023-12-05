@@ -2312,7 +2312,7 @@ type AccessCheckable interface {
 // rbacDebugLogger creates a debug logger for Teleport's RBAC component.
 // It also returns a flag indicating whether debug logging is enabled,
 // allowing the RBAC system to generate more verbose errors in debug mode.
-func rbacDebugLogger() (debugEnabled bool, debugf func(format string, args ...interface{})) {
+func rbacDebugLogger() (debugEnabled bool, debugf func(format string, args ...any)) {
 	isDebugEnabled := log.IsLevelEnabled(log.TraceLevel)
 	log := log.WithField(trace.Component, teleport.ComponentRBAC)
 	return isDebugEnabled, log.Tracef
@@ -2786,7 +2786,7 @@ func (set RoleSet) GuessIfAccessIsPossible(ctx RuleContext, namespace string, re
 
 type boolParser bool
 
-func (p boolParser) Parse(string) (interface{}, error) {
+func (p boolParser) Parse(string) (any, error) {
 	return predicate.BoolPredicate(func() bool {
 		return bool(p)
 	}), nil

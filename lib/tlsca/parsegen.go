@@ -227,7 +227,7 @@ func ParsePrivateKeyDER(der []byte) (crypto.Signer, error) {
 }
 
 // ParsePublicKeyPEM parses public key PEM
-func ParsePublicKeyPEM(bytes []byte) (interface{}, error) {
+func ParsePublicKeyPEM(bytes []byte) (any, error) {
 	block, _ := pem.Decode(bytes)
 	if block == nil {
 		return nil, trace.BadParameter("expected PEM-encoded block")

@@ -44,7 +44,7 @@ func TestDiscoveryConfigCRUD(t *testing.T) {
 	clusterName := "test-cluster"
 
 	requireTraceErrorFn := func(traceFn func(error) bool) require.ErrorAssertionFunc {
-		return func(tt require.TestingT, err error, i ...interface{}) {
+		return func(tt require.TestingT, err error, i ...any) {
 			require.True(t, traceFn(err), "received an un-expected error: %v", err)
 		}
 	}

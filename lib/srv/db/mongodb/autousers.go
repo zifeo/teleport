@@ -183,7 +183,7 @@ func (e *Engine) DeleteUser(ctx context.Context, sessionCtx *common.Session) err
 func (e *Engine) isUserActive(ctx context.Context, sessionCtx *common.Session, client adminClient) (bool, error) {
 	e.Log.Debugf("Checking if user %q is active.", sessionCtx.DatabaseUser)
 	var resp struct {
-		Inprog []interface{} `bson:"inprog"`
+		Inprog []any `bson:"inprog"`
 	}
 
 	err := client.Database(adminDatabaseName).RunCommand(ctx, bson.D{

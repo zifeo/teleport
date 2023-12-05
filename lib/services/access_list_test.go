@@ -361,7 +361,7 @@ func TestIsAccessListMemberChecker(t *testing.T) {
 				"test-lock": newUserLock(t, "test-lock", member1),
 			},
 			currentTime: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC),
-			errAssertionFunc: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertionFunc: func(t require.TestingT, err error, i ...any) {
 				require.ErrorIs(t, err, trace.AccessDenied("user %s is currently locked", member1))
 			},
 		},
@@ -376,7 +376,7 @@ func TestIsAccessListMemberChecker(t *testing.T) {
 				},
 			},
 			currentTime: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC),
-			errAssertionFunc: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertionFunc: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsNotFound(err))
 			},
 		},
@@ -391,7 +391,7 @@ func TestIsAccessListMemberChecker(t *testing.T) {
 				},
 			},
 			currentTime: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-			errAssertionFunc: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertionFunc: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsAccessDenied(err))
 			},
 		},
@@ -419,7 +419,7 @@ func TestIsAccessListMemberChecker(t *testing.T) {
 				},
 			},
 			currentTime: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC),
-			errAssertionFunc: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertionFunc: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsAccessDenied(err))
 			},
 		},
@@ -434,7 +434,7 @@ func TestIsAccessListMemberChecker(t *testing.T) {
 				},
 			},
 			currentTime: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC),
-			errAssertionFunc: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertionFunc: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsAccessDenied(err))
 			},
 		},
@@ -449,7 +449,7 @@ func TestIsAccessListMemberChecker(t *testing.T) {
 				},
 			},
 			currentTime: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC),
-			errAssertionFunc: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertionFunc: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsAccessDenied(err))
 			},
 		},
@@ -464,7 +464,7 @@ func TestIsAccessListMemberChecker(t *testing.T) {
 				},
 			},
 			currentTime: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC),
-			errAssertionFunc: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertionFunc: func(t require.TestingT, err error, i ...any) {
 				require.True(t, trace.IsAccessDenied(err))
 			},
 		},

@@ -161,7 +161,7 @@ func TestNewExporter(t *testing.T) {
 	}{
 		{
 			name: "invalid config",
-			errAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err, i...)
 				require.True(t, trace.IsBadParameter(err), i...)
 			},
@@ -173,7 +173,7 @@ func TestNewExporter(t *testing.T) {
 				Service:     "test",
 				ExporterURL: "tcp://localhost:123",
 			},
-			errAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err, i...)
 				require.True(t, trace.IsBadParameter(err), i...)
 			},
@@ -186,7 +186,7 @@ func TestNewExporter(t *testing.T) {
 				ExporterURL: "localhost:123",
 				DialTimeout: time.Millisecond,
 			},
-			errAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errAssertion: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err, i...)
 				require.True(t, trace.IsConnectionProblem(err), i...)
 			},

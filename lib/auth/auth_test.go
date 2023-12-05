@@ -3186,7 +3186,7 @@ func TestFilterResources(t *testing.T) {
 		{
 			name:  "ListResources fails",
 			cache: mockCache{resourcesError: fail},
-			errorAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errorAssertion: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err, i...)
 				require.ErrorIs(t, err, fail)
 			},
@@ -3202,7 +3202,7 @@ func TestFilterResources(t *testing.T) {
 		{
 			name:  "fatal errors are propagated",
 			cache: mockCache{resources: nodes},
-			errorAssertion: func(t require.TestingT, err error, i ...interface{}) {
+			errorAssertion: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err, i...)
 				require.ErrorIs(t, err, fail)
 			},

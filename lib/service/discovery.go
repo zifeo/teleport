@@ -77,7 +77,7 @@ func (process *TeleportProcess) initDiscoveryService() error {
 		return trace.Wrap(err)
 	}
 
-	process.OnExit("discovery.stop", func(payload interface{}) {
+	process.OnExit("discovery.stop", func(payload any) {
 		log.Info("Shutting down.")
 		if discoveryService != nil {
 			discoveryService.Stop()

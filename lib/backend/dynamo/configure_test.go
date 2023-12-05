@@ -38,7 +38,7 @@ import (
 // startup of DynamoDB.
 func TestContinuousBackups(t *testing.T) {
 	// Create new backend with continuous backups enabled.
-	b, err := New(context.Background(), map[string]interface{}{
+	b, err := New(context.Background(), map[string]any{
 		"table_name":         uuid.New() + "-test",
 		"continuous_backups": true,
 	})
@@ -58,7 +58,7 @@ func TestContinuousBackups(t *testing.T) {
 // TestAutoScaling verifies that auto scaling is enabled upon startup of DynamoDB.
 func TestAutoScaling(t *testing.T) {
 	// Create new backend with auto scaling enabled.
-	b, err := New(context.Background(), map[string]interface{}{
+	b, err := New(context.Background(), map[string]any{
 		"table_name":         uuid.New() + "-test",
 		"auto_scaling":       true,
 		"read_min_capacity":  10,

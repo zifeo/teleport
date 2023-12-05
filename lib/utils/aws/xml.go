@@ -37,7 +37,7 @@ func IsXMLOfLocalName(data []byte, wantLocalName string) bool {
 
 // UnmarshalXMLChildNode decodes the XML-encoded data and stores the child node
 // with the specified name to v, where v is a pointer to an AWS SDK v1 struct.
-func UnmarshalXMLChildNode(v interface{}, data []byte, childName string) error {
+func UnmarshalXMLChildNode(v any, data []byte, childName string) error {
 	return trace.Wrap(xmlutil.UnmarshalXML(v, xml.NewDecoder(bytes.NewReader(data)), childName))
 }
 

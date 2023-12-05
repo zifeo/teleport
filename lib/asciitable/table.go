@@ -166,8 +166,8 @@ func (t *Table) AsBuffer() *bytes.Buffer {
 
 	// Header and separator.
 	if !t.IsHeadless() {
-		var colh []interface{}
-		var cols []interface{}
+		var colh []any
+		var cols []any
 
 		for _, col := range t.columns {
 			colh = append(colh, col.Title)
@@ -180,7 +180,7 @@ func (t *Table) AsBuffer() *bytes.Buffer {
 	// Body.
 	footnoteLabels := make(map[string]struct{})
 	for _, row := range t.rows {
-		var rowi []interface{}
+		var rowi []any
 		for i := range row {
 			cell, addFootnote := t.truncateCell(i, row[i])
 			if addFootnote {

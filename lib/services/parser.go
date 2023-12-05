@@ -41,7 +41,7 @@ import (
 // about current session, e.g. current user
 type RuleContext interface {
 	// GetIdentifier returns identifier defined in a context
-	GetIdentifier(fields []string) (interface{}, error)
+	GetIdentifier(fields []string) (any, error)
 	// GetResource returns resource if specified in the context,
 	// if unspecified, returns error.
 	GetResource() (types.Resource, error)
@@ -58,7 +58,7 @@ var (
 // predicateAllEndWith is a custom function to test if a string ends with a
 // particular suffix. If given a `[]string` as the first argument, all values
 // must have the given suffix (2nd argument).
-func predicateAllEndWith(a interface{}, b interface{}) predicate.BoolPredicate {
+func predicateAllEndWith(a any, b any) predicate.BoolPredicate {
 	return func() bool {
 		// bval is the suffix and must always be a plain string.
 		bval, ok := b.(string)
@@ -85,7 +85,7 @@ func predicateAllEndWith(a interface{}, b interface{}) predicate.BoolPredicate {
 // predicateAllEqual is a custom function to test if all entries in a []string
 // are equal to a certain value. This is primarily useful for comparing string
 // fields that are only expected to contain a single, specific value.
-func predicateAllEqual(a interface{}, b interface{}) predicate.BoolPredicate {
+func predicateAllEqual(a any, b any) predicate.BoolPredicate {
 	return func() bool {
 		// bval is the suffix and must always be a plain string.
 		bval, ok := b.(string)
@@ -112,7 +112,7 @@ func predicateAllEqual(a interface{}, b interface{}) predicate.BoolPredicate {
 // predicateIsSubset determines if the first parameter is contained within the
 // variadic args. The first argument may either by `string` or `[]string`, and
 // the variadic args may only be `string`.
-func predicateIsSubset(a interface{}, b ...interface{}) predicate.BoolPredicate {
+func predicateIsSubset(a any, b ...any) predicate.BoolPredicate {
 	return func() bool {
 		// Populate the set.
 		set := map[string]bool{}
@@ -150,7 +150,7 @@ func NewWhereParser(ctx RuleContext) (predicate.Parser, error) {
 			OR:  predicate.Or,
 			NOT: predicate.Not,
 		},
-		Functions: map[string]interface{}{
+		Functions: map[string]any{
 			"equals":       predicate.Equals,
 			"contains":     predicate.Contains,
 			"all_end_with": predicateAllEndWith,
@@ -159,7 +159,7 @@ func NewWhereParser(ctx RuleContext) (predicate.Parser, error) {
 			// system.catype is a function that returns cert authority type,
 			// it returns empty values for unrecognized values to
 			// pass static rule checks.
-			"system.catype": func() (interface{}, error) {
+			"system.catype": func() (any, error) {
 				resource, err := ctx.GetResource()
 				if err != nil {
 					if trace.IsNotFound(err) {
@@ -183,7 +183,7 @@ func NewWhereParser(ctx RuleContext) (predicate.Parser, error) {
 // from map[string]string or map[string][]string
 // the function returns empty value in case if key not found
 // In case if map is nil, returns empty value as well
-func GetStringMapValue(mapVal, keyVal interface{}) (interface{}, error) {
+func GetStringMapValue(mapVal, keyVal any) (any, error) {
 	key, ok := keyVal.(string)
 	if !ok {
 		return nil, trace.BadParameter("only string keys are supported")
@@ -218,7 +218,7 @@ func GetStringMapValue(mapVal, keyVal interface{}) (interface{}, error) {
 func NewActionsParser(ctx RuleContext) (predicate.Parser, error) {
 	return predicate.NewParser(predicate.Def{
 		Operators: predicate.Operators{},
-		Functions: map[string]interface{}{
+		Functions: map[string]any{
 			"log": NewLogActionFn(ctx),
 		},
 		GetIdentifier: ctx.GetIdentifier,
@@ -227,7 +227,7 @@ func NewActionsParser(ctx RuleContext) (predicate.Parser, error) {
 }
 
 // NewLogActionFn creates logger functions
-func NewLogActionFn(ctx RuleContext) interface{} {
+func NewLogActionFn(ctx RuleContext) any {
 	l := &LogAction{ctx: ctx}
 	writer, ok := ctx.(io.Writer)
 	if ok && writer != nil {
@@ -244,7 +244,7 @@ type LogAction struct {
 }
 
 // Log logs with specified level and formatting string with arguments
-func (l *LogAction) Log(level, format string, args ...interface{}) predicate.BoolPredicate {
+func (l *LogAction) Log(level, format string, args ...any) predicate.BoolPredicate {
 	return func() bool {
 		ilevel, err := log.ParseLevel(level)
 		if err != nil {
@@ -323,7 +323,7 @@ func (ctx *Context) GetResource() (types.Resource, error) {
 }
 
 // GetIdentifier returns identifier defined in a context
-func (ctx *Context) GetIdentifier(fields []string) (interface{}, error) {
+func (ctx *Context) GetIdentifier(fields []string) (any, error) {
 	switch fields[0] {
 	case UserIdentifier:
 		var user UserState
@@ -603,18 +603,18 @@ func (p boolPredicateParser) EvalBoolPredicate(expr string) (bool, error) {
 
 // NewJSONBoolParser returns a generic parser for boolean expressions based on a
 // json-serializable context.
-func NewJSONBoolParser(ctx interface{}) (BoolPredicateParser, error) {
+func NewJSONBoolParser(ctx any) (BoolPredicateParser, error) {
 	p, err := predicate.NewParser(predicate.Def{
 		Operators: predicate.Operators{
 			AND: predicate.And,
 			OR:  predicate.Or,
 			NOT: predicate.Not,
 		},
-		Functions: map[string]interface{}{
+		Functions: map[string]any{
 			"equals":   predicate.Equals,
 			"contains": predicate.Contains,
 		},
-		GetIdentifier: func(fields []string) (interface{}, error) {
+		GetIdentifier: func(fields []string) (any, error) {
 			return predicate.GetFieldByTag(ctx, teleport.JSON, fields)
 		},
 		GetProperty: GetStringMapValue,
@@ -636,8 +636,8 @@ func NewJSONBoolParser(ctx interface{}) (BoolPredicateParser, error) {
 // `contains(session.participants, "user")`. With another RuleContext the
 // largest such subcondition is the empty expression.
 func newParserForIdentifierSubcondition(ctx RuleContext, identifier string) (predicate.Parser, error) {
-	binaryPred := func(predFn func(a, b interface{}) predicate.BoolPredicate, exprFn func(a, b types.WhereExpr) types.WhereExpr) func(a, b interface{}) types.WhereExpr {
-		return func(a, b interface{}) types.WhereExpr {
+	binaryPred := func(predFn func(a, b any) predicate.BoolPredicate, exprFn func(a, b types.WhereExpr) types.WhereExpr) func(a, b any) types.WhereExpr {
+		return func(a, b any) types.WhereExpr {
 			an, aOK := a.(types.WhereExpr)
 			if !aOK {
 				an = types.WhereExpr{Literal: a}
@@ -693,7 +693,7 @@ func newParserForIdentifierSubcondition(ctx RuleContext, identifier string) (pre
 				return types.WhereExpr{Not: &expr}
 			},
 		},
-		Functions: map[string]interface{}{
+		Functions: map[string]any{
 			"equals": binaryPred(predicate.Equals, func(a, b types.WhereExpr) types.WhereExpr {
 				return types.WhereExpr{Equals: types.WhereExpr2{L: &a, R: &b}}
 			}),
@@ -701,7 +701,7 @@ func newParserForIdentifierSubcondition(ctx RuleContext, identifier string) (pre
 				return types.WhereExpr{Contains: types.WhereExpr2{L: &a, R: &b}}
 			}),
 		},
-		GetIdentifier: func(fields []string) (interface{}, error) {
+		GetIdentifier: func(fields []string) (any, error) {
 			if fields[0] == identifier {
 				// TODO: Session events have only one level of attributes. Support for
 				// more nested levels may be added when needed for other objects.
@@ -713,7 +713,7 @@ func newParserForIdentifierSubcondition(ctx RuleContext, identifier string) (pre
 			lit, err := ctx.GetIdentifier(fields)
 			return types.WhereExpr{Literal: lit}, trace.Wrap(err)
 		},
-		GetProperty: func(mapVal, keyVal interface{}) (interface{}, error) {
+		GetProperty: func(mapVal, keyVal any) (any, error) {
 			mapExpr, mapOK := mapVal.(types.WhereExpr)
 			if !mapOK {
 				mapExpr = types.WhereExpr{Literal: mapVal}
@@ -742,7 +742,7 @@ func newParserForIdentifierSubcondition(ctx RuleContext, identifier string) (pre
 // All other fields can be referenced by starting expression with identifier `resource`
 // followed by the names of the json fields ie: `resource.spec.public_addr`.
 func NewResourceParser(resource types.ResourceWithLabels) (BoolPredicateParser, error) {
-	predEquals := func(a interface{}, b interface{}) predicate.BoolPredicate {
+	predEquals := func(a any, b any) predicate.BoolPredicate {
 		switch aval := a.(type) {
 		case label:
 			bval, ok := b.(string)
@@ -753,7 +753,7 @@ func NewResourceParser(resource types.ResourceWithLabels) (BoolPredicateParser, 
 			return predicate.Equals(a, b)
 		}
 	}
-	predPrefix := func(a interface{}, prefix string) predicate.BoolPredicate {
+	predPrefix := func(a any, prefix string) predicate.BoolPredicate {
 		switch aval := a.(type) {
 		case label:
 			return func() bool {
@@ -776,11 +776,11 @@ func NewResourceParser(resource types.ResourceWithLabels) (BoolPredicateParser, 
 			OR:  predicate.Or,
 			NOT: predicate.Not,
 			EQ:  predEquals,
-			NEQ: func(a interface{}, b interface{}) predicate.BoolPredicate {
+			NEQ: func(a any, b any) predicate.BoolPredicate {
 				return predicate.Not(predEquals(a, b))
 			},
 		},
-		Functions: map[string]interface{}{
+		Functions: map[string]any{
 			"hasPrefix": predPrefix,
 			"equals":    predEquals,
 			// search allows fuzzy matching against select field values.
@@ -797,7 +797,7 @@ func NewResourceParser(resource types.ResourceWithLabels) (BoolPredicateParser, 
 				}
 			},
 		},
-		GetIdentifier: func(fields []string) (interface{}, error) {
+		GetIdentifier: func(fields []string) (any, error) {
 			switch fields[0] {
 			case ResourceLabelsIdentifier:
 				combinedLabels := resource.GetAllLabels()
@@ -837,7 +837,7 @@ func NewResourceParser(resource types.ResourceWithLabels) (BoolPredicateParser, 
 				return nil, trace.NotFound("identifier %q is not defined", strings.Join(fields, "."))
 			}
 		},
-		GetProperty: func(mapVal, keyVal interface{}) (interface{}, error) {
+		GetProperty: func(mapVal, keyVal any) (any, error) {
 			m, ok := mapVal.(labels)
 			if !ok {
 				return GetStringMapValue(mapVal, keyVal)

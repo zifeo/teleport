@@ -257,7 +257,7 @@ func TestFIDO2Login(t *testing.T) {
 			RelyingPartyID:     rpID,
 			AllowedCredentials: []wantypes.CredentialDescriptor{},
 			UserVerification:   protocol.VerificationDiscouraged,
-			Extensions:         map[string]interface{}{},
+			Extensions:         map[string]any{},
 		},
 	}
 
@@ -1509,7 +1509,7 @@ func TestFIDO2Register(t *testing.T) {
 
 				// Assert attestation certificate.
 				x5cInterface := attObj.AttStatement["x5c"]
-				x5c, ok := x5cInterface.([]interface{})
+				x5c, ok := x5cInterface.([]any)
 				require.True(t, ok, "attestation x5c type mismatch (got %T)", x5cInterface)
 				assert.Len(t, x5c, 1, "attestation x5c length mismatch")
 				assert.Equal(t, auth1.cert(), x5c[0], "attestation cert mismatch")
@@ -1530,7 +1530,7 @@ func TestFIDO2Register(t *testing.T) {
 
 				// Assert attestation certificate.
 				x5cInterface := attObj.AttStatement["x5c"]
-				x5c, ok := x5cInterface.([]interface{})
+				x5c, ok := x5cInterface.([]any)
 				require.True(t, ok, "attestation x5c type mismatch (got %T)", x5cInterface)
 				assert.Len(t, x5c, 1, "attestation x5c length mismatch")
 				assert.Equal(t, u2f1.cert(), x5c[0], "attestation cert mismatch")

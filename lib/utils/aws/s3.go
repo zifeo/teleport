@@ -35,7 +35,7 @@ import (
 
 // ConvertS3Error wraps S3 error and returns trace equivalent
 // It works on both sdk v1 and v2.
-func ConvertS3Error(err error, args ...interface{}) error {
+func ConvertS3Error(err error, args ...any) error {
 	if err == nil {
 		return nil
 	}

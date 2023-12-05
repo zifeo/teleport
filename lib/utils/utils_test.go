@@ -482,8 +482,8 @@ func TestMarshalYAML(t *testing.T) {
 	}
 	testCases := []struct {
 		comment  string
-		val      interface{}
-		expected interface{}
+		val      any
+		expected any
 		isDoc    bool
 	}{
 		{
@@ -492,23 +492,23 @@ func TestMarshalYAML(t *testing.T) {
 		},
 		{
 			comment: "list of yaml types",
-			val:     []interface{}{"hello", "there"},
+			val:     []any{"hello", "there"},
 		},
 		{
 			comment:  "list of yaml documents",
-			val:      []interface{}{kv{Key: "a"}, kv{Key: "b"}},
-			expected: []interface{}{map[string]interface{}{"Key": "a"}, map[string]interface{}{"Key": "b"}},
+			val:      []any{kv{Key: "a"}, kv{Key: "b"}},
+			expected: []any{map[string]any{"Key": "a"}, map[string]any{"Key": "b"}},
 			isDoc:    true,
 		},
 		{
 			comment:  "list of pointers to yaml docs",
-			val:      []interface{}{kv{Key: "a"}, &kv{Key: "b"}},
-			expected: []interface{}{map[string]interface{}{"Key": "a"}, map[string]interface{}{"Key": "b"}},
+			val:      []any{kv{Key: "a"}, &kv{Key: "b"}},
+			expected: []any{map[string]any{"Key": "a"}, map[string]any{"Key": "b"}},
 			isDoc:    true,
 		},
 		{
 			comment: "list of maps",
-			val:     []interface{}{map[string]interface{}{"Key": "a"}, map[string]interface{}{"Key": "b"}},
+			val:     []any{map[string]any{"Key": "a"}, map[string]any{"Key": "b"}},
 			isDoc:   true,
 		},
 	}

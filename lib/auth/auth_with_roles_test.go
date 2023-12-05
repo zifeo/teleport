@@ -5647,12 +5647,12 @@ func TestGetHeadlessAuthentication(t *testing.T) {
 	_, _, err = CreateUserAndRole(srv.Auth(), otherUsername, nil, nil)
 	require.NoError(t, err)
 
-	assertTimeout := func(t require.TestingT, err error, i ...interface{}) {
+	assertTimeout := func(t require.TestingT, err error, i ...any) {
 		require.Error(t, err)
 		require.ErrorContains(t, err, context.DeadlineExceeded.Error(), "expected context deadline error but got: %v", err)
 	}
 
-	assertAccessDenied := func(t require.TestingT, err error, i ...interface{}) {
+	assertAccessDenied := func(t require.TestingT, err error, i ...any) {
 		require.Error(t, err)
 		require.True(t, trace.IsAccessDenied(err), "expected access denied error but got: %v", err)
 	}
@@ -5725,12 +5725,12 @@ func TestUpdateHeadlessAuthenticationState(t *testing.T) {
 	_, _, err := CreateUserAndRole(srv.Auth(), otherUsername, nil, nil)
 	require.NoError(t, err)
 
-	assertNotFound := func(t require.TestingT, err error, i ...interface{}) {
+	assertNotFound := func(t require.TestingT, err error, i ...any) {
 		require.Error(t, err)
 		require.True(t, trace.IsNotFound(err), "expected not found error but got: %v", err)
 	}
 
-	assertAccessDenied := func(t require.TestingT, err error, i ...interface{}) {
+	assertAccessDenied := func(t require.TestingT, err error, i ...any) {
 		require.Error(t, err)
 		require.True(t, trace.IsAccessDenied(err), "expected access denied error but got: %v", err)
 	}
@@ -6989,7 +6989,7 @@ func TestKubeKeepAliveServer(t *testing.T) {
 
 // inlineEventually is equivalent to require.Eventually except that it runs the provided function directly
 // instead of in a background goroutine, making it safe to fail the test from within the closure.
-func inlineEventually(t *testing.T, cond func() bool, waitFor time.Duration, tick time.Duration, msgAndArgs ...interface{}) {
+func inlineEventually(t *testing.T, cond func() bool, waitFor time.Duration, tick time.Duration, msgAndArgs ...any) {
 	t.Helper()
 
 	timer := time.NewTimer(waitFor)

@@ -314,7 +314,7 @@ func Register(origin string, cc *wantypes.CredentialCreation) (*Registration, er
 	attObj, err := cbor.Marshal(protocol.AttestationObject{
 		RawAuthData: attData.rawAuthData,
 		Format:      "packed",
-		AttStatement: map[string]interface{}{
+		AttStatement: map[string]any{
 			"alg": int64(webauthncose.AlgES256),
 			"sig": sig,
 		},

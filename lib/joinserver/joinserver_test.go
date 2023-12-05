@@ -66,7 +66,7 @@ func (c *mockJoinServiceClient) RegisterUsingAzureMethod(ctx context.Context, ch
 }
 
 func ConnectionCountingStreamInterceptor(count *atomic.Int32) grpc.StreamServerInterceptor {
-	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		count.Add(1)
 		defer count.Add(-1)
 		return handler(srv, ss)

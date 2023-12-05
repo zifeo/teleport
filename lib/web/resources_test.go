@@ -96,7 +96,7 @@ func TestCheckResourceUpsert(t *testing.T) {
 				// Resource does exist.
 				return nil, nil
 			},
-			assertErr: func(t require.TestingT, err error, i ...interface{}) {
+			assertErr: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err)
 				require.True(t, trace.IsAlreadyExists(err))
 			},
@@ -110,7 +110,7 @@ func TestCheckResourceUpsert(t *testing.T) {
 				// Resource does exist.
 				return nil, nil
 			},
-			assertErr: func(t require.TestingT, err error, i ...interface{}) {
+			assertErr: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err)
 				require.True(t, trace.IsBadParameter(err))
 			},
@@ -124,7 +124,7 @@ func TestCheckResourceUpsert(t *testing.T) {
 				// Resource does not exist.
 				return nil, trace.NotFound("")
 			},
-			assertErr: func(t require.TestingT, err error, i ...interface{}) {
+			assertErr: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err)
 				require.True(t, trace.IsNotFound(err))
 			},
@@ -149,7 +149,7 @@ func TestCheckResourceUpsert(t *testing.T) {
 				// Resource does exist.
 				return nil, nil
 			},
-			assertErr: func(t require.TestingT, err error, i ...interface{}) {
+			assertErr: func(t require.TestingT, err error, i ...any) {
 				require.Error(t, err)
 				require.True(t, trace.IsBadParameter(err))
 			},

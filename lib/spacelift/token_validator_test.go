@@ -86,7 +86,7 @@ func (f *fakeIDP) audience() string {
 
 func (f *fakeIDP) handleOpenIDConfig(w http.ResponseWriter, r *http.Request) {
 	// mimic https://teleport-noah-dev.app.spacelift.io/.well-known/openid-configuration
-	response := map[string]interface{}{
+	response := map[string]any{
 		"claims_supported": []string{
 			"aud",
 			"callerId",
@@ -148,7 +148,7 @@ func (f *fakeIDP) issueToken(
 		NotBefore: jwt.NewNumericDate(issuedAt),
 		Expiry:    jwt.NewNumericDate(expiry),
 	}
-	customClaims := map[string]interface{}{
+	customClaims := map[string]any{
 		"spaceId": spaceID,
 	}
 	token, err := jwt.Signed(f.signer).

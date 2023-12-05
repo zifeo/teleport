@@ -40,7 +40,7 @@ var (
 	embedding3 = embeddinglib.NewEmbedding(types.KindDatabase, "bar", embeddinglib.Vector64{2}, sha256.Sum256([]byte("test3")))
 )
 
-func errorIsNotFound(t require.TestingT, err error, msgAndArgs ...interface{}) {
+func errorIsNotFound(t require.TestingT, err error, msgAndArgs ...any) {
 	require.True(t, trace.IsNotFound(err), msgAndArgs...)
 }
 

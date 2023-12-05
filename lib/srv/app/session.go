@@ -407,7 +407,7 @@ func (s *sessionChunkCache) set(sessionID string, sess *sessionChunk, ttl time.D
 }
 
 // expire will close the stream writer.
-func (s *sessionChunkCache) expire(key string, el interface{}) {
+func (s *sessionChunkCache) expire(key string, el any) {
 	// Closing the session stream writer may trigger a flush operation which could
 	// be time-consuming. Launch in another goroutine since this occurs under a
 	// lock and expire can get called during a "get" operation on the ttlmap.
@@ -415,7 +415,7 @@ func (s *sessionChunkCache) expire(key string, el interface{}) {
 	s.srv.log.Debugf("Closing expired stream %v.", key)
 }
 
-func (s *sessionChunkCache) closeSession(el interface{}) {
+func (s *sessionChunkCache) closeSession(el any) {
 	switch sess := el.(type) {
 	case *sessionChunk:
 		s.srv.closeSession(sess)

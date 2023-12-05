@@ -639,7 +639,7 @@ func TestVerifyEnabledService(t *testing.T) {
 		{
 			desc:   "nothing enabled",
 			config: &Config{},
-			errAssertionFunc: func(t require.TestingT, err error, _ ...interface{}) {
+			errAssertionFunc: func(t require.TestingT, err error, _ ...any) {
 				require.True(t, trace.IsBadParameter(err), "err is not a BadParameter error: %T", err)
 			},
 		},
