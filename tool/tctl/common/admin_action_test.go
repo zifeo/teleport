@@ -49,23 +49,66 @@ import (
 	tsh "github.com/gravitational/teleport/tool/tsh/common"
 )
 
-// TestAdminATestAdminActionMFA is an e2e tests for "tctl" admin actions with MFA.
-func TestAdminActionMFA(t *testing.T) {
+func TestAdminActionMFA_Users(t *testing.T) {
+	ctx := context.Background()
 	s := newAdminActionTestSuite(t)
 
-	t.Run("UserCommand", func(t *testing.T) {
-		testAdminActionMFA_UserCommands(t, s)
+	user, err := types.NewUser("teleuser")
+	require.NoError(t, err)
+
+	createUser := func(t *testing.T, authServer *auth.Server) {
+		_, err := authServer.CreateUser(ctx, user)
+		if !trace.IsAlreadyExists(err) {
+			require.NoError(t, err)
+		}
+	}
+
+	deleteUser := func(t *testing.T, authServer *auth.Server) {
+		err := authServer.DeleteUser(ctx, "teleuser")
+		if !trace.IsNotFound(err) {
+			require.NoError(t, err)
+		}
+	}
+
+	t.Run("UserCommands", func(t *testing.T) {
+		for _, tc := range []adminActionTestCase{
+			{
+				command:    "users add teleuser --roles=access",
+				cliCommand: &tctl.UserCommand{},
+				cleanup:    deleteUser,
+			}, {
+				command:    "users update teleuser --set-roles=access,auditor",
+				cliCommand: &tctl.UserCommand{},
+				setup:      createUser,
+				cleanup:    deleteUser,
+			}, {
+				command:    "users rm teleuser",
+				cliCommand: &tctl.UserCommand{},
+				setup:      createUser,
+				cleanup:    deleteUser,
+			},
+		} {
+			t.Run(tc.command, func(t *testing.T) {
+				s.runTestCase(t, ctx, tc)
+			})
+		}
 	})
 
-	t.Run("ResourceCommand", func(t *testing.T) {
-		testAdminActionMFA_ResourceCommands(t, s)
+	t.Run("ResourceCommands", func(t *testing.T) {
+		testAdminActionMFA_ResourceCommand(t, s, resourceCommandTestCase{
+			resource:       user,
+			resourceCreate: createUser,
+			resourceDelete: deleteUser,
+		})
 	})
 }
 
 type adminActionTestSuite struct {
-	authServer        *auth.Server
+	authServer *auth.Server
+	// userClientWithMFA supports MFA prompt for admin actions.
 	userClientWithMFA auth.ClientI
-	userClientNoMFA   auth.ClientI
+	// userClientWithMFA does not support MFA prompt for admin actions.
+	userClientNoMFA auth.ClientI
 }
 
 func newAdminActionTestSuite(t *testing.T) *adminActionTestSuite {
@@ -162,14 +205,42 @@ func newAdminActionTestSuite(t *testing.T) *adminActionTestSuite {
 	}
 }
 
-func (s *adminActionTestSuite) runTestCase(t *testing.T, ctx context.Context, tc adminActiontestCase) {
+type adminActionTestCase struct {
+	command    string
+	cliCommand tctl.CLICommand
+	setup      func(t *testing.T, auth *auth.Server)
+	cleanup    func(t *testing.T, auth *auth.Server)
+}
+
+func (s *adminActionTestSuite) runTestCase(t *testing.T, ctx context.Context, tc adminActionTestCase) {
+	runTest := func(t *testing.T, client auth.ClientI) error {
+		if tc.setup != nil {
+			tc.setup(t, s.authServer)
+		}
+		if tc.cleanup != nil {
+			t.Cleanup(func() { tc.cleanup(t, s.authServer) })
+		}
+
+		app := utils.InitCLIParser("tctl", tctl.GlobalHelpString)
+		cfg := servicecfg.MakeDefaultConfig()
+		tc.cliCommand.Initialize(app, cfg)
+
+		args := strings.Split(tc.command, " ")
+		commandName, err := app.Parse(args)
+		require.NoError(t, err)
+
+		match, err := tc.cliCommand.TryRun(ctx, commandName, client)
+		require.True(t, match)
+		return err
+	}
+
 	t.Run("OK with MFA", func(t *testing.T) {
-		err := s.runTestSubCase(t, ctx, tc, s.userClientWithMFA)
+		err := runTest(t, s.userClientWithMFA)
 		require.NoError(t, err)
 	})
 
 	t.Run("NOK without MFA", func(t *testing.T) {
-		err := s.runTestSubCase(t, ctx, tc, s.userClientNoMFA)
+		err := runTest(t, s.userClientNoMFA)
 		require.ErrorContains(t, err, mfa.ErrAdminActionMFARequired.Message)
 	})
 
@@ -188,150 +259,51 @@ func (s *adminActionTestSuite) runTestCase(t *testing.T, ctx context.Context, tc
 	})
 
 	t.Run("OK mfa off", func(t *testing.T) {
-		err := s.runTestSubCase(t, ctx, tc, s.userClientNoMFA)
+		err := runTest(t, s.userClientNoMFA)
 		require.NoError(t, err)
 	})
 }
 
-func (s *adminActionTestSuite) runTestSubCase(t *testing.T, ctx context.Context, tc adminActiontestCase, client auth.ClientI) error {
-	t.Helper()
-
-	if tc.setup != nil {
-		tc.setup(t, s.authServer)
-	}
-	if tc.cleanup != nil {
-		t.Cleanup(func() { tc.cleanup(t, s.authServer) })
-	}
-
-	app := utils.InitCLIParser("tctl", tctl.GlobalHelpString)
-	cfg := servicecfg.MakeDefaultConfig()
-	tc.cliCommand.Initialize(app, cfg)
-
-	args := strings.Split(tc.command, " ")
-	commandName, err := app.Parse(args)
-	require.NoError(t, err)
-
-	match, err := tc.cliCommand.TryRun(ctx, commandName, client)
-	require.True(t, match)
-	return err
+type resourceCommandTestCase struct {
+	resource       types.Resource
+	resourceCreate func(t *testing.T, authServer *auth.Server)
+	resourceDelete func(t *testing.T, authServer *auth.Server)
 }
 
-type adminActiontestCase struct {
-	command    string
-	cliCommand tctl.CLICommand
-	setup      func(t *testing.T, auth *auth.Server)
-	cleanup    func(t *testing.T, auth *auth.Server)
-}
-
-func testAdminActionMFA_ResourceCommands(t *testing.T, s *adminActionTestSuite) {
+func testAdminActionMFA_ResourceCommand(t *testing.T, s *adminActionTestSuite, tc resourceCommandTestCase) {
 	ctx := context.Background()
 
-	user, err := types.NewUser("teleuser")
+	resourceYaml, err := yaml.Marshal(tc.resource)
 	require.NoError(t, err)
+	resourceYamlPath := filepath.Join(t.TempDir(), fmt.Sprintf("%v.yaml", tc.resource.GetKind()))
+	require.NoError(t, os.WriteFile(resourceYamlPath, []byte(resourceYaml), 0o644))
 
-	for _, rc := range []struct {
-		resource        types.Resource
-		resourceSetup   func(t *testing.T, authServer *auth.Server)
-		resourceCleanup func(t *testing.T, authServer *auth.Server)
-	}{
-		{
-			resource: user,
-			resourceSetup: func(t *testing.T, authServer *auth.Server) {
-				_, err := authServer.CreateUser(ctx, user)
-				if !trace.IsAlreadyExists(err) {
-					require.NoError(t, err)
-				}
-			},
-			resourceCleanup: func(t *testing.T, authServer *auth.Server) {
-				err := authServer.DeleteUser(ctx, user.GetName())
-				if !trace.IsNotFound(err) {
-					require.NoError(t, err)
-				}
-			},
-		},
-	} {
-		rc := rc
-		t.Run(rc.resource.GetKind(), func(t *testing.T) {
-			t.Parallel()
-
-			resourceYaml, err := yaml.Marshal(rc.resource)
-			require.NoError(t, err)
-			resourceYamlPath := filepath.Join(t.TempDir(), fmt.Sprintf("%v.yaml", rc.resource.GetKind()))
-			require.NoError(t, os.WriteFile(resourceYamlPath, []byte(resourceYaml), 0o644))
-
-			t.Run(fmt.Sprintf("create %v.yaml", rc.resource.GetKind()), func(t *testing.T) {
-				s.runTestCase(t, ctx, adminActiontestCase{
-					command:    fmt.Sprintf("create %v", resourceYamlPath),
-					cliCommand: &tctl.ResourceCommand{},
-					cleanup:    rc.resourceCleanup,
-				})
-			})
-
-			t.Run(fmt.Sprintf("create -f %v.yaml", rc.resource.GetKind()), func(t *testing.T) {
-				s.runTestCase(t, ctx, adminActiontestCase{
-					command:    fmt.Sprintf("create -f %v", resourceYamlPath),
-					cliCommand: &tctl.ResourceCommand{},
-					setup:      rc.resourceSetup,
-					cleanup:    rc.resourceCleanup,
-				})
-			})
-
-			rmCommand := fmt.Sprintf("rm %v/%v", rc.resource.GetKind(), rc.resource.GetName())
-			t.Run(rmCommand, func(t *testing.T) {
-				s.runTestCase(t, ctx, adminActiontestCase{
-					command:    rmCommand,
-					cliCommand: &tctl.ResourceCommand{},
-					setup:      rc.resourceSetup,
-					cleanup:    rc.resourceCleanup,
-				})
-			})
+	t.Run(fmt.Sprintf("create %v.yaml", tc.resource.GetKind()), func(t *testing.T) {
+		s.runTestCase(t, ctx, adminActionTestCase{
+			command:    fmt.Sprintf("create %v", resourceYamlPath),
+			cliCommand: &tctl.ResourceCommand{},
+			cleanup:    tc.resourceDelete,
 		})
-	}
-}
+	})
 
-func testAdminActionMFA_UserCommands(t *testing.T, s *adminActionTestSuite) {
-	ctx := context.Background()
-
-	user, err := types.NewUser("teleuser")
-	require.NoError(t, err)
-
-	createUser := func(t *testing.T, authServer *auth.Server) {
-		_, err := authServer.CreateUser(ctx, user)
-		// ensure broken test cases don't impact
-		if !trace.IsAlreadyExists(err) {
-			require.NoError(t, err)
-		}
-	}
-
-	deleteUser := func(t *testing.T, authServer *auth.Server) {
-		err := authServer.DeleteUser(ctx, "teleuser")
-		// ensure broken test cases don't impact
-		if !trace.IsNotFound(err) {
-			require.NoError(t, err)
-		}
-	}
-
-	for _, tc := range []adminActiontestCase{
-		{
-			command:    "users add teleuser --roles=access",
-			cliCommand: &tctl.UserCommand{},
-			cleanup:    deleteUser,
-		}, {
-			command:    "users update teleuser --set-roles=access,auditor",
-			cliCommand: &tctl.UserCommand{},
-			setup:      createUser,
-			cleanup:    deleteUser,
-		}, {
-			command:    "users rm teleuser",
-			cliCommand: &tctl.UserCommand{},
-			setup:      createUser,
-			cleanup:    deleteUser,
-		},
-	} {
-		t.Run(tc.command, func(t *testing.T) {
-			s.runTestCase(t, ctx, tc)
+	t.Run(fmt.Sprintf("create -f %v.yaml", tc.resource.GetKind()), func(t *testing.T) {
+		s.runTestCase(t, ctx, adminActionTestCase{
+			command:    fmt.Sprintf("create -f %v", resourceYamlPath),
+			cliCommand: &tctl.ResourceCommand{},
+			setup:      tc.resourceCreate,
+			cleanup:    tc.resourceDelete,
 		})
-	}
+	})
+
+	rmCommand := fmt.Sprintf("rm %v/%v", tc.resource.GetKind(), tc.resource.GetName())
+	t.Run(rmCommand, func(t *testing.T) {
+		s.runTestCase(t, ctx, adminActionTestCase{
+			command:    rmCommand,
+			cliCommand: &tctl.ResourceCommand{},
+			setup:      tc.resourceCreate,
+			cleanup:    tc.resourceDelete,
+		})
+	})
 }
 
 func setupWebAuthn(t *testing.T, authServer *auth.Server, username string) libclient.WebauthnLoginFunc {
