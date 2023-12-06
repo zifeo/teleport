@@ -276,7 +276,7 @@ func testAdminActionMFA_ResourceCommand(t *testing.T, s *adminActionTestSuite, t
 	resourceYaml, err := yaml.Marshal(tc.resource)
 	require.NoError(t, err)
 	resourceYamlPath := filepath.Join(t.TempDir(), fmt.Sprintf("%v.yaml", tc.resource.GetKind()))
-	require.NoError(t, os.WriteFile(resourceYamlPath, []byte(resourceYaml), 0o644))
+	require.NoError(t, os.WriteFile(resourceYamlPath, resourceYaml, 0o644))
 
 	t.Run(fmt.Sprintf("create %v.yaml", tc.resource.GetKind()), func(t *testing.T) {
 		s.runTestCase(t, ctx, adminActionTestCase{
