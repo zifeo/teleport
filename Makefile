@@ -710,7 +710,7 @@ test-helm-update-snapshots: helmunit/installed
 # Runs all Go tests except integration, called by CI/CD.
 #
 .PHONY: test-go
-test-go: test-go-prepare test-go-unit test-go-touch-id test-go-tsh test-go-chaos
+test-go: test-go-prepare test-go-unit test-go-touch-id test-go-tools test-go-chaos
 
 #
 # Runs a test to ensure no environment variable leak into build binaries.
@@ -742,7 +742,7 @@ test-go-prepare: ensure-webassets bpf-bytecode rdpclient $(TEST_LOG_DIR) ensure-
 # Runs base unit tests
 .PHONY: test-go-unit
 test-go-unit: FLAGS ?= -race -shuffle on
-test-go-unit: SUBJECT ?= $(shell go list ./... | grep -vE 'teleport/(e2e|integration|tool/tsh|integrations/operator|integrations/access|integrations/lib)')
+test-go-unit: SUBJECT ?= $(shell go list ./... | grep -vE 'teleport/(e2e|integration|tool/|integrations/operator|integrations/access|integrations/lib)')
 test-go-unit:
 	$(CGOFLAG) go test -cover -json -tags "$(PAM_TAG) $(FIPS_TAG) $(BPF_TAG) $(RDPCLIENT_TAG) $(LIBFIDO2_TEST_TAG) $(TOUCHID_TAG) $(PIV_TEST_TAG)" $(PACKAGES) $(SUBJECT) $(FLAGS) $(ADDFLAGS) \
 		| tee $(TEST_LOG_DIR)/unit.json \
@@ -767,11 +767,11 @@ ifneq ("$(TOUCHID_TAG)", "")
 		| gotestsum --raw-command -- cat
 endif
 
-# Runs ci tsh tests
-.PHONY: test-go-tsh
-test-go-tsh: FLAGS ?= -race -shuffle on
-test-go-tsh: SUBJECT ?= github.com/gravitational/teleport/tool/tsh/...
-test-go-tsh:
+# Runs ci tools tests
+.PHONY: test-go-tools
+test-go-tools: FLAGS ?= -race -shuffle on
+test-go-tools: SUBJECT ?= github.com/gravitational/teleport/tool/...
+test-go-tools:
 	$(CGOFLAG_TSH) go test -cover -json -tags "$(PAM_TAG) $(FIPS_TAG) $(LIBFIDO2_TEST_TAG) $(TOUCHID_TAG) $(PIV_TEST_TAG)" $(PACKAGES) $(SUBJECT) $(FLAGS) $(ADDFLAGS) \
 		| tee $(TEST_LOG_DIR)/unit.json \
 		| gotestsum --raw-command -- cat

@@ -92,7 +92,7 @@ jobs:
         uses: ./.github/actions/difftest
         with:
           flags: --skip="${{ steps.find_excluded.outputs.FLAKE_SKIP }}" --include "tool/tsh/**/*"
-          target: test-go-tsh
+          target: test-go-tools
 
       - name: Run api difftest
         uses: ./.github/actions/difftest
