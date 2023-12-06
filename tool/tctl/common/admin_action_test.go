@@ -233,7 +233,6 @@ func testAdminActionMFA_ResourceCommands(t *testing.T, s *adminActionTestSuite) 
 		resource        types.Resource
 		resourceSetup   func(t *testing.T, authServer *auth.Server)
 		resourceCleanup func(t *testing.T, authServer *auth.Server)
-		editDisabled    bool
 	}{
 		{
 			resource: user,
@@ -249,7 +248,6 @@ func testAdminActionMFA_ResourceCommands(t *testing.T, s *adminActionTestSuite) 
 					require.NoError(t, err)
 				}
 			},
-			editDisabled: true, // editing users secrets is not allowed.
 		},
 	} {
 		rc := rc
@@ -287,22 +285,6 @@ func testAdminActionMFA_ResourceCommands(t *testing.T, s *adminActionTestSuite) 
 					cleanup:    rc.resourceCleanup,
 				})
 			})
-
-			if !rc.editDisabled {
-				editCommand := fmt.Sprintf("edit %v/%v", rc.resource.GetKind(), rc.resource.GetName())
-				t.Run(editCommand, func(t *testing.T) {
-					s.runTestCase(t, ctx, adminActiontestCase{
-						command: editCommand,
-						cliCommand: &tctl.EditCommand{
-							Editor: func(filename string) error {
-								return os.WriteFile(filename, []byte(resourceYamlPath), 0o644)
-							},
-						},
-						setup:   rc.resourceSetup,
-						cleanup: rc.resourceSetup,
-					})
-				})
-			}
 		})
 	}
 }
