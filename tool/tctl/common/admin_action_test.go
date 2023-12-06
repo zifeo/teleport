@@ -26,6 +26,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gravitational/trace"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/client/proto"
@@ -43,9 +47,6 @@ import (
 	tctl "github.com/gravitational/teleport/tool/tctl/common"
 	testserver "github.com/gravitational/teleport/tool/teleport/testenv"
 	tsh "github.com/gravitational/teleport/tool/tsh/common"
-	"github.com/gravitational/trace"
-	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
 // TestAdminATestAdminActionMFA is an e2e tests for "tctl" admin actions with MFA.
@@ -251,19 +252,16 @@ func testAdminActionMFA_ResourceCommands(t *testing.T, s *adminActionTestSuite) 
 			editDisabled: true, // editing users secrets is not allowed.
 		},
 	} {
-		resource := rc.resource
-		resourceKind := resource.GetKind()
-		resourceName := resource.GetName()
-
-		t.Run(resourceKind, func(t *testing.T) {
+		rc := rc
+		t.Run(rc.resource.GetKind(), func(t *testing.T) {
 			t.Parallel()
 
-			resourceYaml, err := yaml.Marshal(resource)
+			resourceYaml, err := yaml.Marshal(rc.resource)
 			require.NoError(t, err)
-			resourceYamlPath := filepath.Join(t.TempDir(), fmt.Sprintf("%v.yaml", resourceKind))
+			resourceYamlPath := filepath.Join(t.TempDir(), fmt.Sprintf("%v.yaml", rc.resource.GetKind()))
 			require.NoError(t, os.WriteFile(resourceYamlPath, []byte(resourceYaml), 0o644))
 
-			t.Run(fmt.Sprintf("create %v.yaml", resourceKind), func(t *testing.T) {
+			t.Run(fmt.Sprintf("create %v.yaml", rc.resource.GetKind()), func(t *testing.T) {
 				s.runTestCase(t, ctx, adminActiontestCase{
 					command:    fmt.Sprintf("create %v", resourceYamlPath),
 					cliCommand: &tctl.ResourceCommand{},
@@ -271,7 +269,7 @@ func testAdminActionMFA_ResourceCommands(t *testing.T, s *adminActionTestSuite) 
 				})
 			})
 
-			t.Run(fmt.Sprintf("create -f %v.yaml", resourceKind), func(t *testing.T) {
+			t.Run(fmt.Sprintf("create -f %v.yaml", rc.resource.GetKind()), func(t *testing.T) {
 				s.runTestCase(t, ctx, adminActiontestCase{
 					command:    fmt.Sprintf("create -f %v", resourceYamlPath),
 					cliCommand: &tctl.ResourceCommand{},
@@ -280,7 +278,7 @@ func testAdminActionMFA_ResourceCommands(t *testing.T, s *adminActionTestSuite) 
 				})
 			})
 
-			rmCommand := fmt.Sprintf("rm %v/%v", resourceKind, resourceName)
+			rmCommand := fmt.Sprintf("rm %v/%v", rc.resource.GetKind(), rc.resource.GetName())
 			t.Run(rmCommand, func(t *testing.T) {
 				s.runTestCase(t, ctx, adminActiontestCase{
 					command:    rmCommand,
@@ -291,7 +289,7 @@ func testAdminActionMFA_ResourceCommands(t *testing.T, s *adminActionTestSuite) 
 			})
 
 			if !rc.editDisabled {
-				editCommand := fmt.Sprintf("edit %v/%v", resourceKind, resourceName)
+				editCommand := fmt.Sprintf("edit %v/%v", rc.resource.GetKind(), rc.resource.GetName())
 				t.Run(editCommand, func(t *testing.T) {
 					s.runTestCase(t, ctx, adminActiontestCase{
 						command: editCommand,
