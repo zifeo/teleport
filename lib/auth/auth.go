@@ -69,7 +69,6 @@ import (
 	"github.com/gravitational/teleport/api/internalutils/stream"
 	"github.com/gravitational/teleport/api/metadata"
 	"github.com/gravitational/teleport/api/types"
-	"github.com/gravitational/teleport/api/types/accesslist"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/types/wrappers"
 	apiutils "github.com/gravitational/teleport/api/utils"
@@ -4426,18 +4425,6 @@ func (a *Server) generateAccessRequestPromotions(ctx context.Context, req types.
 		log.WithError(err).Warn("Failed to generate access list promotions.")
 	}
 	return reqCopy, promotions
-}
-
-// GetSuggestedAccessLists returns suggested access lists for an access request.
-// The caller is expected to deal with the possibility of a nil promotions object.
-func (a *Server) GetSuggestedAccessLists(ctx context.Context, requestID string) ([]*accesslist.AccessList, error) {
-	// TODO: is this the best way to get identity
-	identity := &tlsca.Identity{Username: authz.ClientUsername(ctx)}
-	suggestions, err := modules.GetModules().GetSuggestedAccessLists(ctx, identity, a, a.Services, requestID)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return suggestions, nil
 }
 
 // updateAccessRequestWithAdditionalReviewers will update the given access request with additional reviewers given the promotions

@@ -282,6 +282,27 @@ func (c *Client) DeleteAccessListReview(ctx context.Context, accessListName, rev
 	return trace.Wrap(err)
 }
 
+// GetSuggestedAccessLists will return potential access list promotions for an access request. On error, this function will log
+// the error and return whatever it has. The caller is expected to deal with the possibility of a nil promotions object.
+func (c *Client) GetSuggestedAccessLists(ctx context.Context, requestID string) ([]*accesslistv1.AccessList, error) {
+	resp, err := c.grpcClient.GetSuggestedAccessLists(ctx, &accesslistv1.GetSuggestedAccessListsRequest{
+		AccessRequestId: requestID,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	//accessLists := make([]*accesslistv1.AccessList, len(resp.AccessLists))
+	//for i, accessList := range resp.AccessLists {
+	//	var err error
+	//	accessLists[i], err = accesslistconv.FromProto(accessList)
+	//	if err != nil {
+	//		return nil, trace.Wrap(err)
+	//	}
+	//}
+	return resp.AccessLists, nil
+}
+
 // DeleteAllAccessListReviews will delete all access list reviews from an access list.
 func (c *Client) DeleteAllAccessListReviews(ctx context.Context, accessListName string) error {
 	return trace.NotImplemented("DeleteAllAccessListReviews is not supported in the gRPC client")

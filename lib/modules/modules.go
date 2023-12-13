@@ -263,7 +263,7 @@ type Modules interface {
 	AttestHardwareKey(context.Context, interface{}, keys.PrivateKeyPolicy, *keys.AttestationStatement, crypto.PublicKey, time.Duration) (keys.PrivateKeyPolicy, error)
 	// GenerateAccessRequestPromotions generates a list of valid promotions for given access request.
 	GenerateAccessRequestPromotions(context.Context, AccessResourcesGetter, types.AccessRequest) (*types.AccessRequestAllowedPromotions, error)
-	// GenerateAccessRequestPromotions generates a list of valid promotions for given access request.
+	// GetSuggestedAccessLists generates a list of valid promotions for given access request.
 	GetSuggestedAccessLists(ctx context.Context, identity *tlsca.Identity, clt AccessListSuggestionClient,
 		accessListGetter AccessListGetter, requestID string,
 	) ([]*accesslist.AccessList, error)
