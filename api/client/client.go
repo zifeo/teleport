@@ -74,6 +74,8 @@ import (
 	"github.com/gravitational/teleport/api/mfa"
 	"github.com/gravitational/teleport/api/observability/tracing"
 	"github.com/gravitational/teleport/api/types"
+	accesslisttype "github.com/gravitational/teleport/api/types/accesslist"
+	accesslistconv "github.com/gravitational/teleport/api/types/accesslist/convert/v1"
 	"github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/types/wrappers"
 	"github.com/gravitational/teleport/api/utils"
@@ -1216,6 +1218,27 @@ func (c *Client) GetAccessRequestAllowedPromotions(ctx context.Context, req type
 		return nil, trace.Wrap(err)
 	}
 	return resp.AllowedPromotions, nil
+}
+
+// generateAccessRequestPromotions will return potential access list promotions for an access request. On error, this function will log
+// the error and return whatever it has. The caller is expected to deal with the possibility of a nil promotions object.
+func (c *Client) GetSuggestedAccessLists(ctx context.Context, requestID string) ([]*accesslisttype.AccessList, error) {
+	resp, err := c.grpc.GetSuggestedAccessLists(ctx, &proto.GetSuggestedAccessListsRequest{
+		AccessRequestID: requestID,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	accessLists := make([]*accesslisttype.AccessList, len(resp.AccessLists))
+	for i, accessList := range resp.AccessLists {
+		var err error
+		accessLists[i], err = accesslistconv.FromProto(accessList)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+	return accessLists, nil
 }
 
 // SetAccessRequestState updates the state of an existing access request.

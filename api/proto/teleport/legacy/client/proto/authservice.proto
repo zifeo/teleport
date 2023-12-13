@@ -19,6 +19,7 @@ package proto;
 import "gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "teleport/accesslist/v1/accesslist.proto";
 import "teleport/attestation/v1/attestation.proto";
 import "teleport/legacy/client/proto/certs.proto";
 import "teleport/legacy/client/proto/event.proto";
@@ -2523,6 +2524,18 @@ message AccessRequestAllowedPromotionResponse {
   types.AccessRequestAllowedPromotions allowedPromotions = 1;
 }
 
+// GetSuggestedAccessListsRequest is the request for suggested access lists for an access request.
+message GetSuggestedAccessListsRequest {
+  // RequestID is the unique ID of the request to be promoted.
+  string accessRequestID = 1;
+}
+
+// GetSuggestedAccessListsResponse is the response for suggested access lists for an access request.
+message GetSuggestedAccessListsResponse {
+  // access_lists is the list of suggested lists.
+  repeated teleport.accesslist.v1.AccessList accessLists = 1 [(gogoproto.jsontag) = "access_lists"];
+}
+
 // AuthService is authentication/authorization service implementation
 service AuthService {
   // InventoryControlStream is the per-instance stream used to advertise teleport instance
@@ -2627,6 +2640,8 @@ service AuthService {
 
   // GetAccessRequestAllowedPromotions returns a list of allowed promotions from an access request to an access list.
   rpc GetAccessRequestAllowedPromotions(AccessRequestAllowedPromotionRequest) returns (AccessRequestAllowedPromotionResponse);
+  // GetSuggestedAccessLists returns suggested access lists for an access request.
+  rpc GetSuggestedAccessLists(GetSuggestedAccessListsRequest) returns (GetSuggestedAccessListsResponse);
 
   // GetPluginData gets all plugin data matching the supplied filter.
   rpc GetPluginData(types.PluginDataFilter) returns (PluginDataSeq);

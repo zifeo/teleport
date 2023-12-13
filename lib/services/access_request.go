@@ -35,6 +35,7 @@ import (
 	"github.com/gravitational/teleport/api/client"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
+	"github.com/gravitational/teleport/api/types/accesslist"
 	apiutils "github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/tlsca"
@@ -184,6 +185,8 @@ type DynamicAccess interface {
 	SubmitAccessReview(ctx context.Context, params types.AccessReviewSubmission) (types.AccessRequest, error)
 	// GetAccessRequestAllowedPromotions returns suggested access lists for the given access request.
 	GetAccessRequestAllowedPromotions(ctx context.Context, req types.AccessRequest) (*types.AccessRequestAllowedPromotions, error)
+	// GetSuggestedAccessLists returns suggested access lists for an access request.
+	GetSuggestedAccessLists(ctx context.Context, requestID string) ([]*accesslist.AccessList, error)
 }
 
 // DynamicAccessOracle is a service capable of answering questions related
