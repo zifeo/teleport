@@ -16,7 +16,7 @@ BPF_MESSAGE := without-BPF-support
 with_bpf := no
 ifeq ("$(OS)","linux")
 # True if $ARCH == amd64 || $ARCH == arm64
-ifneq (,$(filter "$(ARCH)","amd64" "arm64"))
+ifneq (,$(filter "$(ARCH)","amd64")) # disable BPF for now on arm64
 # We only support BPF in native builds
 ifeq ($(IS_NATIVE_BUILD),"yes")
 ifneq ("$(wildcard /usr/libbpf-${LIBBPF_VER}/include/bpf/bpf.h)","")
