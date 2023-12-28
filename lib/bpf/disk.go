@@ -24,12 +24,12 @@ package bpf
 import (
 	_ "embed"
 	"errors"
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/ringbuf"
 	"io"
 	"runtime"
 
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gravitational/trace"
 	"github.com/prometheus/client_golang/prometheus"
 

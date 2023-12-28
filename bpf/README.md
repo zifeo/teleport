@@ -6,7 +6,7 @@ This document will help you get started.
 #### Before you start here are some useful links:
 
 * https://docs.kernel.org/bpf/ - BPF documentation
-* https://github.com/aquasecurity/libbpfgo - Go bindings for libbpf
+* https://github.com/cilium/ebpf - Go library to interact with BPF
 * https://github.com/iovisor/bcc - BPF Compiler Collection (a lot of examples)
 * https://github.com/cilium/cilium - BPF-based networking, security, and observability (more examples)
 * https://man7.org/linux/man-pages/man7/bpf-helpers.7.html - BPF helpers documentation

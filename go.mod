@@ -35,7 +35,6 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0 // replaced
 	github.com/alicebob/miniredis/v2 v2.31.1
 	github.com/andybalholm/brotli v1.1.0
-	github.com/aquasecurity/libbpfgo v0.5.1-libbpf-1.2
 	github.com/armon/go-radix v1.0.0
 	github.com/aws/aws-sdk-go v1.49.21
 	github.com/aws/aws-sdk-go-v2 v1.24.1
