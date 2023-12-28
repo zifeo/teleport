@@ -17,7 +17,7 @@ We support BPFs only on ARM64 and x86_64 architectures.
 
 1. VM with Ubuntu 20.04+ (or any other Linux distro with the kernel 5.8+ - Docker doesn't work for many BPF features)
 2. Install `clang` (required for compiling BPF code) - `apt install clang` should be enough
-3. Install `libbpf` (required for loading BPF code) - get the required version from our Docker file
+3. Install `ebpf` (required for loading BPF code) - get the required version from our Docker file
 
 You can also use our Dockerfile to build the environment:
 
