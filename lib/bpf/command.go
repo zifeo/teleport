@@ -157,34 +157,6 @@ func startExec(bufferSize int) (*exec, error) {
 		toClose = append(toClose, tp)
 	}
 
-	//kpExecve, err := link.Tracepoint("syscalls", "sys_enter_execve", objs.TracepointSyscallsSysEnterExecve, nil)
-	//if err != nil {
-	//	return nil, trace.Wrap(err)
-	//}
-	//
-	//toClose = append(toClose, kpExecve)
-	//
-	//kpExecveExit, err := link.Tracepoint("syscalls", "sys_exit_execve", objs.TracepointSyscallsSysExitExecve, nil)
-	//if err != nil {
-	//	return nil, trace.Wrap(err)
-	//}
-	//
-	//toClose = append(toClose, kpExecveExit)
-	//
-	//kpExecveat, err := link.Tracepoint("syscalls", "sys_enter_execveat", objs.TracepointSyscallsSysEnterExecveat, nil)
-	//if err != nil {
-	//	return nil, trace.Wrap(err)
-	//}
-	//
-	//toClose = append(toClose, kpExecveat)
-	//
-	//kpExecveatExit, err := link.Tracepoint("syscalls", "sys_exit_execveat", objs.TracepointSyscallsSysExitExecveat, nil)
-	//if err != nil {
-	//	return nil, trace.Wrap(err)
-	//}
-	//
-	//toClose = append(toClose, kpExecveatExit)
-
 	eventBuf, err := ringbuf.NewReader(objs.ExecveEvents)
 	if err != nil {
 		return nil, trace.Wrap(err)
