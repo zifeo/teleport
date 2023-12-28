@@ -107,7 +107,7 @@ type conn struct {
 	event6Chan chan []byte
 	toClose    []interface{ Close() error }
 
-	lost *Counter
+	//lost *Counter
 }
 
 func startConn(bufferSize int) (*conn, error) {
@@ -216,7 +216,7 @@ func (c *conn) endSession(cgroupID uint64) error {
 // close will stop reading events off the ring buffer and unload the BPF
 // program. The ring buffer is closed as part of the module being closed.
 func (c *conn) close() {
-	c.lost.Close()
+	//c.lost.Close()
 
 	for _, link := range c.toClose {
 		if err := link.Close(); err != nil {

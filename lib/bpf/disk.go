@@ -84,7 +84,7 @@ type open struct {
 
 	eventBuf chan []byte
 	toClose  []io.Closer
-	lost     *Counter
+	//lost     *Counter
 }
 
 // startOpen will compile, load, start, and pull events off the perf buffer

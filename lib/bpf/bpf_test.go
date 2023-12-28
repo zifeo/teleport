@@ -37,10 +37,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/aquasecurity/libbpfgo"
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
@@ -474,20 +472,20 @@ func TestRootBPFCounter(t *testing.T) {
 		t.Skip(fmt.Sprintf("Tests for package bpf can not be run: %v.", err))
 	}
 
-	module, err := libbpfgo.NewModuleFromBuffer(counterTestBPF, "counter_test")
-	require.NoError(t, err)
-
-	// Load into the kernel
-	err = module.BPFLoadObject()
-	require.NoError(t, err)
-
-	err = AttachSyscallTracepoint(module, "close")
-	require.NoError(t, err)
-
-	promCounter := prometheus.NewCounter(prometheus.CounterOpts{Name: "test"})
-
-	counter, err := NewCounter(module, "test_counter", promCounter)
-	require.NoError(t, err)
+	//module, err := libbpfgo.NewModuleFromBuffer(counterTestBPF, "counter_test")
+	//require.NoError(t, err)
+	//
+	//// Load into the kernel
+	//err = module.BPFLoadObject()
+	//require.NoError(t, err)
+	//
+	//err = AttachSyscallTracepoint(module, "close")
+	//require.NoError(t, err)
+	//
+	//promCounter := prometheus.NewCounter(prometheus.CounterOpts{Name: "test"})
+	//
+	//counter, err := NewCounter(module, "test_counter", promCounter)
+	//require.NoError(t, err)
 
 	// Make sure the counter starts with 0
 	require.Zero(t, testutil.ToFloat64(promCounter))
