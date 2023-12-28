@@ -338,7 +338,7 @@ $(RS_BPF_BUILDDIR)/%.bpf.o: bpf/restrictedsession/%.bpf.c $(wildcard bpf/*.h) | 
 bpf-rs-bytecode: $(RS_BPF_BUILDDIR)/restricted.bpf.o
 
 .PHONY: bpf-er-bytecode
-bpf-er-bytecode: $(ER_BPF_BUILDDIR)/command.bpf.o $(ER_BPF_BUILDDIR)/disk.bpf.o $(ER_BPF_BUILDDIR)/network.bpf.o $(ER_BPF_BUILDDIR)/counter_test.bpf.o
+bpf-er-bytecode: $(ER_BPF_BUILDDIR)/disk.bpf.o $(ER_BPF_BUILDDIR)/network.bpf.o $(ER_BPF_BUILDDIR)/counter_test.bpf.o
 
 .PHONY: bpf-bytecode
 bpf-bytecode: bpf-er-bytecode bpf-rs-bytecode

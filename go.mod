@@ -219,6 +219,8 @@ require (
 	github.com/mailgun/minheap v0.0.0-20170619185613-3dbe6c6bf55f // indirect
 )
 
+require github.com/cilium/ebpf v0.12.3
+
 require (
 	cloud.google.com/go v0.111.0 // indirect
 	cloud.google.com/go/longrunning v0.5.4 // indirect
