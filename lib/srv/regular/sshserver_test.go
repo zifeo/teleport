@@ -2336,7 +2336,6 @@ func TestParseSubsystemRequest(t *testing.T) {
 			SetNamespace(apidefaults.Namespace),
 			SetPAMConfig(&servicecfg.PAMConfig{Enabled: false}),
 			SetBPF(&bpf.NOP{}),
-			SetRestrictedSessionManager(&restricted.NOP{}),
 			SetClock(f.clock),
 			SetLockWatcher(lockWatcher),
 			SetNodeWatcher(nodeWatcher),
