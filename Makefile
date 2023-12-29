@@ -320,24 +320,22 @@ $(BUILDDIR)/tbot:
 
 # Enable target only if /usr/include/linux/bpf.h exists and clang is installed.
 # This is a requirement for building BPF bytecode.
-ifneq ("$(wildcard /usr/include/linux/bpf.h)","")
-ifneq ("$(wildcard /usr/include/bpf/bpf_helpers.h)","")
-ifneq ("$(shell which clang --version 2>/dev/null)","")
+
 
 .PHONY: bpf-bytecode
 bpf-bytecode:
+ifneq ("$(wildcard /usr/include/linux/bpf.h)","")
+ifneq ("$(wildcard /usr/include/bpf/bpf_helpers.h)","")
+ifneq ("$(shell which clang --version 2>/dev/null)","")
 	go generate ./lib/bpf/bpf.go
+
+endif # clang installed
 
 # Generate vmlinux.h based on the installed kernel
 .PHONY: update-vmlinux-h
 update-vmlinux-h:
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c >bpf/vmlinux.h
 
-else
-$(info BPF support is disabled)
-.PHONY: bpf-bytecode
-bpf-bytecode:
-endif # clang installed
 endif # /usr/include/bpf/bpf_helpers.h exists
 endif # /usr/include/linux/bpf.h exists
 
