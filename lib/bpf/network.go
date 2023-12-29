@@ -23,6 +23,7 @@ package bpf
 
 import (
 	_ "embed"
+	"sync"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -100,12 +101,14 @@ type rawConn6Event struct {
 }
 
 type conn struct {
-	//session
 	objs *networkObjects
 
 	event4Chan chan []byte
 	event6Chan chan []byte
 	toClose    []interface{ Close() error }
+
+	closed bool
+	mtx    sync.Mutex
 
 	//lost *Counter
 }
@@ -179,15 +182,7 @@ func startConn(bufferSize int) (*conn, error) {
 	}
 
 	bpfEvents := make(chan []byte, 100)
-	go func() {
-		for {
-			event, err := eventBuf.Read()
-			if err != nil {
-				return
-			}
-			bpfEvents <- event.RawSample
-		}
-	}()
+	go sendEvents(bpfEvents, eventBuf)
 
 	return &conn{
 		objs:       &objs,
@@ -198,6 +193,13 @@ func startConn(bufferSize int) (*conn, error) {
 }
 
 func (c *conn) startSession(cgroupID uint64) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	if c.closed {
+		return trace.BadParameter("connection is closed")
+	}
+
 	if err := c.objs.MonitoredCgroups.Put(cgroupID, int64(0)); err != nil {
 		return trace.Wrap(err)
 	}
@@ -206,6 +208,13 @@ func (c *conn) startSession(cgroupID uint64) error {
 }
 
 func (c *conn) endSession(cgroupID uint64) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	if c.closed {
+		return nil // Ignore. If the session is closed, the cgroup is no longer monitored.
+	}
+
 	if err := c.objs.MonitoredCgroups.Delete(&cgroupID); err != nil {
 		return trace.Wrap(err)
 	}
@@ -217,6 +226,14 @@ func (c *conn) endSession(cgroupID uint64) error {
 // program. The ring buffer is closed as part of the module being closed.
 func (c *conn) close() {
 	//c.lost.Close()
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	if c.closed {
+		return
+	}
+
+	c.closed = true
 
 	for _, link := range c.toClose {
 		if err := link.Close(); err != nil {

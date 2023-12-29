@@ -24,6 +24,7 @@ package bpf
 import (
 	_ "embed"
 	"errors"
+	"sync"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -82,10 +83,20 @@ type exec struct {
 	lost     *ebpf.Map
 	toClose  []interface{ Close() error }
 
+	closed bool
+	mtx    sync.Mutex
+
 	bpfEvents chan []byte
 }
 
 func (e *exec) startSession(cgroupID uint64) error {
+	e.mtx.Lock()
+	defer e.mtx.Unlock()
+
+	if e.closed {
+		return trace.BadParameter("open session already closed")
+	}
+
 	if err := e.objs.MonitoredCgroups.Put(cgroupID, int64(0)); err != nil {
 		return trace.Wrap(err)
 	}
@@ -94,6 +105,13 @@ func (e *exec) startSession(cgroupID uint64) error {
 }
 
 func (e *exec) endSession(cgroupID uint64) error {
+	e.mtx.Lock()
+	defer e.mtx.Unlock()
+
+	if e.closed {
+		return nil // Ignore. If the session is closed, the cgroup is no longer monitored.
+	}
+
 	if err := e.objs.MonitoredCgroups.Delete(&cgroupID); err != nil {
 		return trace.Wrap(err)
 	}
@@ -163,21 +181,7 @@ func startExec(bufferSize int) (*exec, error) {
 	}
 
 	bpfEvents := make(chan []byte, 100)
-	go func() {
-		for {
-			rec, err := eventBuf.Read()
-			if err != nil {
-				if errors.Is(err, ringbuf.ErrClosed) {
-					log.Debug("Received signal, exiting..")
-					return
-				}
-				log.Errorf("Error reading from ring buffer: %v", err)
-				return
-			}
-
-			bpfEvents <- rec.RawSample[:]
-		}
-	}()
+	go sendEvents(bpfEvents, eventBuf)
 
 	return &exec{
 		objs:      objs,
@@ -188,9 +192,34 @@ func startExec(bufferSize int) (*exec, error) {
 	}, nil
 }
 
+func sendEvents(bpfEvents chan []byte, eventBuf *ringbuf.Reader) {
+	for {
+		rec, err := eventBuf.Read()
+		if err != nil {
+			if errors.Is(err, ringbuf.ErrClosed) {
+				log.Debug("Received signal, exiting..")
+				return
+			}
+			log.Errorf("Error reading from ring buffer: %v", err)
+			return
+		}
+
+		bpfEvents <- rec.RawSample[:]
+	}
+}
+
 // close will stop reading events off the ring buffer and unload the BPF
 // program. The ring buffer is closed as part of the module being closed.
 func (e *exec) close() {
+	e.mtx.Lock()
+	defer e.mtx.Unlock()
+
+	if e.closed {
+		return
+	}
+
+	e.closed = true
+
 	for _, link := range e.toClose {
 		if err := link.Close(); err != nil {
 			log.Warn(err)

@@ -23,9 +23,9 @@ package bpf
 
 import (
 	_ "embed"
-	"errors"
 	"io"
 	"runtime"
+	"sync"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -78,12 +78,14 @@ type cgroupRegister interface {
 }
 
 type open struct {
-	//session
-
 	objs diskObjects
 
 	eventBuf chan []byte
 	toClose  []io.Closer
+
+	closed bool
+	mtx    sync.Mutex
+
 	//lost     *Counter
 }
 
@@ -113,8 +115,8 @@ func startOpen(bufferSize int) (*open, error) {
 			prog: objs.TracepointSyscallsSysEnterOpen,
 		},
 		{
-			name: "sys_enter_openat",
-			prog: objs.TracepointSyscallsSysEnterOpenat,
+			name: "sys_enter_openat2",
+			prog: objs.TracepointSyscallsSysEnterOpenat2,
 		},
 		{
 			name: "sys_exit_creat",
@@ -125,24 +127,24 @@ func startOpen(bufferSize int) (*open, error) {
 			prog: objs.TracepointSyscallsSysExitOpen,
 		},
 		{
-			name: "sys_exit_openat",
-			prog: objs.TracepointSyscallsSysExitOpenat,
+			name: "sys_exit_openat2",
+			prog: objs.TracepointSyscallsSysExitOpenat2,
 		},
 	}
 
 	if runtime.GOARCH != "arm64" {
-		// creat is not implemented on arm64.
+		// openat is not implemented on arm64.
 		trs = append(trs, []struct {
 			name string
 			prog *ebpf.Program
 		}{
 			{
-				name: "sys_enter_openat2",
-				prog: objs.TracepointSyscallsSysEnterOpenat2,
+				name: "sys_enter_openat",
+				prog: objs.TracepointSyscallsSysEnterOpenat,
 			},
 			{
-				name: "sys_exit_openat2",
-				prog: objs.TracepointSyscallsSysExitOpenat2,
+				name: "sys_exit_openat",
+				prog: objs.TracepointSyscallsSysExitOpenat,
 			},
 		}...)
 	}
@@ -163,20 +165,7 @@ func startOpen(bufferSize int) (*open, error) {
 	}
 
 	bpfEvents := make(chan []byte, 100)
-	go func() {
-		for {
-			rec, err := eventBuf.Read()
-			if err != nil {
-				if errors.Is(err, ringbuf.ErrClosed) {
-					log.Debug("Received signal, exiting..")
-					return
-				}
-				panic(err)
-			}
-
-			bpfEvents <- rec.RawSample[:]
-		}
-	}()
+	go sendEvents(bpfEvents, eventBuf)
 
 	return &open{
 		objs:     objs,
@@ -185,6 +174,13 @@ func startOpen(bufferSize int) (*open, error) {
 }
 
 func (o *open) startSession(cgroupID uint64) error {
+	o.mtx.Lock()
+	defer o.mtx.Unlock()
+
+	if o.closed {
+		return trace.BadParameter("open session already closed")
+	}
+
 	if err := o.objs.MonitoredCgroups.Put(cgroupID, int64(0)); err != nil {
 		return trace.Wrap(err)
 	}
@@ -193,6 +189,13 @@ func (o *open) startSession(cgroupID uint64) error {
 }
 
 func (o *open) endSession(cgroupID uint64) error {
+	o.mtx.Lock()
+	defer o.mtx.Unlock()
+
+	if o.closed {
+		return nil // Ignore. If the session is closed, the cgroup is no longer monitored.
+	}
+
 	if err := o.objs.MonitoredCgroups.Delete(&cgroupID); err != nil {
 		return trace.Wrap(err)
 	}
@@ -203,6 +206,15 @@ func (o *open) endSession(cgroupID uint64) error {
 // close will stop reading events off the ring buffer and unload the BPF
 // program. The ring buffer is closed as part of the module being closed.
 func (o *open) close() {
+	o.mtx.Lock()
+	defer o.mtx.Unlock()
+
+	if o.closed {
+		return
+	}
+
+	o.closed = true
+
 	for _, toClose := range o.toClose {
 		if err := toClose.Close(); err != nil {
 			log.Warn(err)
