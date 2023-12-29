@@ -171,7 +171,8 @@ func startExec(bufferSize int) (*exec, error) {
 					log.Debug("Received signal, exiting..")
 					return
 				}
-				panic(err)
+				log.Errorf("Error reading from ring buffer: %v", err)
+				return
 			}
 
 			bpfEvents <- rec.RawSample[:]

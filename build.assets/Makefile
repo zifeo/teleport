@@ -274,6 +274,18 @@ fix-imports: buildbox
 		$(DOCKERFLAGS) -t $(BUILDBOX) \
 		make -C /go/src/github.com/gravitational/teleport fix-imports/host
 
+# Generate BPF bytecode in a container, so local setup is not required.
+.PHONY: bpf-bytecode
+bpf-bytecode:
+	docker build \
+  		--build-arg UID=$(UID) \
+        --build-arg GID=$(GID) \
+        --build-arg BUILDARCH=$(RUNTIME_ARCH) \
+        --build-arg GOLANG_VERSION=$(GOLANG_VERSION) \
+        -f Dockerfile-bpf -t bpf-builder .
+	docker run --rm -v "$$(pwd)/../":/teleport -w /teleport bpf-builder \
+		make bpf-bytecode
+
 #
 # Removes the docker image
 #

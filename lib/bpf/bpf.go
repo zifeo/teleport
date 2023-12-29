@@ -26,7 +26,6 @@ import "C"
 import (
 	"bytes"
 	"context"
-	"embed"
 	"encoding/binary"
 	"net"
 	"strconv"
@@ -44,12 +43,13 @@ import (
 	"github.com/gravitational/teleport/lib/service/servicecfg"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cflags "-D__TARGET_ARCH_x86 -I/usr/include/  -idirafter /usr/lib/llvm-16/lib/clang/16/include -idirafter /usr/local/include -idirafter /usr/include/x86_64-linux-gnu -idirafter /usr/include"  -tags bpf command ../../bpf/enhancedrecording/command.bpf.c
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cflags "-D__TARGET_ARCH_x86 -I/usr/include/  -idirafter /usr/lib/llvm-16/lib/clang/16/include -idirafter /usr/local/include -idirafter /usr/include/x86_64-linux-gnu -idirafter /usr/include" -tags bpf -no-global-types disk ../../bpf/enhancedrecording/disk.bpf.c
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cflags "-D__TARGET_ARCH_x86 -I/usr/include/  -idirafter /usr/lib/llvm-16/lib/clang/16/include -idirafter /usr/local/include -idirafter /usr/include/x86_64-linux-gnu -idirafter /usr/include" -tags bpf network ../../bpf/enhancedrecording/network.bpf.c
-
-//go:embed bytecode
-var embedFS embed.FS
+// Multi-arch setup, as mentioned in https://github.com/cilium/ebpf/issues/305
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -cflags "-D__TARGET_ARCH_x86" -tags bpf command ../../bpf/enhancedrecording/command.bpf.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -cflags "-D__TARGET_ARCH_x86" -tags bpf -no-global-types disk ../../bpf/enhancedrecording/disk.bpf.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -cflags "-D__TARGET_ARCH_x86" -tags bpf network ../../bpf/enhancedrecording/network.bpf.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target arm64 -cflags "-D__TARGET_ARCH_arm64" -tags bpf command ../../bpf/enhancedrecording/command.bpf.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target arm64 -cflags "-D__TARGET_ARCH_arm64" -tags bpf -no-global-types disk ../../bpf/enhancedrecording/disk.bpf.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target arm64 -cflags "-D__TARGET_ARCH_arm64" -tags bpf network ../../bpf/enhancedrecording/network.bpf.c
 
 // ArgsCacheSize is the number of args events to store before dropping args
 // events.

@@ -32,14 +32,12 @@ import (
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gravitational/teleport/api/constants"
@@ -355,7 +353,6 @@ func TestRootScript(t *testing.T) {
 // TestRootPrograms tests execsnoop, opensnoop, and tcpconnect to make sure they
 // run and receive events.
 func TestRootPrograms(t *testing.T) {
-	t.Skip("flaky test, disable now")
 	// This test must be run as root. Only root can create cgroups.
 	if !bpfTestEnabled() {
 		t.Skip("BPF testing is disabled")
