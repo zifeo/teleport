@@ -321,6 +321,7 @@ $(BUILDDIR)/tbot:
 # Enable target only if /usr/include/linux/bpf.h exists and clang is installed.
 # This is a requirement for building BPF bytecode.
 ifneq ("$(wildcard /usr/include/linux/bpf.h)","")
+ifneq ("$(wildcard /usr/include/bpf/bpf_helpers.h)","")
 ifneq ("$(shell which clang --version 2>/dev/null)","")
 
 .PHONY: bpf-bytecode
@@ -337,6 +338,7 @@ $(info BPF support is disabled)
 .PHONY: bpf-bytecode
 bpf-bytecode:
 endif # clang installed
+endif # /usr/include/bpf/bpf_helpers.h exists
 endif # /usr/include/linux/bpf.h exists
 
 ifeq ("$(with_rdpclient)", "yes")
