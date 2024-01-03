@@ -54,8 +54,6 @@ type conn struct {
 
 	closed bool
 	mtx    sync.Mutex
-
-	//lost *Counter
 }
 
 func startConn(bufferSize int) (*conn, error) {

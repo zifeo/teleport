@@ -60,8 +60,6 @@ type open struct {
 
 	closed bool
 	mtx    sync.Mutex
-
-	//lost     *Counter
 }
 
 // startOpen will compile, load, start, and pull events off the perf buffer

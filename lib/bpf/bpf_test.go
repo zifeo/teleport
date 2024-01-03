@@ -621,7 +621,6 @@ func runCmd(t *testing.T, reexecCmd string, arg string, traceCgroup cgroupRegist
 
 	cmd.ExtraFiles = append(cmd.ExtraFiles, readP)
 
-	log.Debug("Running command", "cmd", cmd)
 	// Start the re-exec
 	err = cmd.Start()
 	require.NoError(t, err)
@@ -633,25 +632,16 @@ func runCmd(t *testing.T, reexecCmd string, arg string, traceCgroup cgroupRegist
 	err = traceCgroup.startSession(cgroupID)
 	require.NoError(t, err)
 
-	log.Debugf("unlocking pid %d", cmd.Process.Pid)
-
 	// Send one byte to continue the subprocess execution.
 	_, err = writeP.Write([]byte{1})
 	require.NoError(t, err)
-
-	log.Debugf("waiting pid %d", cmd.Process.Pid)
-
 	// Wait for the command to exit. Otherwise, we cannot clean up the cgroup.
 	cmdReturnAssertion(t, cmd.Wait())
-
-	log.Debugf("stopping pid %d", cmd.Process.Pid)
 
 	// Remove the registered cgroup from the BPF module. Do not call it after
 	// BPF module is deregistered.
 	err = traceCgroup.endSession(cgroupID)
 	require.NoError(t, err)
-
-	log.Debugf("ended session pid %d", cmd.Process.Pid)
 }
 
 // executeHTTP will perform an HTTP GET to some endpoint in a loop.
