@@ -39,7 +39,7 @@ use ironrdp_session::SessionErrorKind::Reason;
 use ironrdp_session::{reason_err, SessionError, SessionResult};
 use ironrdp_svc::{StaticVirtualChannelProcessor, SvcMessage, SvcProcessorMessages};
 use ironrdp_tokio::{Framed, TokioStream};
-use log::debug;
+use log::{debug, warn};
 use rand::{Rng, SeedableRng};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Error as IoError;
@@ -167,6 +167,17 @@ impl Client {
         .await?;
 
         debug!("connection_result: {:?}", connection_result);
+        if params.screen_height != connection_result.desktop_size.height
+            || params.screen_width != connection_result.desktop_size.width
+        {
+            warn!(
+                "server negotiated a different resolution ({}x{}) than requested ({}x{})",
+                connection_result.desktop_size.width,
+                connection_result.desktop_size.height,
+                params.screen_width,
+                params.screen_height
+            );
+        }
 
         // Register the RDP channels with the browser client.
         unsafe {

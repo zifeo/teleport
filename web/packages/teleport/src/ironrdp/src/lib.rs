@@ -161,7 +161,7 @@ impl FastPathProcessor {
                 pointer_software_rendering: false,
             }
             .build(),
-            image: DecodedImage::new(PixelFormat::RgbA32, width, height),
+            image: DecodedImage::new(PixelFormat::RgbA32, 1024, 768),
         }
     }
 
