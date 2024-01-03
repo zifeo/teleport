@@ -456,70 +456,6 @@ func TestRootPrograms(t *testing.T) {
 	}
 }
 
-// TestRootBPFCounter tests that BPF-to-Prometheus counter works ok
-func TestRootBPFCounter(t *testing.T) {
-	t.Skip("flaky test, disable now")
-	// This test must be run as root. Only root can create cgroups.
-	if !bpfTestEnabled() {
-		t.Skip("BPF testing is disabled")
-	}
-	if !isRoot() {
-		t.Skip("Tests for package bpf can only be run as root.")
-	}
-
-	//counterTestBPF, err := embedFS.ReadFile("bytecode/counter_test.bpf.o")
-	//if err != nil {
-	//	t.Skip(fmt.Sprintf("Tests for package bpf can not be run: %v.", err))
-	//}
-
-	//module, err := libbpfgo.NewModuleFromBuffer(counterTestBPF, "counter_test")
-	//require.NoError(t, err)
-	//
-	//// Load into the kernel
-	//err = module.BPFLoadObject()
-	//require.NoError(t, err)
-	//
-	//err = AttachSyscallTracepoint(module, "close")
-	//require.NoError(t, err)
-	//
-	//promCounter := prometheus.NewCounter(prometheus.CounterOpts{Name: "test"})
-	//
-	//counter, err := NewCounter(module, "test_counter", promCounter)
-	//require.NoError(t, err)
-
-	// Make sure the counter starts with 0
-	//require.Zero(t, testutil.ToFloat64(promCounter))
-	//
-	//// close(1234) will cause the counter to get incremented.
-	//magicFD := 1234
-	//
-	//// First do it a few times as to no overflow the doorbell buffer
-	//gentleBumps := 10
-	//for i := 0; i < gentleBumps; i++ {
-	//	syscall.Close(magicFD)
-	//}
-	//
-	//// Not ideal but no other good way to know that the counter was updated
-	//time.Sleep(time.Second)
-	//
-	//// Make sure all are accounted for
-	//require.Equal(t, float64(gentleBumps), testutil.ToFloat64(promCounter))
-	//
-	//// Next, pound the counter to hopefully overflow the doorbell.
-	//poundingBumps := 100000
-	//for i := 0; i < poundingBumps; i++ {
-	//	syscall.Close(magicFD)
-	//}
-	//
-	//// Not ideal but no other good way to know that the counter was updated
-	//time.Sleep(time.Second)
-	//
-	//// Make sure all are accounted for
-	//require.Equal(t, float64(gentleBumps+poundingBumps), testutil.ToFloat64(promCounter))
-	//
-	//counter.Close()
-}
-
 // TestRootLargeCommands given commands with higher amount of characters
 // (length), ensure the command events are generated correctly.
 func TestRootLargeCommands(t *testing.T) {
@@ -684,6 +620,7 @@ func runCmd(t *testing.T, reexecCmd string, arg string, traceCgroup cgroupRegist
 
 	cmd.ExtraFiles = append(cmd.ExtraFiles, readP)
 
+	log.Debug("Running command", "cmd", cmd)
 	// Start the re-exec
 	err = cmd.Start()
 	require.NoError(t, err)
@@ -695,17 +632,25 @@ func runCmd(t *testing.T, reexecCmd string, arg string, traceCgroup cgroupRegist
 	err = traceCgroup.startSession(cgroupID)
 	require.NoError(t, err)
 
+	log.Debugf("unlocking pid %d", cmd.Process.Pid)
+
 	// Send one byte to continue the subprocess execution.
 	_, err = writeP.Write([]byte{1})
 	require.NoError(t, err)
 
+	log.Debugf("waiting pid %d", cmd.Process.Pid)
+
 	// Wait for the command to exit. Otherwise, we cannot clean up the cgroup.
 	cmdReturnAssertion(t, cmd.Wait())
+
+	log.Debugf("stopping pid %d", cmd.Process.Pid)
 
 	// Remove the registered cgroup from the BPF module. Do not call it after
 	// BPF module is deregistered.
 	err = traceCgroup.endSession(cgroupID)
 	require.NoError(t, err)
+
+	log.Debugf("ended session pid %d", cmd.Process.Pid)
 }
 
 // executeHTTP will perform an HTTP GET to some endpoint in a loop.
