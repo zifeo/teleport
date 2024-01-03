@@ -46,6 +46,15 @@ BPF_COUNTER(lost);
 static int enter_open(const char *filename, int flags) {
     struct val_t val = {};
     u64 id = bpf_get_current_pid_tgid();
+    u64 cgroup = bpf_get_current_cgroup_id();
+    u64 *is_monitored;
+
+    // Check if the cgroup should be monitored.
+    is_monitored = bpf_map_lookup_elem(&monitored_cgroups, &cgroup);
+    if (is_monitored == NULL) {
+        // cgroup has not been marked for monitoring, ignore.
+        return 0;
+    }
 
     val.pid = id >> 32;
     val.fname = filename;
