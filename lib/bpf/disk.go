@@ -30,6 +30,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/cilium/ebpf/rlimit"
 	"github.com/gravitational/trace"
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -95,6 +96,11 @@ func startOpen(bufferSize int) (*open, error) {
 	err := metrics.RegisterPrometheusCollectors(lostDiskEvents)
 	if err != nil {
 		return nil, trace.Wrap(err)
+	}
+
+	// Remove resource limits for kernels <5.11.
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatal("Removing memlock:", err)
 	}
 
 	var objs diskObjects
@@ -170,6 +176,7 @@ func startOpen(bufferSize int) (*open, error) {
 	return &open{
 		objs:     objs,
 		eventBuf: bpfEvents,
+		toClose:  toClose,
 	}, nil
 }
 
