@@ -45,61 +45,6 @@ var (
 	)
 )
 
-const (
-	network4EventsBuffer = "ipv4_events"
-	network6EventsBuffer = "ipv6_events"
-)
-
-// rawConn4Event is sent by the eBPF program that Teleport pulls off the perf
-// buffer.
-type rawConn4Event struct {
-	// CgroupID is the internal cgroupv2 ID of the event.
-	CgroupID uint64
-
-	// Version is the version of TCP (4 or 6).
-	Version uint64
-
-	// PID is the process ID.
-	PID uint32
-
-	// SrcAddr is the source IP address.
-	SrcAddr uint32
-
-	// DstAddr is the destination IP address.
-	DstAddr uint32
-
-	// DstPort is the port the connection is being made to.
-	DstPort uint16
-
-	// Command is name of the executable making the connection.
-	Command [CommMax]byte
-}
-
-// rawConn6Event is sent by the eBPF program that Teleport pulls off the perf
-// buffer.
-type rawConn6Event struct {
-	// CgroupID is the internal cgroupv2 ID of the event.
-	CgroupID uint64
-
-	// Version is the version of TCP (4 or 6).
-	Version uint64
-
-	// PID is the process ID.
-	PID uint32
-
-	// SrcAddr is the source IP address.
-	SrcAddr [4]uint32
-
-	// DstAddr is the destination IP address.
-	DstAddr [4]uint32
-
-	// DstPort is the port the connection is being made to.
-	DstPort uint16
-
-	// Command is name of the executable making the connection.
-	Command [CommMax]byte
-}
-
 type conn struct {
 	objs *networkObjects
 

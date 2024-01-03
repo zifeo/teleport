@@ -274,7 +274,7 @@ func TestRootObfuscate(t *testing.T) {
 	for {
 		select {
 		case eventBytes := <-execsnoop.events():
-			var event rawExecEvent
+			var event commandDataT
 			err := unmarshalEvent(eventBytes, &event)
 			require.NoError(t, err)
 
@@ -335,7 +335,7 @@ func TestRootScript(t *testing.T) {
 	for {
 		select {
 		case eventBytes := <-execsnoop.events():
-			var event rawExecEvent
+			var event commandDataT
 			err := unmarshalEvent(eventBytes, &event)
 			require.NoError(t, err)
 
@@ -398,7 +398,7 @@ func TestRootPrograms(t *testing.T) {
 				executeCommand(t, "ls", execsnoop)
 			},
 			verifyFn: func(event []byte) bool {
-				var e rawExecEvent
+				var e commandDataT
 				err := unmarshalEvent(event, &e)
 				return err == nil && ConvertString(unsafe.Pointer(&e.Command)) == "ls"
 			},
@@ -412,9 +412,9 @@ func TestRootPrograms(t *testing.T) {
 				executeCommand(t, "ls", opensnoop)
 			},
 			verifyFn: func(event []byte) bool {
-				var e rawOpenEvent
+				var e diskDataT
 				err := unmarshalEvent(event, &e)
-				return err == nil
+				return err == nil && ConvertString(unsafe.Pointer(&e.Command)) == "ls"
 			},
 		},
 		// Run tcpconnect with netcat.
@@ -425,9 +425,10 @@ func TestRootPrograms(t *testing.T) {
 				executeHTTP(t, ts.URL, tcpconnect)
 			},
 			verifyFn: func(event []byte) bool {
-				var e rawConn4Event
+				var e networkIpv4DataT
 				err := unmarshalEvent(event, &e)
-				return err == nil
+				// compare to localhost
+				return err == nil && e.Saddr == 0x0100007f && e.Daddr == 0x0100007f
 			},
 		},
 	}

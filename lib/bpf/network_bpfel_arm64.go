@@ -12,6 +12,28 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type networkIpv4DataT struct {
+	Cgroup  uint64
+	Ip      uint64
+	Pid     uint32
+	Saddr   uint32
+	Daddr   uint32
+	Dport   uint16
+	Command [16]int8
+	_       [2]byte
+}
+
+type networkIpv6DataT struct {
+	Cgroup  uint64
+	Ip      uint64
+	Pid     uint32
+	Saddr   struct{ In6U struct{ U6Addr8 [16]uint8 } }
+	Daddr   struct{ In6U struct{ U6Addr8 [16]uint8 } }
+	Dport   uint16
+	Command [16]int8
+	_       [2]byte
+}
+
 // loadNetwork returns the embedded CollectionSpec for network.
 func loadNetwork() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_NetworkBytes)

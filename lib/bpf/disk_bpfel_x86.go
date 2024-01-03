@@ -12,6 +12,16 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type diskDataT struct {
+	Cgroup     uint64
+	Pid        uint64
+	ReturnCode int32
+	Command    [16]int8
+	FilePath   [255]int8
+	_          [1]byte
+	Flags      int32
+}
+
 // loadDisk returns the embedded CollectionSpec for disk.
 func loadDisk() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_DiskBytes)

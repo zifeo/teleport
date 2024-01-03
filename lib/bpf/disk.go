@@ -47,32 +47,6 @@ var (
 	)
 )
 
-const (
-	diskEventsBuffer = "open_events"
-)
-
-// rawOpenEvent is sent by the eBPF program that Teleport pulls off the perf
-// buffer.
-type rawOpenEvent struct {
-	// CgroupID is the internal cgroupv2 ID of the event.
-	CgroupID uint64
-
-	// PID is the ID of the process.
-	PID uint64
-
-	// ReturnCode is the return code of open.
-	ReturnCode int32
-
-	// Command is name of the executable opening the file.
-	Command [CommMax]byte
-
-	// Path is the full path to the file being opened.
-	Path [PathMax]byte
-
-	// Flags are the flags passed to open.
-	Flags int32
-}
-
 type cgroupRegister interface {
 	startSession(cgroupID uint64) error
 	endSession(cgroupID uint64) error

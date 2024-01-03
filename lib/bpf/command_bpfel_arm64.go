@@ -12,6 +12,16 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type commandDataT struct {
+	Pid     uint64
+	Ppid    uint64
+	Command [16]int8
+	Type    uint32
+	Argv    [128]int8
+	Retval  int32
+	Cgroup  uint64
+}
+
 // loadCommand returns the embedded CollectionSpec for command.
 func loadCommand() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_CommandBytes)

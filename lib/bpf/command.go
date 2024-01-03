@@ -46,35 +46,6 @@ var (
 	)
 )
 
-const (
-	commandEventsBuffer = "execve_events"
-)
-
-// rawExecEvent is sent by the eBPF program that Teleport pulls off the perf
-// buffer.
-type rawExecEvent struct {
-	// PID is the ID of the process.
-	PID uint64
-
-	// PPID is the PID of the parent process.
-	PPID uint64
-
-	// Command is the executable.
-	Command [CommMax]byte
-
-	// Type is the type of event.
-	Type int32
-
-	// Argv is the list of arguments to the program.
-	Argv [ArgvMax]byte
-
-	// ReturnCode is the return code of execve.
-	ReturnCode int32
-
-	// CgroupID is the internal cgroupv2 ID of the event.
-	CgroupID uint64
-}
-
 type exec struct {
 	//session
 	objs commandObjects
