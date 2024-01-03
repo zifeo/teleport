@@ -193,6 +193,8 @@ func startExec(bufferSize int) (*exec, error) {
 }
 
 func sendEvents(bpfEvents chan []byte, eventBuf *ringbuf.Reader) {
+	defer eventBuf.Close()
+
 	for {
 		rec, err := eventBuf.Read()
 		if err != nil {

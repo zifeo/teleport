@@ -594,7 +594,7 @@ func (s *Service) emit6NetworkEvent(eventBytes []byte) {
 func ipv4HostToIP(addr uint32) net.IP {
 	val := make([]byte, 4)
 	binary.LittleEndian.PutUint32(val, addr)
-	return net.IP(val)
+	return val
 }
 
 func ipv6HostToIP(addr [4]uint32) net.IP {
@@ -603,7 +603,7 @@ func ipv6HostToIP(addr [4]uint32) net.IP {
 	binary.LittleEndian.PutUint32(val[4:], addr[1])
 	binary.LittleEndian.PutUint32(val[8:], addr[2])
 	binary.LittleEndian.PutUint32(val[12:], addr[3])
-	return net.IP(val)
+	return val
 }
 
 // unmarshalEvent will unmarshal the perf event.
