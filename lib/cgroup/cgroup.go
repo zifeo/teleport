@@ -146,7 +146,7 @@ func (s *Service) Remove(sessionID string) error {
 	for i := 0; i < 10; i++ {
 		// The rmdir syscall is used to remove a cgroup.
 		if err = unix.Rmdir(filepath.Join(s.teleportRoot, sessionID)); err != nil {
-			// Ignore EBUSY errors. This can happen if a
+			// Retry on EBUSY errors.
 			if errors.Is(err, unix.EBUSY) {
 				// If the cgroup is busy, sleep for a bit and try again.
 				time.Sleep(100 * time.Millisecond)

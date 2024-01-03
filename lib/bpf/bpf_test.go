@@ -432,24 +432,27 @@ func TestRootPrograms(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		// Create a context that will be used to signal that an event has been received.
-		doneContext, doneFunc := context.WithCancel(context.Background())
+		t.Run(tt.inName, func(t *testing.T) {
+			// Create a context that will be used to signal that an event has been received.
+			doneContext, doneFunc := context.WithCancel(context.Background())
+			t.Cleanup(doneFunc)
 
-		// Start two goroutines. The first will wait for the BPF program event to
-		// arrive, and once it has, signal over the context that it's complete. The
-		// second will continue to execute or an HTTP GET in a processAccessEvents attempting to
-		// trigger an event.
-		go waitForEvent(doneContext, doneFunc, tt.inEventCh, tt.verifyFn)
+			// Start two goroutines. The first will wait for the BPF program event to
+			// arrive, and once it has, signal over the context that it's complete. The
+			// second will continue to execute or an HTTP GET in a processAccessEvents attempting to
+			// trigger an event.
+			go waitForEvent(doneContext, doneFunc, tt.inEventCh, tt.verifyFn)
 
-		go tt.genEvents(t)
+			go tt.genEvents(t)
 
-		// Wait for an event to arrive from execsnoop. If an event does not arrive
-		// within 10 seconds, timeout.
-		select {
-		case <-doneContext.Done():
-		case <-time.After(10 * time.Second):
-			t.Fatalf("Timed out waiting for an %v event.", tt.inName)
-		}
+			// Wait for an event to arrive from execsnoop. If an event does not arrive
+			// within 10 seconds, timeout.
+			select {
+			case <-doneContext.Done():
+			case <-time.After(10 * time.Second):
+				t.Fatalf("Timed out waiting for an %v event.", tt.inName)
+			}
+		})
 	}
 }
 
@@ -658,13 +661,8 @@ func createCgroup(t *testing.T, cgroup *cgroup.Service, sessionID string,
 func executeCommand(t *testing.T, file string, traceCgroup cgroupRegister) {
 	t.Helper()
 
-	path, err := osexec.LookPath(file)
-	if err != nil {
-		t.Logf("Failed to find executable %q: %v.", file, err)
-	}
-
-	fullPath, err := osexec.LookPath(path)
-	require.NoError(t, err)
+	fullPath, err := osexec.LookPath(file)
+	require.NoError(t, err, "Failed to find executable %q", file)
 
 	runCmd(t, reexecInCGroupCmd, fullPath, traceCgroup, require.NoError)
 }
