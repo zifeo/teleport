@@ -278,11 +278,11 @@ fix-imports: buildbox
 .PHONY: bpf-bytecode
 bpf-bytecode:
 	docker build \
-  		--build-arg UID=$(UID) \
-        --build-arg GID=$(GID) \
-        --build-arg BUILDARCH=$(RUNTIME_ARCH) \
-        --build-arg GOLANG_VERSION=$(GOLANG_VERSION) \
-        -f Dockerfile-bpf -t bpf-builder .
+		--build-arg UID=$(UID) \
+		--build-arg GID=$(GID) \
+		--build-arg BUILDARCH=$(RUNTIME_ARCH) \
+		--build-arg GOLANG_VERSION=$(GOLANG_VERSION) \
+		-f Dockerfile-bpf -t bpf-builder .
 	docker run --rm -v "$$(pwd)/../":/teleport -w /teleport bpf-builder \
 		make bpf-bytecode
 

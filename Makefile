@@ -293,7 +293,7 @@ $(BUILDDIR)/tctl:
 	GOOS=$(OS) GOARCH=$(ARCH) $(CGOFLAG) go build -tags "$(PAM_TAG) $(FIPS_TAG) $(PIV_BUILD_TAG)" -o $(BUILDDIR)/tctl $(BUILDFLAGS) ./tool/tctl
 
 .PHONY: $(BUILDDIR)/teleport
-$(BUILDDIR)/teleport: ensure-webassets bpf-bytecode rdpclient
+$(BUILDDIR)/teleport: ensure-webassets rdpclient
 	GOOS=$(OS) GOARCH=$(ARCH) $(CGOFLAG) go build -tags "webassets_embed $(PAM_TAG) $(FIPS_TAG) $(BPF_TAG) $(WEBASSETS_TAG) $(RDPCLIENT_TAG) $(PIV_BUILD_TAG)" -o $(BUILDDIR)/teleport $(BUILDFLAGS) ./tool/teleport
 
 TELEPORT_ARGS ?= start
@@ -328,7 +328,8 @@ ifneq ("$(wildcard /usr/include/linux/bpf.h)","")
 ifneq ("$(wildcard /usr/include/bpf/bpf_helpers.h)","")
 ifneq ("$(shell which clang --version 2>/dev/null)","")
 	go generate ./lib/bpf/bpf.go
-
+else
+$(error "clang is required to build BPF bytecode")
 endif # clang installed
 
 # Generate vmlinux.h based on the installed kernel
@@ -724,7 +725,7 @@ test-env-leakage:
 
 # Runs test prepare steps
 .PHONY: test-go-prepare
-test-go-prepare: ensure-webassets bpf-bytecode rdpclient $(TEST_LOG_DIR) ensure-gotestsum $(VERSRC)
+test-go-prepare: ensure-webassets rdpclient $(TEST_LOG_DIR) ensure-gotestsum $(VERSRC)
 
 # Runs base unit tests
 .PHONY: test-go-unit
@@ -776,7 +777,7 @@ test-go-chaos:
 #
 UNIT_ROOT_REGEX := ^TestRoot
 .PHONY: test-go-root
-test-go-root: ensure-webassets bpf-bytecode rdpclient $(TEST_LOG_DIR) ensure-gotestsum
+test-go-root: ensure-webassets rdpclient $(TEST_LOG_DIR) ensure-gotestsum
 test-go-root: FLAGS ?= -race -shuffle on
 test-go-root: PACKAGES = $(shell go list $(ADDFLAGS) ./... | grep -v -e e2e -e integration -e integrations/operator)
 test-go-root: $(VERSRC)
