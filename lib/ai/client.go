@@ -24,6 +24,7 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/sashabaranov/go-openai"
 
+	"github.com/gravitational/teleport/lib/ai/constants"
 	"github.com/gravitational/teleport/lib/ai/embedding"
 	"github.com/gravitational/teleport/lib/ai/model"
 	modeltools "github.com/gravitational/teleport/lib/ai/model/tools"
@@ -137,7 +138,7 @@ func (client *Client) Summary(ctx context.Context, message string) (string, erro
 	resp, err := client.svc.CreateChatCompletion(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4,
+			Model: constants.DefaultGPTModel,
 			Messages: []openai.ChatCompletionMessage{
 				{Role: openai.ChatMessageRoleSystem, Content: model.PromptSummarizeTitle},
 				{Role: openai.ChatMessageRoleUser, Content: message},
@@ -167,7 +168,7 @@ func (client *Client) CommandSummary(ctx context.Context, messages []openai.Chat
 	resp, err := client.svc.CreateChatCompletion(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model:    openai.GPT4,
+			Model:    constants.DefaultLongContextGPTModel,
 			Messages: messages,
 		},
 	)
@@ -188,7 +189,7 @@ func (client *Client) ClassifyMessage(ctx context.Context, message string, class
 	resp, err := client.svc.CreateChatCompletion(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4,
+			Model: constants.DefaultGPTModel,
 			Messages: []openai.ChatCompletionMessage{
 				{Role: openai.ChatMessageRoleSystem, Content: model.MessageClassificationPrompt(classes)},
 				{Role: openai.ChatMessageRoleUser, Content: message},

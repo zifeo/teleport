@@ -28,6 +28,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 
 	"github.com/gravitational/teleport/gen/go/eventschema"
+	"github.com/gravitational/teleport/lib/ai/constants"
 	"github.com/gravitational/teleport/lib/ai/model/output"
 	"github.com/gravitational/teleport/lib/ai/tokens"
 )
@@ -89,7 +90,7 @@ You MUST RESPOND ONLY with a single table name. If no table can answer the quest
 	response, err := t.LLM.CreateChatCompletion(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model:       openai.GPT4,
+			Model:       constants.DefaultGPTModel,
 			Messages:    prompt,
 			Temperature: 0,
 		},
@@ -156,7 +157,7 @@ Today's date is DATE('%s')`, time.Now().Format("2006-01-02")),
 	stream, err := t.LLM.CreateChatCompletionStream(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model:       openai.GPT4,
+			Model:       constants.DefaultLongContextGPTModel,
 			Messages:    prompt,
 			Temperature: 0,
 			Stream:      true,

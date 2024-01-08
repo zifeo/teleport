@@ -29,6 +29,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/gravitational/teleport/lib/ai/constants"
 	"github.com/gravitational/teleport/lib/ai/model/output"
 	"github.com/gravitational/teleport/lib/ai/model/tools"
 	"github.com/gravitational/teleport/lib/ai/tokens"
@@ -319,7 +320,7 @@ func (a *Agent) plan(ctx context.Context, state *executionState) (*AgentAction, 
 	stream, err := state.llm.CreateChatCompletionStream(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model:       openai.GPT432K,
+			Model:       constants.DefaultLongContextGPTModel,
 			Messages:    prompt,
 			Temperature: 0.3,
 			Stream:      true,

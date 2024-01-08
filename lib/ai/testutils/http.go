@@ -27,6 +27,8 @@ import (
 
 	"github.com/sashabaranov/go-openai"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/gravitational/teleport/lib/ai/constants"
 )
 
 // GetTestHandlerFn returns a handler function that can be used to OpenAI API used by
@@ -61,7 +63,7 @@ func streamResponse(w http.ResponseWriter, t *testing.T, responses []string) []s
 		ID:      strconv.Itoa(int(time.Now().Unix())),
 		Object:  "completion",
 		Created: time.Now().Unix(),
-		Model:   openai.GPT4,
+		Model:   constants.DefaultGPTModel,
 		Choices: []openai.ChatCompletionStreamChoice{
 			{
 				Index: 0,
