@@ -48,12 +48,23 @@ RUN yum groupinstall -y 'Development Tools' && \
 # As mentioned above, these packages are unsigned.
 RUN yum install --nogpgcheck -y \
         ${DEVTOOLSET}-gcc \
+        ${DEVTOOLSET}-gcc-c++ \
+        devtoolset-12-libstdc++-devel \
         ${DEVTOOLSET}-make && \
     yum clean all
 
 # Needed for boring-rs
 ENV CMAKE=cmake3
-RUN ln -s /usr/bin/cmake3 /usr/local/bin/cmake
+# Install never cmake version
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.28.1/cmake-3.28.1-linux-aarch64.sh &&  \
+    chmod +x cmake-3.28.1-linux-aarch64.sh && \
+    mkdir -p /opt/cmake && \
+    ./cmake-3.28.1-linux-aarch64.sh --skip-license --prefix=/opt/cmake && \
+    rm cmake-3.28.1-linux-aarch64.sh && \
+    ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
+
+RUN wget https://github.com/userdocs/qbt-ninja-build/releases/download/v1.12.0/ninja-aarch64 -O /usr/local/bin/ninja && \
+    chmod +x /usr/local/bin/ninja
 
 ## GIT2 ###################################################################
 
@@ -307,6 +318,7 @@ COPY --from=libbpf /opt/libbpf/usr /usr/libbpf-${LIBBPF_VERSION}
 
 # Copy the pre-built CentOS 7 assets with clang. Needed to build BoringSSL and BPF tools.
 COPY --from=teleport-buildbox-centos7-assets /opt/llvm /opt/llvm
+RUN ln -s /opt/llvm/bin/clang++ /opt/llvm/bin/clang++-14
 
 # Libclang is needed by boring-rs to generate bindings. libclang is kept in /opt/llvm/lib
 # and without this environment variable, boring-rs will not be able to find it.

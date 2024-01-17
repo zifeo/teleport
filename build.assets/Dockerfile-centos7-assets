@@ -25,6 +25,7 @@ RUN yum groupinstall -y 'Development Tools' && \
         centos-release-scl \
         cmake3 \
         git \
+        wget \
         scl-utils && \
     yum clean all
 
@@ -40,6 +41,9 @@ FROM --platform=$BUILDPLATFORM centos-devtoolset as clang12
 
 ARG DEVTOOLSET
 
+RUN wget https://github.com/userdocs/qbt-ninja-build/releases/download/v1.12.0/ninja-aarch64 -O /usr/local/bin/ninja && \
+    chmod +x /usr/local/bin/ninja
+
 # Compile Clang 12.0.0 from source. It is needed to create BoringSSL and BPF files.
 # CentOS 7 doesn't provide it as a package unfortunately.
 # This version of Clang is explicitly required for FIPS compliance when building BoringSSL.
@@ -49,17 +53,18 @@ ARG DEVTOOLSET
 # CLANG_BUILD_TOOLS must be on, it builds clang binary,
 # LLVM_BUILD_TOOLS must be on, it builds llvm-strip binary.
 # the rest is disabled to speedup the compilation.
-RUN git clone --branch llvmorg-12.0.0 --depth=1 https://github.com/llvm/llvm-project.git && \
+RUN git clone --branch llvmorg-14.0.0 --depth=1 https://github.com/llvm/llvm-project.git && \
     cd llvm-project/ && \
-    [ "$(git rev-parse HEAD)" = 'd28af7c654d8db0b68c175db5ce212d74fb5e9bc' ] && \
+    [ "$(git rev-parse HEAD)" = '329fda39c507e8740978d10458451dcdb21563be' ] && \
     mkdir build && cd build/ && \
     scl enable ${DEVTOOLSET} 'bash -c "cmake3 \
 -DCMAKE_BUILD_TYPE=Release \
 -DCMAKE_INSTALL_PREFIX=/opt/llvm \
--DLLVM_ENABLE_PROJECTS=clang \
--DLLVM_BUILD_TOOLS=ON \
--G \"Unix Makefiles\" ../llvm && \
-make -j$(grep -c processor /proc/cpuinfo) install-llvm-strip install-clang-format install-clang install-clang-resource-headers install-libclang"' && \
+-DLLVM_ENABLE_PROJECTS=\"clang;libcxx;libcxxabi\" \
+-DLLVM_ENABLE_LIBCXX=ON \
+-G \"Ninja\" ../llvm && \
+    cmake3 --build . && \
+    cmake3 -DCMAKE_INSTALL_PREFIX=/opt/llvm -P cmake_install.cmake"' && \
     cd ../.. && \
     rm -rf llvm-project
 
