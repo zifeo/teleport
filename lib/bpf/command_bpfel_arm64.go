@@ -17,7 +17,7 @@ type commandDataT struct {
 	Ppid    uint64
 	Command [16]int8
 	Type    uint32
-	Argv    [128]int8
+	Argv    [1024]int8
 	Retval  int32
 	Cgroup  uint64
 }

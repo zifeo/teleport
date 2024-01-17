@@ -76,7 +76,7 @@ static int __submit_arg(void *ptr, struct common_data_t *common)
     data->pid = common->pid;
     data->cgroup = common->cgroup;
     for (int i = 0; i < TASK_COMM_LEN; i++)
-        data->comm[i] = common->comm[i];
+        data->command[i] = common->comm[i];
 
     bpf_ringbuf_submit(data, 0);
     return 1;
