@@ -21,6 +21,7 @@ package utils
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 	"time"
 
@@ -116,8 +117,9 @@ func NewFnCache(cfg FnCacheConfig) (*FnCache, error) {
 
 	cache.cfg.Context, cache.cancel = context.WithCancel(cfg.Context)
 
-	return cache, nil
+	runtime.SetFinalizer(cache, cache.cancel)
 
+	return cache, nil
 }
 
 type fnCacheEntry struct {

@@ -47,6 +47,10 @@ func CachingResolver(ctx context.Context, resolver Resolver, clock clockwork.Clo
 		return nil, err
 	}
 
+	context.AfterFunc(ctx, func() {
+		cache.Shutdown(context.Background())
+	})
+
 	type data struct {
 		addr *utils.NetAddr
 		mode types.ProxyListenerMode
