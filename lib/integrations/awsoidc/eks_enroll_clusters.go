@@ -22,10 +22,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	//"helm.sh/helm/v3/pkg/action"
 	"net/http"
 	"net/url"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -39,9 +38,9 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	helmCli "helm.sh/helm/v3/pkg/cli"
+	//"helm.sh/helm/v3/pkg/action"
+	//"helm.sh/helm/v3/pkg/chart/loader"
+	//helmCli "helm.sh/helm/v3/pkg/cli"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 
@@ -49,9 +48,6 @@ import (
 	apiutils "github.com/gravitational/teleport/api/utils"
 	awslib "github.com/gravitational/teleport/lib/cloud/aws"
 	"github.com/gravitational/teleport/lib/defaults"
-	"github.com/gravitational/teleport/lib/modules"
-	"github.com/gravitational/teleport/lib/services"
-	"github.com/gravitational/teleport/lib/srv/discovery/common"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -128,12 +124,13 @@ func (d *defaultEnrollEKSClustersClient) GetCallerIdentity(ctx context.Context, 
 
 // CheckAgentAlreadyInstalled checks if teleport-kube-agent Helm chart is already installed on the EKS cluster.
 func (d *defaultEnrollEKSClustersClient) CheckAgentAlreadyInstalled(clientGetter genericclioptions.RESTClientGetter, log logrus.FieldLogger) (bool, error) {
-	actionConfig, err := getHelmActionConfig(clientGetter, log)
-	if err != nil {
-		return false, trace.Wrap(err)
-	}
-
-	return checkAgentAlreadyInstalled(actionConfig)
+	return false, nil
+	//actionConfig, err := getHelmActionConfig(clientGetter, log)
+	//if err != nil {
+	//	return false, trace.Wrap(err)
+	//}
+	//
+	//return checkAgentAlreadyInstalled(actionConfig)
 }
 
 func getToken(ctx context.Context, clock clockwork.Clock, tokenCreator TokenCreator) (string, string, error) {
@@ -172,7 +169,7 @@ func (d *defaultEnrollEKSClustersClient) InstallKubeAgent(ctx context.Context, e
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	settings, err := getHelmSettings()
+	//settings, err := getHelmSettings()
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -183,9 +180,9 @@ func (d *defaultEnrollEKSClustersClient) InstallKubeAgent(ctx context.Context, e
 		joinToken:    joinToken,
 		resourceID:   resourceId,
 		actionConfig: actionConfig,
-		settings:     settings,
-		req:          req,
-		log:          log,
+
+		req: req,
+		log: log,
 	})
 }
 
@@ -444,41 +441,44 @@ func getKubeClientGetter(ctx context.Context, timestamp time.Time, credsProvider
 	return configFlags, nil
 }
 
-func getHelmActionConfig(clientGetter genericclioptions.RESTClientGetter, log logrus.FieldLogger) (*action.Configuration, error) {
-	actionConfig := new(action.Configuration)
-	if err := actionConfig.Init(clientGetter, agentNamespace, "secret", log.WithField("source", "helm").Debugf); err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return actionConfig, nil
+func getHelmActionConfig(clientGetter genericclioptions.RESTClientGetter, log logrus.FieldLogger) (bool, error) {
+	return false, nil
+	//actionConfig := new(action.Configuration)
+	//if err := actionConfig.Init(clientGetter, agentNamespace, "secret", log.WithField("source", "helm").Debugf); err != nil {
+	//	return nil, trace.Wrap(err)
+	//}
+	//
+	//return actionConfig, nil
 }
 
-func getHelmSettings() (*helmCli.EnvSettings, error) {
-	helmSettings := helmCli.New()
-	dir, err := os.MkdirTemp(os.TempDir(), "teleport-eks-chart-")
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	helmSettings.RepositoryCache = dir
-	helmSettings.SetNamespace(agentNamespace)
-
-	return helmSettings, nil
-}
+//
+//func getHelmSettings() (*helmCli.EnvSettings, error) {
+//	helmSettings := helmCli.New()
+//	dir, err := os.MkdirTemp(os.TempDir(), "teleport-eks-chart-")
+//	if err != nil {
+//		return nil, trace.Wrap(err)
+//	}
+//	helmSettings.RepositoryCache = dir
+//	helmSettings.SetNamespace(agentNamespace)
+//
+//	return helmSettings, nil
+//}
 
 // checkAgentAlreadyInstalled checks through the Helm if teleport-kube-agent chart was already installed in the EKS cluster.
-func checkAgentAlreadyInstalled(actionConfig *action.Configuration) (bool, error) {
-	listCmd := action.NewList(actionConfig)
-
-	releases, err := listCmd.Run()
-	if err != nil {
-		return false, trace.Wrap(err)
-	}
-	for _, release := range releases {
-		if release.Name == agentName {
-			return true, nil
-		}
-	}
+func checkAgentAlreadyInstalled(actionConfig bool) (bool, error) {
 	return false, nil
+	//listCmd := action.NewList(actionConfig)
+	//
+	//releases, err := listCmd.Run()
+	//if err != nil {
+	//	return false, trace.Wrap(err)
+	//}
+	//for _, release := range releases {
+	//	if release.Name == agentName {
+	//		return true, nil
+	//	}
+	//}
+	//return false, nil
 }
 
 type installKubeAgentParams struct {
@@ -486,80 +486,81 @@ type installKubeAgentParams struct {
 	proxyAddr    string
 	joinToken    string
 	resourceID   string
-	actionConfig *action.Configuration
-	settings     *helmCli.EnvSettings
-	req          EnrollEKSClustersRequest
-	log          logrus.FieldLogger
+	actionConfig bool
+	//settings     *helmCli.EnvSettings
+	req EnrollEKSClustersRequest
+	log logrus.FieldLogger
 }
 
 // installKubeAgent installs teleport-kube-agent chart to the target EKS cluster.
 func installKubeAgent(ctx context.Context, cfg installKubeAgentParams) error {
-	defer func() {
-		// Clean up temporary chart cache directory.
-		err := os.RemoveAll(cfg.settings.RepositoryCache)
-		if err != nil && cfg.log != nil {
-			cfg.log.Warnf("could not delete temporary chart cache directory at the path %q", cfg.settings.RepositoryCache)
-		}
-	}()
-
-	installCmd := action.NewInstall(cfg.actionConfig)
-	installCmd.RepoURL = agentRepoURL
-	installCmd.Version = cfg.req.AgentVersion
-	if strings.Contains(installCmd.Version, "dev") {
-		installCmd.Version = "" // For testing during development.
-	}
-
-	chartPath, err := installCmd.LocateChart(agentName, cfg.settings)
-	if err != nil {
-		return trace.Wrap(err, "could not locate chart")
-	}
-
-	agentChart, err := loader.Load(chartPath)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	installCmd.ReleaseName = agentName
-	installCmd.Namespace = agentNamespace
-	installCmd.CreateNamespace = true
-	vals := map[string]any{}
-	vals["proxyAddr"] = cfg.proxyAddr
-
-	vals["roles"] = "kube"
-	// todo(anton): Remove check for 13 once Teleport cloud is unblocked to move from v13 chart.
-	if cfg.req.EnableAppDiscovery && !strings.HasPrefix(installCmd.Version, "13") {
-		vals["roles"] = "kube,app,discovery"
-	}
-	vals["authToken"] = cfg.joinToken
-
-	if cfg.req.IsCloud && cfg.req.EnableAutoUpgrades {
-		vals["updater"] = map[string]any{"enabled": true, "releaseChannel": "stable/cloud"}
-
-		vals["highAvailability"] = map[string]any{"replicaCount": 2,
-			"podDisruptionBudget": map[string]any{"enabled": true, "minAvailable": 1},
-		}
-	}
-	if modules.GetModules().BuildType() == modules.BuildEnterprise {
-		vals["enterprise"] = true
-	}
-
-	eksTags := make(map[string]*string, len(cfg.eksCluster.Tags))
-	for k, v := range cfg.eksCluster.Tags {
-		eksTags[k] = aws.String(v)
-	}
-	kubeCluster, err := services.NewKubeClusterFromAWSEKS(aws.ToString(cfg.eksCluster.Name), aws.ToString(cfg.eksCluster.Arn), eksTags)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	common.ApplyEKSNameSuffix(kubeCluster)
-	vals["kubeClusterName"] = kubeCluster.GetName()
-
-	labels := kubeCluster.GetStaticLabels()
-	labels[types.InternalResourceIDLabel] = cfg.resourceID
-	vals["labels"] = labels
-
-	if _, err := installCmd.RunWithContext(ctx, agentChart, vals); err != nil {
-		return trace.Wrap(err, "could not install Helm chart.")
-	}
-
 	return nil
+	//defer func() {
+	//	// Clean up temporary chart cache directory.
+	//	err := os.RemoveAll("cfg.settings.RepositoryCache")
+	//	if err != nil && cfg.log != nil {
+	//		cfg.log.Warnf("could not delete temporary chart cache directory at the path %q", "cfg.settings.RepositoryCache")
+	//	}
+	//}()
+	//
+	//installCmd := action.NewInstall(cfg.actionConfig)
+	//installCmd.RepoURL = agentRepoURL
+	//installCmd.Version = cfg.req.AgentVersion
+	//if strings.Contains(installCmd.Version, "dev") {
+	//	installCmd.Version = "" // For testing during development.
+	//}
+	//
+	//chartPath, err := installCmd.LocateChart(agentName, nil)
+	//if err != nil {
+	//	return trace.Wrap(err, "could not locate chart")
+	//}
+	//
+	//agentChart, err := loader.Load(chartPath)
+	//if err != nil {
+	//	return trace.Wrap(err)
+	//}
+	//installCmd.ReleaseName = agentName
+	//installCmd.Namespace = agentNamespace
+	//installCmd.CreateNamespace = true
+	//vals := map[string]any{}
+	//vals["proxyAddr"] = cfg.proxyAddr
+	//
+	//vals["roles"] = "kube"
+	//// todo(anton): Remove check for 13 once Teleport cloud is unblocked to move from v13 chart.
+	//if cfg.req.EnableAppDiscovery && !strings.HasPrefix(installCmd.Version, "13") {
+	//	vals["roles"] = "kube,app,discovery"
+	//}
+	//vals["authToken"] = cfg.joinToken
+	//
+	//if cfg.req.IsCloud && cfg.req.EnableAutoUpgrades {
+	//	vals["updater"] = map[string]any{"enabled": true, "releaseChannel": "stable/cloud"}
+	//
+	//	vals["highAvailability"] = map[string]any{"replicaCount": 2,
+	//		"podDisruptionBudget": map[string]any{"enabled": true, "minAvailable": 1},
+	//	}
+	//}
+	//if modules.GetModules().BuildType() == modules.BuildEnterprise {
+	//	vals["enterprise"] = true
+	//}
+	//
+	//eksTags := make(map[string]*string, len(cfg.eksCluster.Tags))
+	//for k, v := range cfg.eksCluster.Tags {
+	//	eksTags[k] = aws.String(v)
+	//}
+	//kubeCluster, err := services.NewKubeClusterFromAWSEKS(aws.ToString(cfg.eksCluster.Name), aws.ToString(cfg.eksCluster.Arn), eksTags)
+	//if err != nil {
+	//	return trace.Wrap(err)
+	//}
+	//common.ApplyEKSNameSuffix(kubeCluster)
+	//vals["kubeClusterName"] = kubeCluster.GetName()
+	//
+	//labels := kubeCluster.GetStaticLabels()
+	//labels[types.InternalResourceIDLabel] = cfg.resourceID
+	//vals["labels"] = labels
+	//
+	//if _, err := installCmd.RunWithContext(ctx, agentChart, vals); err != nil {
+	//	return trace.Wrap(err, "could not install Helm chart.")
+	//}
+	//
+	//return nil
 }
