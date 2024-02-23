@@ -121,6 +121,21 @@ type mockSSHChannel struct {
 	MockSendRequest func(name string, wantReply bool, payload []byte) (bool, error)
 }
 
+// SetDeadline implements ssh.Channel.
+func (*mockSSHChannel) SetDeadline(deadline time.Time) error {
+	panic("unimplemented")
+}
+
+// SetReadDeadline implements ssh.Channel.
+func (*mockSSHChannel) SetReadDeadline(deadline time.Time) error {
+	panic("unimplemented")
+}
+
+// SetWriteDeadline implements ssh.Channel.
+func (*mockSSHChannel) SetWriteDeadline(deadline time.Time) error {
+	panic("unimplemented")
+}
+
 func (m *mockSSHChannel) Close() error { return nil }
 
 func (m *mockSSHChannel) CloseWrite() error { return nil }

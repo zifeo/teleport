@@ -22,6 +22,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,21 @@ func (n fakeReaderWriter) Write(b []byte) (int, error) {
 
 type mockChannel struct {
 	fakeReaderWriter
+}
+
+// SetDeadline implements ssh.Channel.
+func (*mockChannel) SetDeadline(deadline time.Time) error {
+	panic("unimplemented")
+}
+
+// SetReadDeadline implements ssh.Channel.
+func (*mockChannel) SetReadDeadline(deadline time.Time) error {
+	panic("unimplemented")
+}
+
+// SetWriteDeadline implements ssh.Channel.
+func (*mockChannel) SetWriteDeadline(deadline time.Time) error {
+	panic("unimplemented")
 }
 
 func (mc *mockChannel) Close() error {

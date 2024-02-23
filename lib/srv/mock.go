@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/user"
 	"testing"
+	"time"
 
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
@@ -335,6 +336,21 @@ type mockSSHChannel struct {
 	stdIn  io.ReadCloser
 	stdOut io.WriteCloser
 	stdErr io.ReadWriter
+}
+
+// SetDeadline implements ssh.Channel.
+func (*mockSSHChannel) SetDeadline(deadline time.Time) error {
+	panic("unimplemented")
+}
+
+// SetReadDeadline implements ssh.Channel.
+func (*mockSSHChannel) SetReadDeadline(deadline time.Time) error {
+	panic("unimplemented")
+}
+
+// SetWriteDeadline implements ssh.Channel.
+func (*mockSSHChannel) SetWriteDeadline(deadline time.Time) error {
+	panic("unimplemented")
 }
 
 func newMockSSHChannel() ssh.Channel {
