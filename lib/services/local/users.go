@@ -110,12 +110,14 @@ func (s *IdentityService) listUsersWithSecrets(ctx context.Context, pageSize int
 		}
 
 		if name != prevUser {
-			user, err := userFromUserItems(prevUser, items)
-			if err != nil {
-				return nil, "", trace.Wrap(err)
-			}
+			if !items.complete() {
+				user, err := userFromUserItems(prevUser, items)
+				if err != nil {
+					return nil, "", trace.Wrap(err)
+				}
 
-			out = append(out, user)
+				out = append(out, user)
+			}
 
 			prevUser = name
 			items = userItems{}
