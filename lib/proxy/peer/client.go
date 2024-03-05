@@ -386,6 +386,7 @@ func (c *Client) DialNode(
 	dst net.Addr,
 	tunnelType types.TunnelType,
 ) (net.Conn, error) {
+	c.config.Log.Infof("---> Attempting dial of node %q via proxies %+v", nodeID, proxyIDs)
 	stream, _, err := c.dial(proxyIDs, &clientapi.DialRequest{
 		NodeID:     nodeID,
 		TunnelType: tunnelType,
@@ -496,7 +497,7 @@ func (c *Client) dial(proxyIDs []string, dialRequest *clientapi.DialRequest) (ne
 
 	var errs []error
 	for _, conn := range conns {
-
+		c.config.Log.Infof("---> Attempting dial against proxy %q at %q...", conn.id, conn.addr)
 		stream, err := conn.clt.Dial(c.ctx /*TODO: should this be passed in by caller instead?*/, dialRequest)
 		if err != nil {
 			c.metrics.reportTunnelError(errorProxyPeerTunnelRPC)
@@ -504,6 +505,7 @@ func (c *Client) dial(proxyIDs []string, dialRequest *clientapi.DialRequest) (ne
 			errs = append(errs, trace.ConnectionProblem(err, "error starting stream: %v", err))
 			continue
 		}
+		c.config.Log.Infof("---> Successfully dialed proxy %q at %q.", conn.id, conn.addr)
 
 		return stream, existing, nil
 	}
