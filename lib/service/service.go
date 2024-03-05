@@ -72,6 +72,7 @@ import (
 	integrationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/integration/v1"
 	kubeproto "github.com/gravitational/teleport/api/gen/proto/go/teleport/kube/v1"
 	transportpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/transport/v1"
+	"github.com/gravitational/teleport/api/metadata"
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	apiutils "github.com/gravitational/teleport/api/utils"
@@ -4209,24 +4210,71 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 	}
 
 	var peerAddrString string
-	var proxyServer *peer.Server
+	var proxyPeerGrpcServer *grpc.Server
 	if !process.Config.Proxy.DisableReverseTunnel && listeners.proxyPeer != nil {
 		peerAddr, err := process.Config.Proxy.PublicPeerAddr()
 		if err != nil {
 			return trace.Wrap(err)
 		}
+
+		tlsConf := serverTLSConfig.Clone()
+		tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
+		tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+			tlsCopy := tlsConf.Clone()
+
+			pool, _, err := auth.ClientCertPool(accessPoint, clusterName, types.HostCA)
+			if err != nil {
+				return nil, trace.Wrap(err)
+			}
+
+			tlsCopy.RootCAs = pool
+			return tlsCopy, nil
+		}
+
+		proxyPeerGrpcServer = grpc.NewServer(
+			grpc.Creds(peer.NewServerCredentials(credentials.NewTLS(tlsConf))),
+			grpc.ChainStreamInterceptor(metadata.StreamServerInterceptor, interceptors.GRPCServerStreamErrorInterceptor),
+			grpc.KeepaliveParams(keepalive.ServerParameters{
+				Time:    10 * time.Second,
+				Timeout: 20 * time.Second,
+			}),
+			grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+				MinTime:             10 * time.Second,
+				PermitWithoutStream: true,
+			}),
+			grpc.MaxConcurrentStreams(defaults.GRPCMaxConcurrentStreams),
+		)
+
+		svc, err := peer.NewProxyService(clusterdial.NewClusterDialer(tsrv))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		proto.RegisterProxyServiceServer(proxyPeerGrpcServer, svc)
+
 		peerAddrString = peerAddr.String()
-		proxyServer, err = peer.NewServer(peer.ServerConfig{
-			AccessCache:   accessPoint,
-			Listener:      listeners.proxyPeer,
-			TLSConfig:     serverTLSConfig,
+		proxyServer, err := peer.NewServer(peer.ServerConfig{
 			ClusterDialer: clusterdial.NewClusterDialer(tsrv),
 			Log:           log,
-			ClusterName:   clusterName,
+			Server:        svc,
 		})
 		if err != nil {
 			return trace.Wrap(err)
 		}
+
+		process.RegisterCriticalFunc("proxy.peer.grpc", func() error {
+			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
+				log.Debugf("Process exiting: failed to start peer proxy service waiting for reverse tunnel server")
+				return nil
+			}
+
+			log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.Addr().String())
+			err := proxyPeerGrpcServer.Serve(listeners.proxyPeer)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+
+			return nil
+		})
 
 		process.RegisterCriticalFunc("proxy.peer", func() error {
 			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
@@ -4235,7 +4283,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 			}
 
 			log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.Addr().String())
-			err := proxyServer.Serve()
+			err := proxyServer.Serve(process.ExitContext())
 			if err != nil {
 				return trace.Wrap(err)
 			}
@@ -4750,8 +4798,8 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				warnOnErr(tsrv.Close(), log)
 			}
 			warnOnErr(rcWatcher.Close(), log)
-			if proxyServer != nil {
-				warnOnErr(proxyServer.Close(), log)
+			if proxyPeerGrpcServer != nil {
+				proxyPeerGrpcServer.Stop()
 			}
 			if webServer != nil {
 				warnOnErr(webServer.Close(), log)
@@ -4797,8 +4845,8 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				warnOnErr(tsrv.Shutdown(ctx), log)
 			}
 			warnOnErr(rcWatcher.Close(), log)
-			if proxyServer != nil {
-				warnOnErr(proxyServer.Shutdown(), log)
+			if proxyPeerGrpcServer != nil {
+				proxyPeerGrpcServer.GracefulStop()
 			}
 			if peerClient != nil {
 				peerClient.Shutdown()

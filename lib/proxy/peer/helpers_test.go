@@ -19,6 +19,7 @@
 package peer
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
@@ -28,13 +29,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 
 	clientapi "github.com/gravitational/teleport/api/client/proto"
+	"github.com/gravitational/teleport/api/metadata"
 	"github.com/gravitational/teleport/api/types"
+	"github.com/gravitational/teleport/api/utils/grpc/interceptors"
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/auth/native"
 	"github.com/gravitational/teleport/lib/defaults"
@@ -56,75 +61,6 @@ type mockAccessCache struct {
 
 type mockProxyAccessPoint struct {
 	auth.ProxyAccessPoint
-}
-
-type mockProxyService struct {
-	mockDialNode func(stream clientapi.ProxyService_DialNodeServer) error
-}
-
-func (s *mockProxyService) DialNode(stream clientapi.ProxyService_DialNodeServer) error {
-	if s.mockDialNode != nil {
-		return s.mockDialNode(stream)
-	}
-
-	return s.defaultDialNode(stream)
-}
-
-func (s *mockProxyService) defaultDialNode(stream clientapi.ProxyService_DialNodeServer) error {
-	sendErr := make(chan error)
-	recvErr := make(chan error)
-
-	frame, err := stream.Recv()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	if frame.GetDialRequest() == nil {
-		return trace.BadParameter("invalid dial request")
-	}
-
-	err = stream.Send(&clientapi.Frame{
-		Message: &clientapi.Frame_ConnectionEstablished{
-			ConnectionEstablished: &clientapi.ConnectionEstablished{},
-		},
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	go func() {
-		for {
-			if _, err := stream.Recv(); err != nil {
-				recvErr <- err
-				close(recvErr)
-				return
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			err := stream.Send(&clientapi.Frame{
-				Message: &clientapi.Frame_Data{
-					Data: &clientapi.Data{Bytes: []byte("pong")},
-				},
-			})
-			if err != nil {
-				sendErr <- err
-				close(sendErr)
-				return
-			}
-		}
-	}()
-
-	select {
-	case <-stream.Context().Done():
-		return stream.Context().Err()
-	case err := <-recvErr:
-		return err
-	case err := <-sendErr:
-		return err
-	}
 }
 
 // newSelfSignedCA creates a new CA for testing.
@@ -216,15 +152,16 @@ func setupClient(t *testing.T, clientCA, serverCA *tlsca.CertAuthority, role typ
 type serverTestOption func(*ServerConfig)
 
 // setupServer return a Server object.
-func setupServer(t *testing.T, name string, serverCA, clientCA *tlsca.CertAuthority, role types.SystemRole, options ...serverTestOption) (*Server, types.Server) {
+func setupServer(t *testing.T, name string, serverCA, clientCA *tlsca.CertAuthority, role types.SystemRole, options ...serverTestOption) (*Server, *grpc.Server, types.Server) {
 	tlsConf := certFromIdentity(t, serverCA, tlsca.Identity{
 		Username: name + ".test",
 		Groups:   []string{string(role)},
 	})
 
-	getConfigForClient := func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+	tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
+
+	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		config := tlsConf.Clone()
-		config.ClientAuth = tls.RequireAndVerifyClientCert
 		clientCAs := x509.NewCertPool()
 		clientCAs.AddCert(clientCA.Cert)
 		config.ClientCAs = clientCAs
@@ -234,14 +171,14 @@ func setupServer(t *testing.T, name string, serverCA, clientCA *tlsca.CertAuthor
 	listener, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 
+	svc := &proxyService{
+		clusterDialer: &mockClusterDialer{},
+		connC:         make(chan connection, 10),
+	}
+
 	config := ServerConfig{
-		AccessCache:        &mockAccessCache{},
-		Listener:           listener,
-		TLSConfig:          tlsConf,
-		ClusterDialer:      &mockClusterDialer{},
-		getConfigForClient: getConfigForClient,
-		service:            &mockProxyService{},
-		ClusterName:        "test",
+		ClusterDialer: &mockClusterDialer{},
+		Server:        svc,
 	}
 	for _, option := range options {
 		option(&config)
@@ -250,18 +187,37 @@ func setupServer(t *testing.T, name string, serverCA, clientCA *tlsca.CertAuthor
 	server, err := NewServer(config)
 	require.NoError(t, err)
 
+	grpcServer := grpc.NewServer(
+		grpc.Creds(newServerCredentials(credentials.NewTLS(tlsConf))),
+		grpc.ChainStreamInterceptor(metadata.StreamServerInterceptor, interceptors.GRPCServerStreamErrorInterceptor),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    peerKeepAlive,
+			Timeout: peerTimeout,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             peerKeepAlive,
+			PermitWithoutStream: true,
+		}),
+		grpc.MaxConcurrentStreams(defaults.GRPCMaxConcurrentStreams),
+	)
+
+	clientapi.RegisterProxyServiceServer(grpcServer, svc)
+
 	ts, err := types.NewServer(
 		name, types.KindProxy,
 		types.ServerSpecV2{PeerAddr: listener.Addr().String()},
 	)
 	require.NoError(t, err)
 
-	go server.Serve()
+	ctx, cancel := context.WithCancel(context.Background())
+	go server.Serve(ctx)
+	go grpcServer.Serve(listener)
 	t.Cleanup(func() {
-		require.NoError(t, server.Close())
+		cancel()
+		grpcServer.Stop()
 	})
 
-	return server, ts
+	return server, grpcServer, ts
 }
 
 func sendMsg(t *testing.T, stream clientapi.ProxyService_DialNodeClient) {
