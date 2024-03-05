@@ -160,16 +160,33 @@ type DialParams struct {
 
 type QuicService struct {
 	Listener *quicgo.Listener
+	initOnce sync.Once
+	ch       chan quic.PendingConn
 }
 
 func (q *QuicService) Accept(ctx context.Context) (quic.PendingConn, error) {
-	conn, err := q.Listener.Accept(ctx)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
+	q.initOnce.Do(func() {
+		q.ch = make(chan quic.PendingConn, 1)
+		go func() {
+			for {
+				qconn, err := q.Listener.Accept(context.Background())
+				if err != nil {
+					panic(err)
+				}
+				go func() {
+					srv := quic.NewServer(qconn)
+					for {
+						pconn, err := srv.Accept(context.Background())
+						if err != nil {
+							panic(err)
+						}
 
-	srv := quic.NewServer(conn)
+						q.ch <- pconn
+					}
+				}()
+			}
+		}()
+	})
 
-	pconn, err := srv.Accept(ctx)
-	return pconn, trace.Wrap(err)
+	return <-q.ch, nil
 }
