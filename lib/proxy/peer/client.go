@@ -595,8 +595,6 @@ func (c *Client) connect(peerID string, peerAddr string) (*clientConn, error) {
 
 	tlsConfig = tlsConfig.Clone()
 
-	tlsConfig.ServerName = auth.HostFQDN(peerID, c.config.ClusterName)
-
 	tlsConfig.VerifyConnection = func(state tls.ConnectionState) (err error) {
 		defer func() {
 			if err != nil {
@@ -624,7 +622,7 @@ func (c *Client) connect(peerID string, peerAddr string) (*clientConn, error) {
 		const duplicatePeerMsg = "Detected multiple Proxy Peers with the same public address %q when connecting to Proxy %q which can lead to inconsistent state and problems establishing sessions. For best results ensure that `peer_public_addr` is unique per proxy and not a load balancer."
 
 		// verify that we hit the proxy with the expected ID
-		if err := validatePeer(peerID, identity); err != nil {
+		if err := validatePeer(auth.HostFQDN(peerID, c.config.ClusterName), identity); err != nil {
 			c.config.Log.Errorf(duplicatePeerMsg, peerAddr, peerID)
 			return trace.Wrap(err)
 		}
@@ -632,7 +630,10 @@ func (c *Client) connect(peerID string, peerAddr string) (*clientConn, error) {
 		return nil
 	}
 
-	qconn, err := goquic.DialAddr(c.ctx, peerAddr, tlsConfig, nil)
+	qconn, err := goquic.DialAddr(c.ctx, peerAddr, tlsConfig, &goquic.Config{
+		MaxIdleTimeout:  time.Minute,
+		KeepAlivePeriod: 20 * time.Second,
+	})
 	if err != nil {
 		c.config.Log.Warnf("---> Failed to perform quic dial: %v", err)
 		return nil, trace.Wrap(err)

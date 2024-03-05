@@ -26,6 +26,7 @@ import (
 	"sync"
 
 	"github.com/gravitational/trace"
+	quicgo "github.com/quic-go/quic-go"
 
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/types"
@@ -155,4 +156,20 @@ type DialParams struct {
 	To       *utils.NetAddr
 	ServerID string
 	ConnType types.TunnelType
+}
+
+type QuicService struct {
+	Listener *quicgo.Listener
+}
+
+func (q *QuicService) Accept(ctx context.Context) (quic.PendingConn, error) {
+	conn, err := q.Listener.Accept(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	srv := quic.NewServer(conn)
+
+	pconn, err := srv.Accept(ctx)
+	return pconn, trace.Wrap(err)
 }

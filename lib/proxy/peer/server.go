@@ -92,7 +92,7 @@ func (s *Server) Serve(ctx context.Context) error {
 					s.config.Log.WithError(err).Debug("connection terminated")
 				}
 			}()
-		case errors.Is(err, context.Canceled):
+		case errors.Is(err, context.Canceled) || utils.IsUseOfClosedNetworkError(err):
 			return nil
 		default:
 			s.config.Log.WithError(err).Warn("failed to accept inbound connection")

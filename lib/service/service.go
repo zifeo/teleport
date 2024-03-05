@@ -52,6 +52,7 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
@@ -72,7 +73,6 @@ import (
 	integrationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/integration/v1"
 	kubeproto "github.com/gravitational/teleport/api/gen/proto/go/teleport/kube/v1"
 	transportpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/transport/v1"
-	"github.com/gravitational/teleport/api/metadata"
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	apiutils "github.com/gravitational/teleport/api/utils"
@@ -3437,7 +3437,7 @@ type proxyListeners struct {
 	// is not enabled. It's used to redirect traffic on that port to the gRPC
 	// listener.
 	reverseTunnelALPN net.Listener
-	proxyPeer         net.Listener
+	proxyPeer         net.PacketConn
 	// grpcPublic receives gRPC traffic that has the TLS ALPN protocol common.ProtocolProxyGRPCInsecure. This
 	// listener does not enforce mTLS authentication since it's used to handle cluster join requests.
 	grpcPublic net.Listener
@@ -3632,7 +3632,8 @@ func (process *TeleportProcess) setupProxyListeners(networkingConfig types.Clust
 			return nil, trace.Wrap(err)
 		}
 
-		listener, err := process.importOrCreateListener(ListenerProxyPeer, addr.String())
+		listener, err := net.ListenPacket("udp", addr.String())
+		//listener, err := process.importOrCreateListener(ListenerProxyPeer, addr.String())
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -4231,50 +4232,58 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 			return tlsCopy, nil
 		}
 
-		proxyPeerGrpcServer = grpc.NewServer(
-			grpc.Creds(peer.NewServerCredentials(credentials.NewTLS(tlsConf))),
-			grpc.ChainStreamInterceptor(metadata.StreamServerInterceptor, interceptors.GRPCServerStreamErrorInterceptor),
-			grpc.KeepaliveParams(keepalive.ServerParameters{
-				Time:    10 * time.Second,
-				Timeout: 20 * time.Second,
-			}),
-			grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-				MinTime:             10 * time.Second,
-				PermitWithoutStream: true,
-			}),
-			grpc.MaxConcurrentStreams(defaults.GRPCMaxConcurrentStreams),
-		)
-
-		svc, err := peer.NewProxyService(clusterdial.NewClusterDialer(tsrv))
+		listener, err := quic.Listen(listeners.proxyPeer, tlsConf, &quic.Config{
+			MaxIdleTimeout:  time.Minute,
+			KeepAlivePeriod: 20 * time.Second,
+		})
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		proto.RegisterProxyServiceServer(proxyPeerGrpcServer, svc)
+
+		//proxyPeerGrpcServer = grpc.NewServer(
+		//	grpc.Creds(peer.NewServerCredentials(credentials.NewTLS(tlsConf))),
+		//	grpc.ChainStreamInterceptor(metadata.StreamServerInterceptor, interceptors.GRPCServerStreamErrorInterceptor),
+		//	grpc.KeepaliveParams(keepalive.ServerParameters{
+		//		Time:    10 * time.Second,
+		//		Timeout: 20 * time.Second,
+		//	}),
+		//	grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+		//		MinTime:             10 * time.Second,
+		//		PermitWithoutStream: true,
+		//	}),
+		//	grpc.MaxConcurrentStreams(defaults.GRPCMaxConcurrentStreams),
+		//)
+		//
+		//svc, err := peer.NewProxyService(clusterdial.NewClusterDialer(tsrv))
+		//if err != nil {
+		//	return trace.Wrap(err)
+		//}
+		//proto.RegisterProxyServiceServer(proxyPeerGrpcServer, svc)
 
 		peerAddrString = peerAddr.String()
 		proxyServer, err := peer.NewServer(peer.ServerConfig{
 			ClusterDialer: clusterdial.NewClusterDialer(tsrv),
 			Log:           log,
-			Server:        svc,
+			Server:        &peer.QuicService{Listener: listener},
 		})
 		if err != nil {
 			return trace.Wrap(err)
 		}
 
-		process.RegisterCriticalFunc("proxy.peer.grpc", func() error {
-			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
-				log.Debugf("Process exiting: failed to start peer proxy service waiting for reverse tunnel server")
-				return nil
-			}
-
-			log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.Addr().String())
-			err := proxyPeerGrpcServer.Serve(listeners.proxyPeer)
-			if err != nil {
-				return trace.Wrap(err)
-			}
-
-			return nil
-		})
+		//process.RegisterCriticalFunc("proxy.peer.grpc", func() error {
+		//	if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
+		//		log.Debugf("Process exiting: failed to start peer proxy service waiting for reverse tunnel server")
+		//		return nil
+		//	}
+		//
+		//	log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.Addr().String())
+		//	err := proxyPeerGrpcServer.Serve(listeners.proxyPeer)
+		//	if err != nil {
+		//		return trace.Wrap(err)
+		//	}
+		//
+		//	return nil
+		//})
 
 		process.RegisterCriticalFunc("proxy.peer", func() error {
 			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
@@ -4282,7 +4291,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				return nil
 			}
 
-			log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.Addr().String())
+			log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.LocalAddr())
 			err := proxyServer.Serve(process.ExitContext())
 			if err != nil {
 				return trace.Wrap(err)
