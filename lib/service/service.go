@@ -126,6 +126,7 @@ import (
 	"github.com/gravitational/teleport/lib/proxy"
 	"github.com/gravitational/teleport/lib/proxy/clusterdial"
 	"github.com/gravitational/teleport/lib/proxy/peer"
+	quic2 "github.com/gravitational/teleport/lib/proxy/quic"
 	"github.com/gravitational/teleport/lib/resumption"
 	"github.com/gravitational/teleport/lib/reversetunnel"
 	"github.com/gravitational/teleport/lib/reversetunnelclient"
@@ -4260,11 +4261,13 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		//}
 		//proto.RegisterProxyServiceServer(proxyPeerGrpcServer, svc)
 
+		svc := &peer.QuicService{PendingC: make(chan quic2.PendingConn, 100)}
+
 		peerAddrString = peerAddr.String()
 		proxyServer, err := peer.NewServer(peer.ServerConfig{
 			ClusterDialer: clusterdial.NewClusterDialer(tsrv),
 			Log:           log,
-			Server:        &peer.QuicService{Listener: listener},
+			Server:        svc,
 		})
 		if err != nil {
 			return trace.Wrap(err)
@@ -4284,6 +4287,25 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		//
 		//	return nil
 		//})
+
+		process.RegisterCriticalFunc("proxy.peer.quic", func() error {
+			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
+				log.Debugf("Process exiting: failed to start peer proxy service waiting for reverse tunnel server")
+				return nil
+			}
+
+			for {
+				qconn, err := listener.Accept(process.ExitContext())
+				if err != nil {
+					if errors.Is(err, context.Canceled) || utils.IsUseOfClosedNetworkError(err) {
+						return nil
+					}
+					return trace.Wrap(err)
+				}
+
+				go svc.Handle(process.ExitContext(), qconn)
+			}
+		})
 
 		process.RegisterCriticalFunc("proxy.peer", func() error {
 			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
