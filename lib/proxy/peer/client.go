@@ -657,9 +657,6 @@ func (c *Client) connect(peerID string, peerAddr string) (*clientConn, error) {
 		qconn, err := goquic.DialAddr(c.ctx, peerAddr, tlsConfig, &goquic.Config{
 			MaxIdleTimeout:  time.Minute,
 			KeepAlivePeriod: 20 * time.Second,
-
-			MaxStreamReceiveWindow:     15 * 1024 * 1024,
-			MaxConnectionReceiveWindow: 100 * 1024 * 1024,
 		})
 		if err != nil {
 			c.config.Log.Warnf("---> Failed to perform quic dial: %v", err)
