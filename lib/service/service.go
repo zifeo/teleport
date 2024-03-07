@@ -3634,7 +3634,7 @@ func (process *TeleportProcess) setupProxyListeners(networkingConfig types.Clust
 		}
 
 		listener, err := net.ListenPacket("udp", addr.String())
-		//listener, err := process.importOrCreateListener(ListenerProxyPeer, addr.String())
+		// listener, err := process.importOrCreateListener(ListenerProxyPeer, addr.String())
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -4236,6 +4236,9 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		listener, err := quic.Listen(listeners.proxyPeer, tlsConf, &quic.Config{
 			MaxIdleTimeout:  time.Minute,
 			KeepAlivePeriod: 20 * time.Second,
+
+			MaxStreamReceiveWindow:     15 * 1024 * 1024,
+			MaxConnectionReceiveWindow: 100 * 1024 * 1024,
 		})
 		if err != nil {
 			return trace.Wrap(err)
