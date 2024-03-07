@@ -23,7 +23,10 @@ import (
 	"crypto/tls"
 	"math/rand"
 	"net"
+	"os"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -198,9 +201,16 @@ func (c *grpcClient) Dial(ctx context.Context, req *clientapi.DialRequest) (net.
 
 // clientConn hold info about a dialed grpc connection
 type clientConn struct {
-	clt  quic.Client
+	clts []quic.Client
+	ctr  atomic.Uint64
 	id   string
 	addr string
+}
+
+func (c *clientConn) Dial(ctx context.Context, req *clientapi.DialRequest) (net.Conn, error) {
+	n := c.ctr.Add(1) - 1
+	clt := c.clts[n%uint64(len(c.clts))]
+	return clt.Dial(ctx, req)
 }
 
 func (c *clientConn) Shutdown(ctx context.Context) error {
@@ -498,7 +508,7 @@ func (c *Client) dial(proxyIDs []string, dialRequest *clientapi.DialRequest) (ne
 	var errs []error
 	for _, conn := range conns {
 		c.config.Log.Infof("---> Attempting dial against proxy %q at %q...", conn.id, conn.addr)
-		stream, err := conn.clt.Dial(c.ctx /*TODO: should this be passed in by caller instead?*/, dialRequest)
+		stream, err := conn.Dial(c.ctx /*TODO: should this be passed in by caller instead?*/, dialRequest)
 		if err != nil {
 			c.metrics.reportTunnelError(errorProxyPeerTunnelRPC)
 			c.config.Log.Debugf("Error opening tunnel rpc to proxy %+v at %+v", conn.id, conn.addr)
@@ -632,20 +642,37 @@ func (c *Client) connect(peerID string, peerAddr string) (*clientConn, error) {
 		return nil
 	}
 
-	qconn, err := goquic.DialAddr(c.ctx, peerAddr, tlsConfig, &goquic.Config{
-		MaxIdleTimeout:  time.Minute,
-		KeepAlivePeriod: 20 * time.Second,
-
-		MaxStreamReceiveWindow:     15 * 1024 * 1024,
-		MaxConnectionReceiveWindow: 100 * 1024 * 1024,
-	})
-	if err != nil {
-		c.config.Log.Warnf("---> Failed to perform quic dial: %v", err)
-		return nil, trace.Wrap(err)
+	connCount := 2
+	if cs := os.Getenv("TELEPORT_UNSTABLE_QUIC_CONNS"); cs != "" {
+		cv, _ := strconv.Atoi(cs)
+		if cv > 0 {
+			connCount = cv
+		}
 	}
 
+	c.config.Log.Infof("---> Attempting to set up %d quic conns to proxy %s (%s)...", connCount, peerID, peerAddr)
+
+	var clts []quic.Client
+	for i := 0; i < connCount; i++ {
+		qconn, err := goquic.DialAddr(c.ctx, peerAddr, tlsConfig, &goquic.Config{
+			MaxIdleTimeout:  time.Minute,
+			KeepAlivePeriod: 20 * time.Second,
+
+			MaxStreamReceiveWindow:     15 * 1024 * 1024,
+			MaxConnectionReceiveWindow: 100 * 1024 * 1024,
+		})
+		if err != nil {
+			c.config.Log.Warnf("---> Failed to perform quic dial: %v", err)
+			return nil, trace.Wrap(err)
+		}
+
+		clts = append(clts, quic.NewClient(qconn))
+	}
+
+	c.config.Log.Infof("---> Successfully created quic conns for proxy %s (%s).", peerID, peerAddr)
+
 	return &clientConn{
-		clt:  quic.NewClient(qconn),
+		clts: clts,
 		id:   peerID,
 		addr: peerAddr,
 	}, nil
