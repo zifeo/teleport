@@ -3946,20 +3946,36 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 
 	if !process.Config.Proxy.DisableReverseTunnel {
 		if listeners.proxyPeer != nil {
-			p, err := peer.NewClient(peer.ClientConfig{
-				Context:     process.ExitContext(),
-				ID:          process.Config.HostUUID,
-				AuthClient:  conn.Client,
-				AccessPoint: accessPoint,
-				TLSConfig:   clientTLSConfig,
-				Log:         process.log,
-				Clock:       process.Clock,
-				ClusterName: clusterName,
-			})
-			if err != nil {
-				return trace.Wrap(err)
+			if os.Getenv("TELEPORT_UNSTABLE_QUIC_PROXY_PEERING") != "" {
+				p, err := peer.NewQUICClient(peer.QUICClientConfig{
+					Context:     process.ExitContext(),
+					ID:          process.Config.HostUUID,
+					AccessPoint: accessPoint,
+					TLSConfig:   clientTLSConfig,
+					Log:         process.log,
+					Clock:       process.Clock,
+					ClusterName: clusterName,
+				})
+				if err != nil {
+					return trace.Wrap(err)
+				}
+				peerClient = p
+			} else {
+				p, err := peer.NewClient(peer.ClientConfig{
+					Context:     process.ExitContext(),
+					ID:          process.Config.HostUUID,
+					AuthClient:  conn.Client,
+					AccessPoint: accessPoint,
+					TLSConfig:   clientTLSConfig,
+					Log:         process.log,
+					Clock:       process.Clock,
+					ClusterName: clusterName,
+				})
+				if err != nil {
+					return trace.Wrap(err)
+				}
+				peerClient = p
 			}
-			peerClient = p
 		}
 
 		tsrv, err = reversetunnel.NewServer(
