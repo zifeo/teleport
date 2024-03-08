@@ -39,8 +39,8 @@ type serverCredentials struct {
 	credentials.TransportCredentials
 }
 
-// NewServerCredentials creates new serverCredentials from the given [crendentials.TransportCredentials].
-func NewServerCredentials(creds credentials.TransportCredentials) *serverCredentials {
+// newServerCredentials creates new serverCredentials from the given [crendentials.TransportCredentials].
+func newServerCredentials(creds credentials.TransportCredentials) *serverCredentials {
 	return &serverCredentials{
 		TransportCredentials: creds,
 	}

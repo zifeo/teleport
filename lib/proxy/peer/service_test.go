@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/gravitational/trace"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -50,7 +51,9 @@ func setupService(t *testing.T) (*proxyService, proto.ProxyServiceClient) {
 	listener, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 
-	proxyService := &proxyService{connC: make(chan connection, 1)}
+	proxyService := &proxyService{
+		log: logrus.New(),
+	}
 	proto.RegisterProxyServiceServer(server, proxyService)
 
 	go server.Serve(listener)

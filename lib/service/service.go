@@ -52,7 +52,6 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
@@ -126,7 +125,6 @@ import (
 	"github.com/gravitational/teleport/lib/proxy"
 	"github.com/gravitational/teleport/lib/proxy/clusterdial"
 	"github.com/gravitational/teleport/lib/proxy/peer"
-	quic2 "github.com/gravitational/teleport/lib/proxy/quic"
 	"github.com/gravitational/teleport/lib/resumption"
 	"github.com/gravitational/teleport/lib/reversetunnel"
 	"github.com/gravitational/teleport/lib/reversetunnelclient"
@@ -3438,7 +3436,8 @@ type proxyListeners struct {
 	// is not enabled. It's used to redirect traffic on that port to the gRPC
 	// listener.
 	reverseTunnelALPN net.Listener
-	proxyPeer         net.PacketConn
+	proxyPeer         net.Listener
+	proxyPeerQUIC     net.PacketConn
 	// grpcPublic receives gRPC traffic that has the TLS ALPN protocol common.ProtocolProxyGRPCInsecure. This
 	// listener does not enforce mTLS authentication since it's used to handle cluster join requests.
 	grpcPublic net.Listener
@@ -3488,6 +3487,9 @@ func (l *proxyListeners) Close() {
 	}
 	if l.proxyPeer != nil {
 		l.proxyPeer.Close()
+	}
+	if l.proxyPeerQUIC != nil {
+		l.proxyPeerQUIC.Close()
 	}
 	if l.grpcPublic != nil {
 		l.grpcPublic.Close()
@@ -3633,13 +3635,18 @@ func (process *TeleportProcess) setupProxyListeners(networkingConfig types.Clust
 			return nil, trace.Wrap(err)
 		}
 
-		listener, err := net.ListenPacket("udp", addr.String())
-		// listener, err := process.importOrCreateListener(ListenerProxyPeer, addr.String())
+		listener, err := process.importOrCreateListener(ListenerProxyPeer, addr.String())
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 
 		listeners.proxyPeer = listener
+
+		quicConn, err := net.ListenPacket("udp", addr.String())
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		listeners.proxyPeerQUIC = quicConn
 	}
 
 	switch {
@@ -3935,11 +3942,11 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 	// register SSH reverse tunnel server that accepts connections
 	// from remote teleport nodes
 	var tsrv reversetunnelclient.Server
-	var peerClient *peer.Client
+	var peerClient peer.ClientI
 
 	if !process.Config.Proxy.DisableReverseTunnel {
 		if listeners.proxyPeer != nil {
-			peerClient, err = peer.NewClient(peer.ClientConfig{
+			p, err := peer.NewClient(peer.ClientConfig{
 				Context:     process.ExitContext(),
 				ID:          process.Config.HostUUID,
 				AuthClient:  conn.Client,
@@ -3952,6 +3959,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 			if err != nil {
 				return trace.Wrap(err)
 			}
+			peerClient = p
 		}
 
 		tsrv, err = reversetunnel.NewServer(
@@ -4212,100 +4220,24 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 	}
 
 	var peerAddrString string
-	var proxyPeerGrpcServer *grpc.Server
+	var proxyServer *peer.Server
 	if !process.Config.Proxy.DisableReverseTunnel && listeners.proxyPeer != nil {
 		peerAddr, err := process.Config.Proxy.PublicPeerAddr()
 		if err != nil {
 			return trace.Wrap(err)
 		}
-
-		tlsConf := serverTLSConfig.Clone()
-		tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
-		tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-			tlsCopy := tlsConf.Clone()
-
-			pool, _, err := auth.ClientCertPool(accessPoint, clusterName, types.HostCA)
-			if err != nil {
-				return nil, trace.Wrap(err)
-			}
-
-			tlsCopy.RootCAs = pool
-			return tlsCopy, nil
-		}
-
-		listener, err := quic.Listen(listeners.proxyPeer, tlsConf, &quic.Config{
-			MaxIdleTimeout:  time.Minute,
-			KeepAlivePeriod: 20 * time.Second,
-		})
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		//proxyPeerGrpcServer = grpc.NewServer(
-		//	grpc.Creds(peer.NewServerCredentials(credentials.NewTLS(tlsConf))),
-		//	grpc.ChainStreamInterceptor(metadata.StreamServerInterceptor, interceptors.GRPCServerStreamErrorInterceptor),
-		//	grpc.KeepaliveParams(keepalive.ServerParameters{
-		//		Time:    10 * time.Second,
-		//		Timeout: 20 * time.Second,
-		//	}),
-		//	grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-		//		MinTime:             10 * time.Second,
-		//		PermitWithoutStream: true,
-		//	}),
-		//	grpc.MaxConcurrentStreams(defaults.GRPCMaxConcurrentStreams),
-		//)
-		//
-		//svc, err := peer.NewProxyService(clusterdial.NewClusterDialer(tsrv))
-		//if err != nil {
-		//	return trace.Wrap(err)
-		//}
-		//proto.RegisterProxyServiceServer(proxyPeerGrpcServer, svc)
-
-		svc := &peer.QuicService{PendingC: make(chan quic2.PendingConn, 100)}
-
 		peerAddrString = peerAddr.String()
-		proxyServer, err := peer.NewServer(peer.ServerConfig{
+		proxyServer, err = peer.NewServer(peer.ServerConfig{
+			AccessCache:   accessPoint,
+			Listener:      listeners.proxyPeer,
+			TLSConfig:     serverTLSConfig,
 			ClusterDialer: clusterdial.NewClusterDialer(tsrv),
 			Log:           log,
-			Server:        svc,
+			ClusterName:   clusterName,
 		})
 		if err != nil {
 			return trace.Wrap(err)
 		}
-
-		//process.RegisterCriticalFunc("proxy.peer.grpc", func() error {
-		//	if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
-		//		log.Debugf("Process exiting: failed to start peer proxy service waiting for reverse tunnel server")
-		//		return nil
-		//	}
-		//
-		//	log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.Addr().String())
-		//	err := proxyPeerGrpcServer.Serve(listeners.proxyPeer)
-		//	if err != nil {
-		//		return trace.Wrap(err)
-		//	}
-		//
-		//	return nil
-		//})
-
-		process.RegisterCriticalFunc("proxy.peer.quic", func() error {
-			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
-				log.Debugf("Process exiting: failed to start peer proxy service waiting for reverse tunnel server")
-				return nil
-			}
-
-			for {
-				qconn, err := listener.Accept(process.ExitContext())
-				if err != nil {
-					if errors.Is(err, context.Canceled) || utils.IsUseOfClosedNetworkError(err) {
-						return nil
-					}
-					return trace.Wrap(err)
-				}
-
-				go svc.Handle(process.ExitContext(), qconn)
-			}
-		})
 
 		process.RegisterCriticalFunc("proxy.peer", func() error {
 			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
@@ -4313,8 +4245,38 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				return nil
 			}
 
-			log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.LocalAddr())
-			err := proxyServer.Serve(process.ExitContext())
+			log.Infof("Peer proxy service is starting on %s", listeners.proxyPeer.Addr().String())
+			err := proxyServer.Serve()
+			if err != nil {
+				return trace.Wrap(err)
+			}
+
+			return nil
+		})
+	}
+
+	var proxyQUICServer *peer.QUICServer
+	if !process.Config.Proxy.DisableReverseTunnel && listeners.proxyPeerQUIC != nil {
+		proxyQUICServer, err = peer.NewQUICServer(peer.QUICServerConfig{
+			AccessCache:   accessPoint,
+			PacketConn:    listeners.proxyPeerQUIC,
+			TLSConfig:     serverTLSConfig,
+			ClusterDialer: clusterdial.NewClusterDialer(tsrv),
+			Log:           log,
+			ClusterName:   clusterName,
+		})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		process.RegisterCriticalFunc("proxy.peer.quic", func() error {
+			if _, err := process.WaitForEvent(process.ExitContext(), ProxyReverseTunnelReady); err != nil {
+				log.Debugf("Process exiting: failed to start quic peer proxy service waiting for reverse tunnel server")
+				return nil
+			}
+
+			log.Infof("QUIC peer proxy service is starting on %s", listeners.proxyPeer.Addr().String())
+			err := proxyQUICServer.Serve()
 			if err != nil {
 				return trace.Wrap(err)
 			}
@@ -4829,8 +4791,11 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				warnOnErr(tsrv.Close(), log)
 			}
 			warnOnErr(rcWatcher.Close(), log)
-			if proxyPeerGrpcServer != nil {
-				proxyPeerGrpcServer.Stop()
+			if proxyServer != nil {
+				warnOnErr(proxyServer.Close(), log)
+			}
+			if proxyQUICServer != nil {
+				warnOnErr(proxyQUICServer.Close(), log)
 			}
 			if webServer != nil {
 				warnOnErr(webServer.Close(), log)
@@ -4876,8 +4841,11 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				warnOnErr(tsrv.Shutdown(ctx), log)
 			}
 			warnOnErr(rcWatcher.Close(), log)
-			if proxyPeerGrpcServer != nil {
-				proxyPeerGrpcServer.GracefulStop()
+			if proxyServer != nil {
+				warnOnErr(proxyServer.Shutdown(), log)
+			}
+			if proxyQUICServer != nil {
+				warnOnErr(proxyQUICServer.Close(), log)
 			}
 			if peerClient != nil {
 				peerClient.Shutdown()

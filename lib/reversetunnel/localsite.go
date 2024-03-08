@@ -169,7 +169,7 @@ type localSite struct {
 	offlineThreshold time.Duration
 
 	// peerClient is the proxy peering client
-	peerClient *peer.Client
+	peerClient peer.ClientI
 
 	// periodicFunctionInterval defines the interval period functions run at
 	periodicFunctionInterval time.Duration

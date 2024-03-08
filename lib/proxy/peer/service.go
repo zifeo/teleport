@@ -19,121 +19,92 @@
 package peer
 
 import (
-	"context"
-	"errors"
 	"net"
 	"strings"
-	"sync"
 
 	"github.com/gravitational/trace"
-	quicgo "github.com/quic-go/quic-go"
+	"github.com/sirupsen/logrus"
 
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/types"
 	streamutils "github.com/gravitational/teleport/api/utils/grpc/stream"
-	"github.com/gravitational/teleport/lib/proxy/quic"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
-type connection struct {
-	req                 *proto.DialRequest
-	stream              proto.ProxyService_DialNodeServer
-	source, destination net.Addr
-	closed              chan error
-	once                sync.Once
-}
-
-func (c *connection) DialRequest() *proto.DialRequest {
-	return c.req
-}
-
-func (c *connection) Accept() (net.Conn, error) {
-	err := c.stream.Send(&proto.Frame{
-		Message: &proto.Frame_ConnectionEstablished{
-			ConnectionEstablished: &proto.ConnectionEstablished{},
-		},
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	streamRW, err := streamutils.NewReadWriter(frameStream{stream: c.stream})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return &connCloser{c: c, Conn: utils.NewTrackingConn(streamutils.NewConn(streamRW, c.source, c.destination))}, nil
-}
-
-func (c *connection) Reject(msg string) error {
-	c.close(msg)
-	return nil
-}
-
-func (c *connection) close(msg string) {
-	c.once.Do(func() {
-		c.closed <- errors.New(msg)
-		close(c.closed)
-	})
-}
-
-type connCloser struct {
-	net.Conn
-	c *connection
-}
-
-func (c *connCloser) Close() error {
-	c.c.close("")
-	return trace.Wrap(c.Conn.Close())
-}
-
-// ProxyService implements the grpc ProxyService.
-type ProxyService struct {
+// proxyService implements the grpc ProxyService.
+type proxyService struct {
 	clusterDialer ClusterDialer
-	connC         chan *connection
-}
-
-func NewProxyService(dialer ClusterDialer) (*ProxyService, error) {
-	if dialer == nil {
-		return nil, trace.BadParameter("missing cluster dialer")
-	}
-
-	return &ProxyService{
-		clusterDialer: dialer,
-		connC:         make(chan *connection, 100),
-	}, nil
+	log           logrus.FieldLogger
 }
 
 // DialNode opens a bidirectional stream to the requested node.
-func (s *ProxyService) DialNode(stream proto.ProxyService_DialNodeServer) error {
+func (s *proxyService) DialNode(stream proto.ProxyService_DialNodeServer) error {
 	frame, err := stream.Recv()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	conn := &connection{
-		req:    frame.GetDialRequest(),
-		stream: stream,
-		closed: make(chan error),
+	// The first frame is always expected to be a dial request.
+	dial := frame.GetDialRequest()
+	if dial == nil {
+		return trace.BadParameter("invalid dial request: request must not be nil")
 	}
 
-	s.connC <- conn
+	if dial.Source == nil || dial.Destination == nil {
+		return trace.BadParameter("invalid dial request: source and destination must not be nil")
+	}
 
-	select {
-	case <-stream.Context().Done():
-		return nil
-	case err := <-conn.closed:
+	log := s.log.WithFields(logrus.Fields{
+		"node": dial.NodeID,
+		"src":  dial.Source.Addr,
+		"dst":  dial.Destination.Addr,
+	})
+	log.Debugf("Dial request from peer.")
+
+	_, clusterName, err := splitServerID(dial.NodeID)
+	if err != nil {
 		return trace.Wrap(err)
 	}
-}
 
-func (p *ProxyService) Accept(ctx context.Context) (quic.PendingConn, error) {
-	select {
-	case c := <-p.connC:
-		return c, nil
-	case <-ctx.Done():
-		return nil, trace.Wrap(ctx.Err())
+	source := &utils.NetAddr{
+		Addr:        dial.Source.Addr,
+		AddrNetwork: dial.Source.Network,
 	}
+	destination := &utils.NetAddr{
+		Addr:        dial.Destination.Addr,
+		AddrNetwork: dial.Destination.Network,
+	}
+
+	nodeConn, err := s.clusterDialer.Dial(clusterName, DialParams{
+		From:     source,
+		To:       destination,
+		ServerID: dial.NodeID,
+		ConnType: dial.TunnelType,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = stream.Send(&proto.Frame{
+		Message: &proto.Frame_ConnectionEstablished{
+			ConnectionEstablished: &proto.ConnectionEstablished{},
+		},
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	streamRW, err := streamutils.NewReadWriter(frameStream{stream: stream})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	streamConn := utils.NewTrackingConn(streamutils.NewConn(streamRW, source, destination))
+
+	err = utils.ProxyConn(stream.Context(), streamConn, nodeConn)
+	sent, received := streamConn.Stat()
+	log.Debugf("Closing dial request from peer. sent: %d received %d", sent, received)
+	return trace.Wrap(err)
 }
 
 // splitServerID splits a server id in to a node id and cluster name.
@@ -156,27 +127,4 @@ type DialParams struct {
 	To       *utils.NetAddr
 	ServerID string
 	ConnType types.TunnelType
-}
-
-type QuicService struct {
-	PendingC chan quic.PendingConn
-}
-
-func (q *QuicService) Handle(ctx context.Context, qconn quicgo.Connection) {
-	srv := quic.NewServer(qconn)
-	for {
-		pconn, err := srv.Accept(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) || utils.IsUseOfClosedNetworkError(err) {
-				return
-			}
-			continue
-		}
-
-		q.PendingC <- pconn
-	}
-}
-
-func (q *QuicService) Accept(ctx context.Context) (quic.PendingConn, error) {
-	return <-q.PendingC, nil
 }

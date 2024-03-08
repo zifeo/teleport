@@ -19,15 +19,23 @@
 package peer
 
 import (
-	"context"
+	"crypto/tls"
 	"errors"
+	"net"
 	"time"
 
 	"github.com/gravitational/trace"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/lib/proxy/quic"
+	"github.com/gravitational/teleport/api/client/proto"
+	"github.com/gravitational/teleport/api/metadata"
+	"github.com/gravitational/teleport/api/utils/grpc/interceptors"
+	"github.com/gravitational/teleport/lib/auth"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -38,10 +46,20 @@ const (
 
 // ServerConfig configures a Server instance.
 type ServerConfig struct {
-	Log           logrus.FieldLogger
+	AccessCache   auth.AccessCache
+	Listener      net.Listener
+	TLSConfig     *tls.Config
 	ClusterDialer ClusterDialer
+	Log           logrus.FieldLogger
+	ClusterName   string
 
-	Server quic.Server
+	// getConfigForClient gets the client tls config.
+	// configurable for testing purposes.
+	getConfigForClient func(*tls.ClientHelloInfo) (*tls.Config, error)
+
+	// service is a custom ProxyServiceServer
+	// configurable for testing purposes.
+	service proto.ProxyServiceServer
 }
 
 // checkAndSetDefaults checks and sets default values
@@ -54,12 +72,43 @@ func (c *ServerConfig) checkAndSetDefaults() error {
 		teleport.Component(teleport.ComponentProxy, "peer"),
 	)
 
-	if c.ClusterDialer == nil {
-		return trace.BadParameter("missing cluster dialer")
+	if c.AccessCache == nil {
+		return trace.BadParameter("missing access cache")
 	}
 
-	if c.Server == nil {
-		return trace.BadParameter("missing server")
+	if c.Listener == nil {
+		return trace.BadParameter("missing listener")
+	}
+
+	if c.ClusterDialer == nil {
+		return trace.BadParameter("missing cluster dialer server")
+	}
+
+	if c.ClusterName == "" {
+		return trace.BadParameter("missing cluster name")
+	}
+
+	if c.TLSConfig == nil {
+		return trace.BadParameter("missing tls config")
+	}
+
+	if len(c.TLSConfig.Certificates) == 0 {
+		return trace.BadParameter("missing tls certificate")
+	}
+
+	c.TLSConfig = c.TLSConfig.Clone()
+	c.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
+
+	if c.getConfigForClient == nil {
+		c.getConfigForClient = getConfigForClient(c.TLSConfig, c.AccessCache, c.Log, c.ClusterName)
+	}
+	c.TLSConfig.GetConfigForClient = c.getConfigForClient
+
+	if c.service == nil {
+		c.service = &proxyService{
+			c.ClusterDialer,
+			c.Log,
+		}
 	}
 
 	return nil
@@ -68,89 +117,66 @@ func (c *ServerConfig) checkAndSetDefaults() error {
 // Server is a proxy service server using grpc and tls.
 type Server struct {
 	config ServerConfig
+	server *grpc.Server
 }
 
 // NewServer creates a new proxy server instance.
 func NewServer(config ServerConfig) (*Server, error) {
-	if err := config.checkAndSetDefaults(); err != nil {
+	err := config.checkAndSetDefaults()
+	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
+	metrics, err := newServerMetrics()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	reporter := newReporter(metrics)
+
+	server := grpc.NewServer(
+		grpc.Creds(newServerCredentials(credentials.NewTLS(config.TLSConfig))),
+		grpc.StatsHandler(newStatsHandler(reporter)),
+		grpc.ChainStreamInterceptor(metadata.StreamServerInterceptor, interceptors.GRPCServerStreamErrorInterceptor),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    peerKeepAlive,
+			Timeout: peerTimeout,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             peerKeepAlive,
+			PermitWithoutStream: true,
+		}),
+		grpc.MaxConcurrentStreams(defaults.GRPCMaxConcurrentStreams),
+	)
+
+	proto.RegisterProxyServiceServer(server, config.service)
+
 	return &Server{
 		config: config,
+		server: server,
 	}, nil
 }
 
 // Serve starts the proxy server.
-func (s *Server) Serve(ctx context.Context) error {
-	for {
-		pconn, err := s.config.Server.Accept(ctx)
-		switch {
-		case err == nil:
-			go func() {
-				if err := s.handleConn(ctx, pconn); err != nil {
-					s.config.Log.WithError(err).Debug("connection terminated")
-				}
-			}()
-		case errors.Is(err, context.Canceled) || utils.IsUseOfClosedNetworkError(err):
+func (s *Server) Serve() error {
+	if err := s.server.Serve(s.config.Listener); err != nil {
+		if errors.Is(err, grpc.ErrServerStopped) ||
+			utils.IsUseOfClosedNetworkError(err) {
 			return nil
-		default:
-			s.config.Log.WithError(err).Warn("failed to accept inbound connection")
 		}
+		return trace.Wrap(err)
 	}
+	return nil
 }
 
-func (s *Server) handleConn(ctx context.Context, conn quic.PendingConn) error {
-	req := conn.DialRequest()
+// Close closes the proxy server immediately.
+func (s *Server) Close() error {
+	s.server.Stop()
+	return nil
+}
 
-	if req == nil {
-		conn.Reject("invalid dial request: request must not be nil")
-		return trace.BadParameter("invalid dial request: request must not be nil")
-	}
-
-	if req.Source == nil || req.Destination == nil {
-		conn.Reject("invalid dial request: source and destination must not be nil")
-		return trace.BadParameter("invalid dial request: source and destination must not be nil")
-	}
-
-	log := s.config.Log.WithFields(logrus.Fields{
-		"node": req.NodeID,
-		"src":  req.Source.Addr,
-		"dst":  req.Destination.Addr,
-	})
-	log.Debug("Received dial request from peer.")
-
-	_, clusterName, err := splitServerID(req.NodeID)
-	if err != nil {
-		conn.Reject(err.Error())
-		return trace.Wrap(err)
-	}
-
-	source := &utils.NetAddr{
-		Addr:        req.Source.Addr,
-		AddrNetwork: req.Source.Network,
-	}
-	destination := &utils.NetAddr{
-		Addr:        req.Destination.Addr,
-		AddrNetwork: req.Destination.Network,
-	}
-
-	targetConn, err := s.config.ClusterDialer.Dial(clusterName, DialParams{
-		From:     source,
-		To:       destination,
-		ServerID: req.NodeID,
-		ConnType: req.TunnelType,
-	})
-	if err != nil {
-		conn.Reject(err.Error())
-		return trace.Wrap(err)
-	}
-
-	clientConn, err := conn.Accept()
-	if err != nil {
-		conn.Reject(err.Error())
-		return trace.Wrap(err, targetConn.Close())
-	}
-
-	return trace.Wrap(utils.ProxyConn(ctx, clientConn, targetConn))
+// Shutdown does a graceful shutdown of the proxy server.
+func (s *Server) Shutdown() error {
+	s.server.GracefulStop()
+	return nil
 }

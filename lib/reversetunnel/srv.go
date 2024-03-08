@@ -200,7 +200,7 @@ type Config struct {
 	NewCachingAccessPointOldProxy auth.NewRemoteProxyCachingAccessPoint
 
 	// PeerClient is a client to peer proxy servers.
-	PeerClient *peer.Client
+	PeerClient peer.ClientI
 
 	// LockWatcher is a lock watcher.
 	LockWatcher *services.LockWatcher
@@ -1087,7 +1087,7 @@ func (s *server) GetSite(name string) (reversetunnelclient.RemoteSite, error) {
 }
 
 // GetProxyPeerClient returns the proxy peer client
-func (s *server) GetProxyPeerClient() *peer.Client {
+func (s *server) GetProxyPeerClient() peer.ClientI {
 	return s.PeerClient
 }
 
