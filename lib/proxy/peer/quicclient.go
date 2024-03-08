@@ -3,6 +3,7 @@ package peer
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"math/rand"
 	"net"
 	"sync"
@@ -392,7 +393,12 @@ func (c *QUICClient) connect(peerID string, peerAddr string) (*clientQUICConn, e
 		return nil, trace.Wrap(err, "Error updating client tls config")
 	}
 
+	tlsConfig.NextProtos = []string{quicPeerALPN}
 	tlsConfig.VerifyConnection = func(state tls.ConnectionState) (err error) {
+		if state.NegotiatedProtocol == "" {
+			return errors.New("ALPN is required")
+		}
+
 		// VerifiedChains must be populated after the handshake.
 		if len(state.VerifiedChains) < 1 || len(state.VerifiedChains[0]) < 1 {
 			return trace.Errorf("missing expected certificate chains")
