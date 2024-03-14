@@ -20,6 +20,7 @@ import "teleport/accesslist/v1/accesslist.proto";
 import "teleport/accessmonitoringrules/v1/access_monitoring_rules.proto";
 import "teleport/discoveryconfig/v1/discoveryconfig.proto";
 import "teleport/legacy/types/types.proto";
+import "teleport/machineid/v1/bot.proto";
 import "teleport/secreports/v1/secreports.proto";
 import "teleport/userloginstate/v1/userloginstate.proto";
 
@@ -150,5 +151,6 @@ message Event {
     teleport.accesslist.v1.Review AccessListReview = 53;
     // AccessMonitoringRule is an access monitoring rule resource.
     teleport.accessmonitoringrules.v1.AccessMonitoringRule AccessMonitoringRule = 54;
+    teleport.machineid.v1.Bot Bot = 55;
   }
 }

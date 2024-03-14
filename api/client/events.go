@@ -18,6 +18,7 @@ import (
 	"github.com/gravitational/trace"
 
 	"github.com/gravitational/teleport/api/client/proto"
+	machineidv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/machineid/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/accesslist"
 	accesslistv1conv "github.com/gravitational/teleport/api/types/accesslist/convert/v1"
@@ -48,7 +49,14 @@ func EventToGRPC(in types.Event) (*proto.Event, error) {
 		}
 		return &out, nil
 	}
+
 	switch r := in.Resource.(type) {
+	case interface{ Unwrap() types.Resource153 }:
+		resource := r.Unwrap()
+		switch r := resource.(type) {
+		case *machineidv1.Bot:
+			out.Resource = &proto.Event_Bot{Bot: r}
+		}
 	case *types.ResourceHeader:
 		out.Resource = &proto.Event_ResourceHeader{
 			ResourceHeader: r,

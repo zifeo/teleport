@@ -25,9 +25,11 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/gravitational/teleport"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
+	machineidv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/machineid/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
@@ -190,6 +192,8 @@ func (e *EventsService) NewWatcher(ctx context.Context, watch types.Watch) (type
 			parser = newAccessListMemberParser()
 		case types.KindAccessListReview:
 			parser = newAccessListReviewParser()
+		case types.KindBot:
+			parser = newBotParser()
 		default:
 			if watch.AllowPartialSuccess {
 				continue
@@ -1222,6 +1226,32 @@ func (p *appParser) parse(event backend.Event) (types.Resource, error) {
 			services.WithExpires(event.Item.Expires),
 			services.WithRevision(event.Item.Revision),
 		)
+	default:
+		return nil, trace.BadParameter("event %v is not supported", event.Type)
+	}
+}
+
+func newBotParser() *botParser {
+	return &botParser{
+		baseParser: newBaseParser(backend.Key("bots")),
+	}
+}
+
+type botParser struct {
+	baseParser
+}
+
+func (p *botParser) parse(event backend.Event) (types.Resource, error) {
+	switch event.Type {
+	case types.OpDelete:
+		return resourceHeader(event, types.KindBot, types.V1, 0)
+	case types.OpPut:
+		var bot machineidv1.Bot
+		if err := protojson.Unmarshal(event.Item.Value, &bot); err != nil {
+			return nil, trace.Wrap(err)
+		}
+
+		return types.Resource153ToLegacy(&bot), nil
 	default:
 		return nil, trace.BadParameter("event %v is not supported", event.Type)
 	}

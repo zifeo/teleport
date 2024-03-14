@@ -17,11 +17,15 @@ package client
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	authpb "github.com/gravitational/teleport/api/client/proto"
+	headerv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/header/v1"
+	machineidv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/machineid/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/accesslist"
 	accesslistv1conv "github.com/gravitational/teleport/api/types/accesslist/convert/v1"
@@ -208,4 +212,32 @@ func newAccessList(t *testing.T, name string, clock clockwork.Clock) *accesslist
 	require.NoError(t, err)
 
 	return accessList
+}
+
+func TestEventToGRPC(t *testing.T) {
+
+	bot := &machineidv1.Bot{
+		Kind:     "bot",
+		SubKind:  "robot",
+		Metadata: &headerv1.Metadata{Name: "Bernard"},
+		Spec: &machineidv1.BotSpec{
+			Roles: []string{"robot", "human"},
+		},
+	}
+
+	out, err := EventToGRPC(types.Event{
+		Type:     types.OpPut,
+		Resource: types.Resource153ToLegacy(bot),
+	})
+	require.NoError(t, err)
+
+	require.Empty(t, cmp.Diff(authpb.Event{Type: authpb.Operation_PUT, Resource: &authpb.Event_Bot{Bot: bot}}, out, protocmp.Transform()))
+
+	out, err = EventToGRPC(types.Event{
+		Type:     types.OpPut,
+		Resource: &types.CertAuthorityV2{},
+	})
+	require.NoError(t, err)
+
+	require.Empty(t, cmp.Diff(authpb.Event{Type: authpb.Operation_PUT, Resource: &authpb.Event_CertAuthority{CertAuthority: &types.CertAuthorityV2{}}}, out, protocmp.Transform()))
 }
