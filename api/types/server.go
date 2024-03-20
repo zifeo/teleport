@@ -514,9 +514,6 @@ func (s *ServerV2) MatchSearch(values []string) bool {
 		fieldVals = append(fieldVals, key, value)
 	}
 
-	fieldVals = append(fieldVals, s.Metadata.Name, s.Spec.Hostname, s.Spec.Addr)
-	fieldVals = append(fieldVals, s.Spec.PublicAddrs...)
-
 	return MatchSearch(fieldVals, values, custom)
 }
 
