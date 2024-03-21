@@ -69,6 +69,7 @@ import (
 	kubewaitingcontainerpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/kubewaitingcontainer/v1"
 	loginrulepb "github.com/gravitational/teleport/api/gen/proto/go/teleport/loginrule/v1"
 	machineidv1pb "github.com/gravitational/teleport/api/gen/proto/go/teleport/machineid/v1"
+	notificationspb "github.com/gravitational/teleport/api/gen/proto/go/teleport/notifications/v1"
 	oktapb "github.com/gravitational/teleport/api/gen/proto/go/teleport/okta/v1"
 	pluginspb "github.com/gravitational/teleport/api/gen/proto/go/teleport/plugins/v1"
 	resourceusagepb "github.com/gravitational/teleport/api/gen/proto/go/teleport/resourceusage/v1"
@@ -2965,6 +2966,12 @@ func (c *Client) GetClusterAuditConfig(ctx context.Context) (types.ClusterAuditC
 		return nil, trace.Wrap(err)
 	}
 	return resp, nil
+}
+
+// NotificationsClient returns an unadorned notifications client using the underlying
+// Auth gRPC connection.
+func (c *Client) NotificationsClient() notificationspb.NotificationServiceClient {
+	return notificationspb.NewNotificationServiceClient(c.conn)
 }
 
 // GetClusterAccessGraphConfig retrieves the Cluster Access Graph configuration from Auth server.

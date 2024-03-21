@@ -5411,6 +5411,9 @@ func NewGRPCServer(cfg GRPCServerConfig) (*GRPCServer, error) {
 
 	clusterconfigpb.RegisterClusterConfigServiceServer(server, clusterConfigService)
 
+	// TODO: start up the notifications service (needs lib/auth changes)
+	// notificationService, err := notificationsv1.NewService()
+
 	// Initialize and register the Kubernetes waiting container service.
 	kubeWaitingContsServer, err := kubewaitingcontainerv1.NewService(kubewaitingcontainerv1.ServiceConfig{
 		Authorizer: cfg.Authorizer,
