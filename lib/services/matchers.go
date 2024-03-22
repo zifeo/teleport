@@ -27,6 +27,7 @@ import (
 	"github.com/gravitational/teleport/api/types"
 	apiutils "github.com/gravitational/teleport/api/utils"
 	azureutils "github.com/gravitational/teleport/api/utils/azure"
+	"github.com/gravitational/teleport/lib/utils/typical"
 )
 
 // ResourceMatcher matches cluster resources.
@@ -220,6 +221,17 @@ func MatchResourceByFilters(resource types.ResourceWithLabels, filter MatchResou
 }
 
 func matchResourceByFilters(resource types.ResourceWithLabels, filter MatchResourceFilter) (bool, error) {
+	if filter.Expression != nil {
+		match, err := filter.Expression.Evaluate(resource)
+		if err != nil {
+			return false, trace.Wrap(err)
+		}
+
+		if !match {
+			return false, nil
+		}
+	}
+
 	if filter.PredicateExpression != "" {
 		parser, err := NewResourceParser(resource)
 		if err != nil {
@@ -283,6 +295,7 @@ type MatchResourceFilter struct {
 	SearchKeywords []string
 	// PredicateExpression holds boolean conditions that must be matched.
 	PredicateExpression string
+	Expression          typical.Expression[types.ResourceWithLabels, bool]
 	// Kinds is a list of resourceKinds to be used when doing a unified resource query.
 	// It will filter out any kind not present in the list. If the list is not present or empty
 	// then all kinds are valid and will be returned (still subject to other included filters)
@@ -295,5 +308,6 @@ func (m *MatchResourceFilter) IsSimple() bool {
 	return len(m.Labels) == 0 &&
 		len(m.SearchKeywords) == 0 &&
 		m.PredicateExpression == "" &&
+		m.Expression == nil &&
 		len(m.Kinds) == 0
 }

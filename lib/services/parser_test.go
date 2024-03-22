@@ -218,13 +218,29 @@ func TestNewResourceParser(t *testing.T) {
 			`exists(labels.env) || (exists(labels.os) && labels.os != "mac")`,
 			`exists(labels.env) || exists(labels.os) && labels.os != "mac"`,
 		}
-		for _, expr := range exprs {
-			t.Run(expr, func(t *testing.T) {
-				match, err := parser.EvalBoolPredicate(expr)
-				require.NoError(t, err)
-				require.True(t, match)
-			})
-		}
+
+		t.Run("old", func(t *testing.T) {
+			for _, expr := range exprs {
+				t.Run(expr, func(t *testing.T) {
+					match, err := parser.EvalBoolPredicate(expr)
+					require.NoError(t, err)
+					require.True(t, match)
+				})
+			}
+		})
+
+		t.Run("new", func(t *testing.T) {
+			for _, expr := range exprs {
+				t.Run(expr, func(t *testing.T) {
+					expression, err := NewResourceParserG[types.ResourceWithLabels](expr)
+					require.NoError(t, err)
+
+					match, err := expression.Evaluate(resource)
+					require.NoError(t, err)
+					require.True(t, match)
+				})
+			}
+		})
 	})
 
 	t.Run("non matching expressions", func(t *testing.T) {
@@ -243,13 +259,29 @@ func TestNewResourceParser(t *testing.T) {
 			`search("mac", "not-found")`,
 			`hasPrefix(name, "x")`,
 		}
-		for _, expr := range exprs {
-			t.Run(expr, func(t *testing.T) {
-				match, err := parser.EvalBoolPredicate(expr)
-				require.NoError(t, err)
-				require.False(t, match)
-			})
-		}
+
+		t.Run("old", func(t *testing.T) {
+			for _, expr := range exprs {
+				t.Run(expr, func(t *testing.T) {
+					match, err := parser.EvalBoolPredicate(expr)
+					require.NoError(t, err)
+					require.False(t, match)
+				})
+			}
+		})
+
+		t.Run("new", func(t *testing.T) {
+			for _, expr := range exprs {
+				t.Run(expr, func(t *testing.T) {
+					expression, err := NewResourceParserG[types.ResourceWithLabels](expr)
+					require.NoError(t, err)
+
+					match, err := expression.Evaluate(resource)
+					require.NoError(t, err)
+					require.False(t, match)
+				})
+			}
+		})
 	})
 
 	t.Run("error in expressions", func(t *testing.T) {
@@ -284,13 +316,26 @@ func TestNewResourceParser(t *testing.T) {
 			`hasPrefix(name, "too", "many")`,
 			"",
 		}
-		for _, expr := range exprs {
-			t.Run(expr, func(t *testing.T) {
-				match, err := parser.EvalBoolPredicate(expr)
-				require.Error(t, err)
-				require.False(t, match)
-			})
-		}
+
+		t.Run("old", func(t *testing.T) {
+			for _, expr := range exprs {
+				t.Run(expr, func(t *testing.T) {
+					match, err := parser.EvalBoolPredicate(expr)
+					require.Error(t, err)
+					require.False(t, match)
+				})
+			}
+		})
+
+		t.Run("new", func(t *testing.T) {
+			for _, expr := range exprs {
+				t.Run(expr, func(t *testing.T) {
+					expression, err := NewResourceParserG[types.ResourceWithLabels](expr)
+					require.Error(t, err)
+					require.Nil(t, expression)
+				})
+			}
+		})
 	})
 }
 

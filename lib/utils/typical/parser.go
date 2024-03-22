@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// typical (TYPed predICAte Library) is a library for building better predicate
+// Package typical (TYPed predICAte Library) is a library for building better predicate
 // expression parsers faster. It is built on top of
 // [predicate](github.com/gravitational/predicate).
 //
@@ -56,20 +56,25 @@ type Expression[TEnv, TResult any] interface {
 }
 
 // ParserSpec defines a predicate language.
-type ParserSpec struct {
-	// Variables defines all of the literals and variables available to
+type ParserSpec[TEnv any] struct {
+	// Variables define all the literals and variables available to
 	// expressions in the predicate language. It is a map from variable name to
 	// definition.
 	Variables map[string]Variable
 
-	// Functions defines all of the functions available to expressions in the
+	// Functions define all the functions available to expressions in the
 	// predicate language.
 	Functions map[string]Function
 
-	// Methods defines all of the methods available to expressions in the
+	// Methods define all the methods available to expressions in the
 	// predicate language. Methods are just functions that take their receiver
 	// as their first argument.
 	Methods map[string]Function
+
+	// GetUnknownIdentifier is used to retrieve any identifiers that cannot
+	// be determined statically. If not defined, any unknown identifiers result
+	// in a [UnknownIdentifierError].
+	GetUnknownIdentifier func(env TEnv, fields []string) (any, error)
 }
 
 // Variable holds the definition of a literal or variable. It is expected to be
@@ -86,7 +91,7 @@ type Function interface {
 // Parser is a predicate expression parser configured to parse expressions of a
 // specific expression language.
 type Parser[TEnv, TResult any] struct {
-	spec    ParserSpec
+	spec    ParserSpec[TEnv]
 	pred    predicate.Parser
 	options parserOptions
 }
@@ -109,7 +114,7 @@ func WithInvalidNamespaceHack() ParserOption {
 }
 
 // NewParser creates a predicate expression parser with the given specification.
-func NewParser[TEnv, TResult any](spec ParserSpec, opts ...ParserOption) (*Parser[TEnv, TResult], error) {
+func NewParser[TEnv, TResult any](spec ParserSpec[TEnv], opts ...ParserOption) (*Parser[TEnv, TResult], error) {
 	var options parserOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -217,6 +222,14 @@ func (p *Parser[TEnv, TResult]) getIdentifier(selector []string) (any, error) {
 		}
 	}
 
+	if p.spec.GetUnknownIdentifier != nil {
+		return dynamicVariable[TEnv, any]{
+			accessor: func(env TEnv) (any, error) {
+				return p.spec.GetUnknownIdentifier(env, selector)
+			},
+		}, nil
+	}
+
 	return nil, UnknownIdentifierError(joined)
 }
 
@@ -249,7 +262,38 @@ func getProperty[TEnv any](mapVal, keyVal any) (any, error) {
 	if dynamicMap, ok := mapVal.(indexExpressionBuilder[TEnv]); ok {
 		return dynamicMap.buildIndexExpression(keyExpr), nil
 	}
+
+	if mapExpr, ok := mapVal.(Expression[TEnv, any]); ok {
+		return untypedMapExpr[TEnv]{mapExpr, keyExpr}, nil
+	}
+
 	return nil, trace.Wrap(unexpectedTypeError[map[string]string](mapVal), "cannot take index of unexpected type")
+}
+
+type untypedMapExpr[TEnv any] struct {
+	mapExpr Expression[TEnv, any]
+	keyExpr Expression[TEnv, string]
+}
+
+func (u untypedMapExpr[TEnv]) Evaluate(env TEnv) (any, error) {
+	k, err := u.keyExpr.Evaluate(env)
+	if err != nil {
+		return nil, trace.Wrap(err, "evaluating key of index expression")
+	}
+	m, err := u.mapExpr.Evaluate(env)
+	if err != nil {
+		return nil, trace.Wrap(err, "evaluating base of index expression")
+	}
+	switch typedMap := m.(type) {
+	case map[string]string:
+		return typedMap[k], nil
+	case map[string][]string:
+		return typedMap[k], nil
+	case map[string]any:
+		return typedMap[k], nil
+	default:
+		return nil, trace.Wrap(unexpectedTypeError[map[string]any](u.mapExpr), "cannot take index of unexpected type")
+	}
 }
 
 type propertyExpr[TEnv, TValues any] struct {
@@ -595,6 +639,56 @@ func (e unaryVariadicFuncExpr[TEnv, TVarArgs, TResult]) Evaluate(env TEnv) (TRes
 		varArgs[i] = arg
 	}
 	res, err := e.impl(varArgs...)
+	if err != nil {
+		return nul, trace.Wrap(err, "evaluating function (%s)", e.name)
+	}
+	return res, nil
+}
+
+type unaryVariadicFunctionWithEnv[TEnv, TVarArgs, TResult any] struct {
+	impl func(TEnv, ...TVarArgs) (TResult, error)
+}
+
+// UnaryVariadicFunctionWithEnv returns a definition for a function that can be called
+// with any number of arguments of a single type. The arguments may be literals
+// or subexpressions.
+func UnaryVariadicFunctionWithEnv[TEnv, TVarArgs, TResult any](impl func(TEnv, ...TVarArgs) (TResult, error)) Function {
+	return unaryVariadicFunctionWithEnv[TEnv, TVarArgs, TResult]{impl}
+}
+
+func (f unaryVariadicFunctionWithEnv[TEnv, TVarArgs, TResult]) buildExpression(name string, args ...any) (any, error) {
+	varArgExprs := make([]Expression[TEnv, TVarArgs], len(args))
+	for i, arg := range args {
+		argExpr, err := coerce[TEnv, TVarArgs](arg)
+		if err != nil {
+			return nil, trace.Wrap(err, "parsing argument %d to function (%s)", i+1, name)
+		}
+		varArgExprs[i] = argExpr
+	}
+	return unaryVariadicFuncWithEnvExpr[TEnv, TVarArgs, TResult]{
+		name:        name,
+		impl:        f.impl,
+		varArgExprs: varArgExprs,
+	}, nil
+}
+
+type unaryVariadicFuncWithEnvExpr[TEnv, TVarArgs, TResult any] struct {
+	name        string
+	impl        func(TEnv, ...TVarArgs) (TResult, error)
+	varArgExprs []Expression[TEnv, TVarArgs]
+}
+
+func (e unaryVariadicFuncWithEnvExpr[TEnv, TVarArgs, TResult]) Evaluate(env TEnv) (TResult, error) {
+	var nul TResult
+	varArgs := make([]TVarArgs, len(e.varArgExprs))
+	for i, argExpr := range e.varArgExprs {
+		arg, err := argExpr.Evaluate(env)
+		if err != nil {
+			return nul, trace.Wrap(err, "evaluating argument %d to function (%s)", i+1, e.name)
+		}
+		varArgs[i] = arg
+	}
+	res, err := e.impl(env, varArgs...)
 	if err != nil {
 		return nul, trace.Wrap(err, "evaluating function (%s)", e.name)
 	}

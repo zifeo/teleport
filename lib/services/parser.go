@@ -34,6 +34,7 @@ import (
 	"github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/types/wrappers"
 	"github.com/gravitational/teleport/lib/session"
+	"github.com/gravitational/teleport/lib/utils/typical"
 )
 
 // RuleContext specifies context passed to the
@@ -729,6 +730,51 @@ func newParserForIdentifierSubcondition(ctx RuleContext, identifier string) (pre
 			return GetStringMapValue(mapExpr.Literal, keyExpr.Literal)
 		},
 	})
+}
+
+func NewResourceParserG[T types.ResourceWithLabels](expression string) (typical.Expression[T, bool], error) {
+	parser, err := typical.NewParser[T, bool](typical.ParserSpec[T]{
+		Variables: map[string]typical.Variable{
+			"labels": typical.DynamicMapFunction(func(r types.ResourceWithLabels, key string) (string, error) {
+				val, _ := r.GetLabel(key)
+				return val, nil
+			}),
+			"name": typical.DynamicVariable(func(r types.ResourceWithLabels) (string, error) {
+				// For nodes, the resource "name" that user expects is the
+				// nodes hostname, not its UUID. Currently for other resources,
+				// the metadata.name returns the name as expected.
+				if server, ok := r.(types.Server); ok {
+					return server.GetHostname(), nil
+				}
+
+				return r.GetName(), nil
+			}),
+		},
+		Functions: map[string]typical.Function{
+			"hasPrefix": typical.BinaryFunction[types.ResourceWithLabels, string, string, bool](func(s, suffix string) (bool, error) {
+				return strings.HasPrefix(s, suffix), nil
+			}),
+			"equals": typical.BinaryFunction[types.ResourceWithLabels, string, string, bool](func(a, b string) (bool, error) {
+				return strings.Compare(a, b) == 0, nil
+			}),
+			"search": typical.UnaryVariadicFunctionWithEnv(func(r types.ResourceWithLabels, v ...string) (bool, error) {
+				return r.MatchSearch(v), nil
+			}),
+			"exists": typical.UnaryFunction[types.ResourceWithLabels, string, bool](func(value string) (bool, error) {
+				return value != "", nil
+			}),
+		},
+		GetUnknownIdentifier: func(env T, fields []string) (any, error) {
+			f, err := predicate.GetFieldByTag(env, teleport.JSON, fields[1:])
+			return f, trace.Wrap(err)
+		},
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	expr, err := parser.Parse(expression)
+	return expr, trace.Wrap(err)
 }
 
 // NewResourceParser returns a parser made for boolean expressions based on a

@@ -1365,24 +1365,21 @@ func (a *ServerWithRoles) ListUnifiedResources(ctx context.Context, req *proto.L
 	)
 
 	filter := services.MatchResourceFilter{
-		Labels:              req.Labels,
-		SearchKeywords:      req.SearchKeywords,
-		PredicateExpression: req.PredicateExpression,
-		Kinds:               req.Kinds,
+		Labels:         req.Labels,
+		SearchKeywords: req.SearchKeywords,
+		Kinds:          req.Kinds,
 	}
 
 	// If a predicate expression was provided, evaluate it with an empty
 	// server to determine if the expression is valid before attempting
 	// to do any listing.
-	if filter.PredicateExpression != "" {
-		parser, err := services.NewResourceParser(&types.ServerV2{})
+	if req.PredicateExpression != "" {
+		expression, err := services.NewResourceParserG[types.ResourceWithLabels](req.PredicateExpression)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 
-		if _, err := parser.EvalBoolPredicate(filter.PredicateExpression); err != nil {
-			return nil, trace.BadParameter("failed to parse predicate expression: %s", err.Error())
-		}
+		filter.Expression = expression
 	}
 
 	// Populate resourceAccessMap with any access errors the user has for each possible
