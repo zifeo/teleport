@@ -3518,7 +3518,7 @@ export const eventsSample = [
     resource_type: 'group',
     teleport_id: '0012345678',
     external_id: '0987654321',
-    display: 'Some group'
+    display: 'Some group',
   },
   {
     time: '2023-05-08T19:21:36.144Z',
@@ -3530,8 +3530,8 @@ export const eventsSample = [
     integration: 'okta',
     resource_type: 'group',
     external_id: '0987654321',
-    display: 'Some group'
-  }, 
+    display: 'Some group',
+  },
   {
     time: '2023-05-08T19:21:36.144Z',
     cluster: 'dev',
@@ -3542,7 +3542,7 @@ export const eventsSample = [
     resource_type: 'user',
     teleport_id: 'test@example.com',
     external_id: '00123456789',
-    display: 'test@example.com'
+    display: 'test@example.com',
   },
   {
     time: '2023-05-08T19:21:37.000Z',
@@ -3554,8 +3554,8 @@ export const eventsSample = [
     error: 'no such user',
     integration: 'okta',
     external_id: '00123456789',
-    display: 'test@example.com'
-  }, 
+    display: 'test@example.com',
+  },
   {
     time: '2023-05-08T19:21:36.144Z',
     cluster: 'dev',
@@ -3566,7 +3566,7 @@ export const eventsSample = [
     resource_type: 'user',
     teleport_id: 'test@example.com',
     external_id: '00123456789',
-    display: 'test@example.com'
+    display: 'test@example.com',
   },
   {
     time: '2023-05-08T19:21:37.000Z',
@@ -3578,7 +3578,7 @@ export const eventsSample = [
     error: 'no such group',
     integration: 'okta',
     external_id: '00123456789',
-    display: 'some group'
-  }, 
+    display: 'some group',
+  },
   // Do not add new events to this array, add it to `events` list.
 ].map(makeEvent);
