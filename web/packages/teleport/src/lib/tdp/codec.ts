@@ -53,6 +53,7 @@ export enum MessageType {
   RDP_RESPONSE_PDU = 30,
   RDP_CONNECTION_ACTIVATED = 31,
   SYNC_KEYS = 32,
+  CLIENT_SCREEN_SPEC_EXT = 33,
   __LAST, // utility value
 }
 
@@ -74,6 +75,14 @@ export enum ScrollAxis {
 export type ClientScreenSpec = {
   width: number;
   height: number;
+};
+
+// TODO
+export type ClientScreenSpecExt = {
+  spec: ClientScreenSpec;
+  scaleFactor: number;
+  physicalWidth: number;
+  physicalHeight: number;
 };
 
 // | message type (2) | left uint32 | top uint32 | right uint32 | bottom uint32 | data []byte |
@@ -330,6 +339,22 @@ export default class Codec {
     view.setUint8(0, MessageType.CLIENT_SCREEN_SPEC);
     view.setUint32(1, width);
     view.setUint32(5, height);
+    return buffer;
+  }
+
+  // encodeClientScreenSpecExt encodes the client's screen spec (ext).
+  // | message type (33) | width uint32 | height uint32 | scale_factor uint32 | physical_width uint32 | physical_height uint32 |
+  encodeClientScreenSpecExt(spec: ClientScreenSpecExt): Message {
+    const { width, height } = spec.spec;
+    const { scaleFactor, physicalWidth, physicalHeight } = spec;
+    const buffer = new ArrayBuffer(21);
+    const view = new DataView(buffer);
+    view.setUint8(0, MessageType.CLIENT_SCREEN_SPEC_EXT);
+    view.setUint32(1, width);
+    view.setUint32(5, height);
+    view.setFloat32(9, scaleFactor);
+    view.setUint32(13, physicalWidth);
+    view.setUint32(17, physicalHeight);
     return buffer;
   }
 

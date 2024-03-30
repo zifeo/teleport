@@ -27,7 +27,7 @@ use ironrdp_cliprdr::{Cliprdr, CliprdrClient, CliprdrSvcMessages};
 use ironrdp_connector::connection_activation::ConnectionActivationState;
 use ironrdp_connector::{Config, ConnectorError, Credentials, DesktopSize};
 use ironrdp_displaycontrol::client::DisplayControlClient;
-use ironrdp_displaycontrol::pdu::DisplayControlPdu;
+use ironrdp_displaycontrol::pdu::{DisplayControlMonitorLayout, DisplayControlPdu};
 use ironrdp_dvc::DvcProcessor;
 use ironrdp_dvc::DynamicChannelId;
 use ironrdp_dvc::{DrdynvcClient, DvcMessage};
@@ -74,7 +74,7 @@ use tokio_boring::{HandshakeError, SslStream};
 const RDP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct ResizeWithholder {
-    withheld_resize: Option<(u32, u32)>,
+    withheld_resize: Option<Resize>,
 }
 
 /// The RDP client on the Rust side of things. Each `Client`
@@ -420,10 +420,9 @@ impl Client {
                             Client::write_rdpdr(&mut write_stream, x224_processor.clone(), args)
                                 .await?;
                         }
-                        ClientFunction::WriteScreenResize(width, height) => {
+                        ClientFunction::WriteScreenResize(resize) => {
                             Client::handle_screen_resize(
-                                width,
-                                height,
+                                resize,
                                 x224_processor.clone(),
                                 &mut write_stream,
                                 resize_withholder.clone(),
@@ -495,15 +494,19 @@ impl Client {
         debug!("DisplayControlClient channel opened");
         // We've been notified that the DisplayControl dvc channel has been opened:
         let mut resize_withholder =
-            Self::resize_manager_lock(resize_withholder).map_err(|err| custom_err!(err))?;
+            Self::resize_withholder_lock(resize_withholder).map_err(|err| custom_err!(err))?;
         let withheld_resize = resize_withholder.withheld_resize.take();
-        if let Some((width, height)) = withheld_resize {
+        if let Some(resize) = withheld_resize {
             // If there was a resize withheld, perform it now.
-            debug!(
-                "Withheld resize for size [{:?}x{:?}] found, sending now",
-                width, height
-            );
-            let pdu = DisplayControlPdu::create_monitor_layout_pdu(width, height)?;
+            debug!("Withheld resize [{:?}] found, sending now", resize);
+            let pdu: DisplayControlPdu = DisplayControlMonitorLayout::new_single_primary_monitor(
+                resize.width,
+                resize.height,
+                resize.scale_factor,
+                resize.physical_width,
+                resize.physical_height,
+            )?
+            .into();
             return Ok(vec![Box::new(pdu)]);
         }
 
@@ -685,8 +688,7 @@ impl Client {
     }
 
     async fn handle_screen_resize(
-        width: u32,
-        height: u32,
+        resize: Resize,
         x224_processor: Arc<Mutex<x224::Processor>>,
         write_stream: &mut RdpWriteStream,
         resize_withholder: Arc<Mutex<ResizeWithholder>>,
@@ -699,26 +701,20 @@ impl Client {
                 Self::get_dvc_processor::<DisplayControlClient>(&x224_processor)?;
             if !disp_ctl_cli.ready() {
                 debug!("DisplayControl channel not ready, withholding resize");
-                let mut resize_withholder = Self::resize_manager_lock(&resize_withholder)?;
+                let mut resize_withholder = Self::resize_withholder_lock(&resize_withholder)?;
                 // The client requested a resize but the DisplayControl channel has not been opened yet.
                 // Sending the resize now would cause an RDP error and end the session; instead we withhold
                 // it until the DisplayControl channel is ready.
-                resize_withholder.withheld_resize = Some((width, height));
+                resize_withholder.withheld_resize = Some(resize);
                 None // No immediate action required.
             } else {
-                Some((width, height)) // Perform the resize immediately.
+                Some(resize) // Perform the resize immediately.
             }
         }; // Drop the lock here to avoid holding it over the await below.
 
-        if let Some((width, height)) = action {
-            debug!("Performing resize to [{:?}x{:?}]", width, height);
-            return Client::write_screen_resize(
-                write_stream,
-                x224_processor.clone(),
-                width,
-                height,
-            )
-            .await;
+        if let Some(resize) = action {
+            debug!("Performing resize to [{:?}]", resize);
+            return Client::write_screen_resize(write_stream, x224_processor.clone(), resize).await;
         }
 
         Ok(())
@@ -728,8 +724,7 @@ impl Client {
     async fn write_screen_resize(
         write_stream: &mut RdpWriteStream,
         x224_processor: Arc<Mutex<x224::Processor>>,
-        width: u32,
-        height: u32,
+        resize: Resize,
     ) -> ClientResult<()> {
         let cloned = x224_processor.clone();
         let messages = global::TOKIO_RT
@@ -744,10 +739,13 @@ impl Client {
                     ));
                 }
 
-                Ok::<_, ClientError>(disp_ctl_cli.encode_monitor(
+                Ok::<_, ClientError>(disp_ctl_cli.encode_single_primary_monitor(
                     channel_id.unwrap(),
-                    width,
-                    height,
+                    resize.width,
+                    resize.height,
+                    resize.scale_factor,
+                    resize.physical_width,
+                    resize.physical_height,
                 ))
             })
             .await???;
@@ -940,7 +938,7 @@ impl Client {
             .map_err(|err| reason_err!(function!(), "PoisonError: {:?}", err))
     }
 
-    fn resize_manager_lock(
+    fn resize_withholder_lock(
         resize_withholder: &Arc<Mutex<ResizeWithholder>>,
     ) -> Result<MutexGuard<ResizeWithholder>, SessionError> {
         resize_withholder
@@ -1056,7 +1054,7 @@ enum ClientFunction {
     /// Corresponds to [`Client::write_rdpdr`]
     WriteRdpdr(RdpdrPdu),
     /// Corresponds to [`Client::write_screen_resize`]
-    WriteScreenResize(u32, u32),
+    WriteScreenResize(Resize),
     /// Corresponds to [`Client::handle_tdp_sd_announce`]
     HandleTdpSdAnnounce(tdp::SharedDirectoryAnnounce),
     /// Corresponds to [`Client::handle_tdp_sd_info_response`]
@@ -1081,6 +1079,15 @@ enum ClientFunction {
     HandleRemoteCopy(Vec<u8>),
     /// Aborts the client by stopping both the read and write loops.
     Stop,
+}
+
+#[derive(Debug)]
+struct Resize {
+    width: u32,
+    height: u32,
+    scale_factor: u32,
+    physical_width: u32,
+    physical_height: u32,
 }
 
 /// `ClientHandle` is used to dispatch [`ClientFunction`]s calls
@@ -1135,13 +1142,39 @@ impl ClientHandle {
         self.send(ClientFunction::WriteRdpdr(pdu)).await
     }
 
-    pub fn write_screen_resize(&self, width: u32, height: u32) -> ClientResult<()> {
-        self.blocking_send(ClientFunction::WriteScreenResize(width, height))
+    pub fn write_screen_resize(
+        &self,
+        width: u32,
+        height: u32,
+        scale_factor: u32,
+        physical_width: u32,
+        physical_height: u32,
+    ) -> ClientResult<()> {
+        self.blocking_send(ClientFunction::WriteScreenResize(Resize {
+            width,
+            height,
+            scale_factor,
+            physical_width,
+            physical_height,
+        }))
     }
 
-    pub async fn write_screen_resize_async(&self, width: u32, height: u32) -> ClientResult<()> {
-        self.send(ClientFunction::WriteScreenResize(width, height))
-            .await
+    pub async fn write_screen_resize_async(
+        &self,
+        width: u32,
+        height: u32,
+        scale_factor: u32,
+        physical_width: u32,
+        physical_height: u32,
+    ) -> ClientResult<()> {
+        self.send(ClientFunction::WriteScreenResize(Resize {
+            width,
+            height,
+            scale_factor,
+            physical_width,
+            physical_height,
+        }))
+        .await
     }
 
     pub fn handle_tdp_sd_announce(&self, sda: tdp::SharedDirectoryAnnounce) -> ClientResult<()> {

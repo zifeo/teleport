@@ -423,11 +423,22 @@ pub unsafe extern "C" fn client_write_screen_resize(
     cgo_handle: CgoHandle,
     width: u32,
     height: u32,
+    scale_factor: u32,
+    physical_width: u32,
+    physical_height: u32,
 ) -> CGOErrCode {
     handle_operation(
         cgo_handle,
         "client_write_screen_resize",
-        move |client_handle| client_handle.write_screen_resize(width, height),
+        move |client_handle| {
+            client_handle.write_screen_resize(
+                width,
+                height,
+                scale_factor,
+                physical_width,
+                physical_height,
+            )
+        },
     )
 }
 

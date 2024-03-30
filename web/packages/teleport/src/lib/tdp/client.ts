@@ -55,6 +55,7 @@ import type {
   SharedDirectoryDeleteResponse,
   FileSystemObject,
   SyncKeys,
+  ClientScreenSpecExt,
 } from './codec';
 import type { WebauthnAssertionResponse } from 'teleport/services/auth';
 
@@ -598,6 +599,11 @@ export default class Client extends EventEmitterWebAuthnSender {
     this.send(this.codec.encodeClientScreenSpec(spec));
   }
 
+  sendClientScreenSpecExt(spec: ClientScreenSpecExt) {
+    this.logger.info(`requesting screen spec from client ${spec}`);
+    this.send(this.codec.encodeClientScreenSpecExt(spec));
+  }
+
   sendMouseMove(x: number, y: number) {
     this.send(this.codec.encodeMouseMove(x, y));
   }
@@ -684,8 +690,8 @@ export default class Client extends EventEmitterWebAuthnSender {
     this.send(this.codec.encodeSharedDirectoryDeleteResponse(response));
   }
 
-  resize(spec: ClientScreenSpec) {
-    this.sendClientScreenSpec(spec);
+  resize(spec: ClientScreenSpecExt) {
+    this.sendClientScreenSpecExt(spec);
   }
 
   sendRDPResponsePDU(responseFrame: ArrayBuffer) {

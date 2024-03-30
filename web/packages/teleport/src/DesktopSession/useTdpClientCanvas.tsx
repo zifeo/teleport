@@ -25,6 +25,7 @@ import { throttle } from 'shared/utils/highbar';
 import { TdpClient, ButtonState, ScrollAxis } from 'teleport/lib/tdp';
 import {
   ClientScreenSpec,
+  ClientScreenSpecExt,
   ClipboardData,
   PngFrame,
 } from 'teleport/lib/tdp/codec';
@@ -112,7 +113,7 @@ export default function useTdpClientCanvas(props: Props) {
   ) => {
     // The first image fragment we see signals a successful TDP connection.
     if (!initialTdpConnectionSucceeded.current) {
-      syncCanvas(ctx.canvas, getDisplaySize());
+      syncCanvas(ctx.canvas, getSpec());
       setTdpConnection({ status: 'success' });
       initialTdpConnectionSucceeded.current = true;
     }
@@ -126,7 +127,7 @@ export default function useTdpClientCanvas(props: Props) {
   ) => {
     // The first image fragment we see signals a successful TDP connection.
     if (!initialTdpConnectionSucceeded.current) {
-      syncCanvas(ctx.canvas, getDisplaySize());
+      syncCanvas(ctx.canvas, getSpec());
       setTdpConnection({ status: 'success' });
       initialTdpConnectionSucceeded.current = true;
     }
@@ -273,7 +274,7 @@ export default function useTdpClientCanvas(props: Props) {
   const canvasOnContextMenu = () => false;
 
   const windowOnResize = throttle((cli: TdpClient) => {
-    const spec = getDisplaySize();
+    const spec = getSpecExt();
     cli.resize(spec);
   }, 250);
 
@@ -294,7 +295,7 @@ export default function useTdpClientCanvas(props: Props) {
 
   return {
     tdpClient,
-    clientScreenSpecToRequest: getDisplaySize(),
+    clientScreenSpecToRequest: getSpec(),
     clientOnPngFrame,
     clientOnBitmapFrame,
     clientOnClientScreenSpec,
@@ -319,10 +320,34 @@ export default function useTdpClientCanvas(props: Props) {
 // Calculates the size (in pixels) of the display.
 // Since we want to maximize the display size for the user, this is simply
 // the full width of the screen and the full height sans top bar.
-function getDisplaySize() {
+function getSpec(): ClientScreenSpec {
   return {
     width: window.innerWidth,
     height: window.innerHeight - TopBarHeight,
+  };
+}
+
+function getSpecExt(): ClientScreenSpecExt {
+  let spec = getSpec();
+  const canvasWidthInPixels = spec.width;
+  const canvasHeightInPixels = spec.height;
+
+  // Calculate physical dimensions using `window.devicePixelRatio`:
+  // "A value of 1 indicates a classic 96 DPI display, while a value of 2 is expected for HiDPI/Retina displays."
+  // https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio
+  const dpi = 96 * window.devicePixelRatio;
+  const physicalWidth = canvasWidthInPixels / dpi;
+  const physicalHeight = canvasHeightInPixels / dpi;
+
+  // Windows also uses 96 dpi as 'default'. The `scaleFactor` is
+  // given as a percentage of this default (hence we multiply by 100).
+  const scaleFactor = window.devicePixelRatio * 100;
+
+  return {
+    spec,
+    scaleFactor,
+    physicalWidth,
+    physicalHeight,
   };
 }
 

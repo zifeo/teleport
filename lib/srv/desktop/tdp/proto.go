@@ -80,6 +80,7 @@ const (
 	TypeRDPResponsePDU                = MessageType(30)
 	TypeRDPConnectionInitialized      = MessageType(31)
 	TypeSyncKeys                      = MessageType(32)
+	TypeClientScreenSpecExt           = MessageType(33)
 )
 
 // Message is a Go representation of a desktop protocol message.
@@ -114,6 +115,8 @@ func decodeMessage(firstByte byte, in byteReader) (Message, error) {
 	switch mt := MessageType(firstByte); mt {
 	case TypeClientScreenSpec:
 		return decodeClientScreenSpec(in)
+	case TypeClientScreenSpecExt:
+		return decodeClientScreenSpecExt(in)
 	case TypePNGFrame:
 		return decodePNGFrame(in)
 	case TypePNG2Frame:
@@ -509,6 +512,33 @@ func (s ClientScreenSpec) Encode() ([]byte, error) {
 
 func decodeClientScreenSpec(in io.Reader) (ClientScreenSpec, error) {
 	var s ClientScreenSpec
+	err := binary.Read(in, binary.BigEndian, &s)
+	return s, trace.Wrap(err)
+}
+
+// ClientScreenSpecExt is the client screen specification (ext).
+// | message type (33) | width uint32 | height uint32 | scale_factor uint32 | physical_width uint32 | physical_height uint32 |
+type ClientScreenSpecExt struct {
+	Width          uint32
+	Height         uint32
+	ScaleFactor    uint32
+	PhysicalWidth  uint32
+	PhysicalHeight uint32
+}
+
+func (s ClientScreenSpecExt) Encode() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	buf.WriteByte(byte(TypeClientScreenSpecExt))
+	writeUint32(buf, s.Width)
+	writeUint32(buf, s.Height)
+	writeUint32(buf, s.ScaleFactor)
+	writeUint32(buf, s.PhysicalWidth)
+	writeUint32(buf, s.PhysicalHeight)
+	return buf.Bytes(), nil
+}
+
+func decodeClientScreenSpecExt(in io.Reader) (ClientScreenSpecExt, error) {
+	var s ClientScreenSpecExt
 	err := binary.Read(in, binary.BigEndian, &s)
 	return s, trace.Wrap(err)
 }

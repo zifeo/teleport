@@ -393,14 +393,17 @@ func (c *Client) startInputStreaming(stopCh chan struct{}) error {
 		c.UpdateClientActivity()
 
 		switch m := msg.(type) {
-		case tdp.ClientScreenSpec:
+		case tdp.ClientScreenSpecExt:
 			c.cfg.Log.Debugf("Client changed screen size to %dx%d", m.Width, m.Height)
 			if errCode := C.client_write_screen_resize(
 				C.ulong(c.handle),
 				C.uint32_t(m.Width),
 				C.uint32_t(m.Height),
+				C.uint32_t(m.ScaleFactor),
+				C.uint32_t(m.PhysicalWidth),
+				C.uint32_t(m.PhysicalHeight),
 			); errCode != C.ErrCodeSuccess {
-				return trace.Errorf("ClientScreenSpec: client_write_screen_resize: %v", errCode)
+				return trace.Errorf("ClientScreenSpecExt: client_write_screen_resize: %v", errCode)
 			}
 		case tdp.MouseMove:
 			mouseX, mouseY = m.X, m.Y
