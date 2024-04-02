@@ -332,16 +332,16 @@ function getSpecExt(): ClientScreenSpecExt {
   const canvasWidthInPixels = spec.width;
   const canvasHeightInPixels = spec.height;
 
-  // Calculate physical dimensions using `window.devicePixelRatio`:
-  // "A value of 1 indicates a classic 96 DPI display, while a value of 2 is expected for HiDPI/Retina displays."
-  // https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio
-  const dpi = 96 * window.devicePixelRatio;
-  const physicalWidth = canvasWidthInPixels / dpi;
-  const physicalHeight = canvasHeightInPixels / dpi;
-
+  // "Due to the 1:96 fixed ratio of CSS in to CSS px"
+  // https://developer.mozilla.org/en-US/docs/Web/CSS/resolution
+  const dpi = 96;
+  // Convert inches to millimeters (1 inch = 25.4 mm)
+  const inchesToMm = 25.4;
+  const physicalWidth = (canvasWidthInPixels / dpi) * inchesToMm;
+  const physicalHeight = (canvasHeightInPixels / dpi) * inchesToMm;
   // Windows also uses 96 dpi as 'default'. The `scaleFactor` is
   // given as a percentage of this default (hence we multiply by 100).
-  const scaleFactor = window.devicePixelRatio * 100;
+  const scaleFactor = 100;
 
   return {
     spec,

@@ -600,7 +600,9 @@ export default class Client extends EventEmitterWebAuthnSender {
   }
 
   sendClientScreenSpecExt(spec: ClientScreenSpecExt) {
-    this.logger.info(`requesting screen spec from client ${spec}`);
+    this.logger.info(
+      `requesting screen spec from client ${JSON.stringify(spec)}`
+    );
     this.send(this.codec.encodeClientScreenSpecExt(spec));
   }
 

@@ -352,7 +352,7 @@ export default class Codec {
     view.setUint8(0, MessageType.CLIENT_SCREEN_SPEC_EXT);
     view.setUint32(1, width);
     view.setUint32(5, height);
-    view.setFloat32(9, scaleFactor);
+    view.setUint32(9, scaleFactor);
     view.setUint32(13, physicalWidth);
     view.setUint32(17, physicalHeight);
     return buffer;
