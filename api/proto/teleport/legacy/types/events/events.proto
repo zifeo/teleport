@@ -6165,14 +6165,14 @@ message SCIMResourceEvent {
   string Integration = 3;
 
   // ResourceType is the SCIM resource type of the Teleport resource involved in
-  // this event. Valid valies include, but are not limited to, "user" and
+  // this event. Valid values include, but are not limited to, "user" and
   // "group".
   string ResourceType = 4;
 
   // TeleportID is the name of the Teleport resource involved in this event.
   string TeleportID = 5;
 
-  // ExternalID is the ID used by the externam SCIM client to to refer to the
+  // ExternalID is the ID used by the external SCIM client to to refer to the
   // resource affected by this event.
   string ExternalID = 6;
 
