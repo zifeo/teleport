@@ -753,7 +753,43 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 	// ssh
 	// Use Interspersed(false) to forward all flags to ssh.
 	ssh := app.Command("ssh", "Run shell or execute a command on a remote SSH node.").Interspersed(false)
-	ssh.Arg("[user@]host", "Remote hostname and the login to use").Required().StringVar(&cf.UserHost)
+	ssh.Arg("[user@]host", "Remote hostname and the login to use").HintActionWithData(func(v string) []string {
+		cf.Context = context.Background()
+		cf.tracer = tracing.NoopTracer("tsh")
+
+		var prefix string
+		if split := strings.SplitAfter(v, "@"); len(split) == 2 {
+			cf.SearchKeywords = split[1]
+			prefix = split[0]
+		}
+
+		tc, err := makeClient(&cf)
+		if err != nil {
+			log.WithError(err).Debug("FAILED TO CREATE CLIENT")
+			return nil
+		}
+
+		// Get list of all nodes in backend and sort by "Node Name".
+		nodes, err := tc.ListNodesWithFilters(cf.Context)
+		if err != nil {
+			log.WithError(err).Debug("FAILED TO LIST NODES")
+			return nil
+		}
+		sort.Slice(nodes, func(i, j int) bool {
+			return nodes[i].GetHostname() < nodes[j].GetHostname()
+		})
+
+		out := make([]string, 0, len(nodes))
+		for _, n := range nodes {
+			if prefix != "" {
+				out = append(out, prefix+n.GetHostname())
+			} else {
+				out = append(out, n.GetHostname())
+			}
+		}
+
+		return out
+	}).Required().StringVar(&cf.UserHost)
 	ssh.Arg("command", "Command to execute on a remote host").StringsVar(&cf.RemoteCommand)
 	app.Flag("jumphost", "SSH jumphost").Short('J').StringVar(&cf.ProxyJump)
 	ssh.Flag("port", "SSH port on a remote host").Short('p').Int32Var(&cf.NodePort)
