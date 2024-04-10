@@ -138,6 +138,7 @@ const cfg = {
     consoleNodes: '/web/cluster/:clusterId/console/nodes',
     consoleConnect: '/web/cluster/:clusterId/console/node/:serverId/:login',
     consoleSession: '/web/cluster/:clusterId/console/session/:sid',
+    kubeConnect: '/web/cluster/:clusterId/console/kube/:kubeId/:namespace/:pod',
     player: '/web/cluster/:clusterId/session/:sid', // ?recordingType=ssh|desktop|k8s&durationMs=1234
     login: '/web/login',
     loginSuccess: '/web/msg/info/login_success',
@@ -533,6 +534,15 @@ const cfg = {
       clusterId,
       serverId,
       login,
+    });
+  },
+
+  getKubeExecConnectRoute({ clusterId, kubeId, namespace, pod }) {
+    return generatePath(cfg.routes.kubeConnect, {
+      clusterId,
+      kubeId,
+      namespace,
+      pod,
     });
   },
 
