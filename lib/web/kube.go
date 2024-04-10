@@ -2,7 +2,6 @@ package web
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -11,12 +10,15 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/sirupsen/logrus"
 
+	clientproto "github.com/gravitational/teleport/api/client/proto"
+	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/session"
 )
 
 type podHandler struct {
+	cluster           string
 	req               PodExecRequest
 	sess              session.Session
 	sctx              *SessionContext
@@ -34,7 +36,7 @@ func (t *podHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
 
 	sessionMetadataResponse, err := json.Marshal(siteSessionGenerateResponse{Session: t.sess})
 	if err != nil {
-		t.sendError("unable to marshal session response", err, t.ws)
+		t.sendError(err)
 		return
 	}
 
@@ -46,13 +48,13 @@ func (t *podHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
 
 	envelopeBytes, err := proto.Marshal(envelope)
 	if err != nil {
-		t.sendError("unable to marshal session data event for web client", err, t.ws)
+		t.sendError(err)
 		return
 	}
 
 	err = t.ws.WriteMessage(websocket.BinaryMessage, envelopeBytes)
 	if err != nil {
-		t.sendError("unable to write message to socket", err, t.ws)
+		t.sendError(err)
 		return
 	}
 }
@@ -61,18 +63,18 @@ func (t *podHandler) Close() error {
 	return trace.Wrap(t.ws.Close())
 }
 
-func (t *podHandler) sendError(errMsg string, err error, ws WSConn) {
+func (t *podHandler) sendError(err error) {
 	envelope := &Envelope{
 		Version: defaults.WebsocketVersion,
 		Type:    defaults.WebsocketError,
-		Payload: fmt.Sprintf("%s: %s", errMsg, err.Error()),
+		Payload: err.Error(),
 	}
 
 	envelopeBytes, err := proto.Marshal(envelope)
 	if err != nil {
 		t.log.WithError(err).Error("failed to marshal error message")
 	}
-	if err := ws.WriteMessage(websocket.BinaryMessage, envelopeBytes); err != nil {
+	if err := t.ws.WriteMessage(websocket.BinaryMessage, envelopeBytes); err != nil {
 		t.log.WithError(err).Error("failed to send error message")
 	}
 }
@@ -82,5 +84,20 @@ func (t *podHandler) handler(r *http.Request) {
 
 	// Start sending ping frames through websocket to the client.
 	go startPingLoop(r.Context(), t.ws, t.keepAliveInterval, t.log, t.Close)
+
+	_, err := t.userClient.GenerateUserCerts(r.Context(), clientproto.UserCertsRequest{
+		PublicKey:         t.sctx.cfg.Session.GetPub(),
+		Username:          t.sctx.GetUser(),
+		Expires:           t.sctx.cfg.Session.GetExpiryTime(),
+		Format:            constants.CertificateFormatStandard,
+		RouteToCluster:    t.cluster,
+		KubernetesCluster: t.req.Cluster,
+		Usage:             clientproto.UserCertsRequest_Kubernetes,
+	})
+	if err != nil {
+		t.log.WithError(err).Warn("Failed creating user certs")
+		t.sendError(err)
+		return
+	}
 
 }

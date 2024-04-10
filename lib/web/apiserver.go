@@ -760,7 +760,7 @@ func (h *Handler) bindDefaultEndpoints() {
 	h.GET("/webapi/sites/:site/connect/ws", h.WithClusterAuthWebSocket(true, h.siteNodeConnect))   // connect to an active session (via websocket, with auth over websocket)
 	h.GET("/webapi/sites/:site/sessions", h.WithClusterAuth(h.clusterActiveAndPendingSessionsGet)) // get list of active and pending sessions
 
-	h.GET("/webapi/sites/:site/connect/ws", h.WithClusterAuthWebSocket(true, h.podConnect))
+	h.GET("/webapi/sites/:site/kube/:clusterName/connect/ws", h.WithClusterAuthWebSocket(true, h.podConnect))
 
 	// Audit events handlers.
 	h.GET("/webapi/sites/:site/events/search", h.WithClusterAuth(h.clusterSearchEvents))                 // search site events
@@ -3283,6 +3283,7 @@ func (h *Handler) podConnect(
 		req:               req,
 		sess:              sess,
 		sctx:              sctx,
+		cluster:           site.GetName(),
 		ws:                ws,
 		keepAliveInterval: keepAliveInterval,
 		log:               h.log.WithField(teleport.ComponentKey, "pod"),
