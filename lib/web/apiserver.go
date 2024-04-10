@@ -760,6 +760,8 @@ func (h *Handler) bindDefaultEndpoints() {
 	h.GET("/webapi/sites/:site/connect/ws", h.WithClusterAuthWebSocket(true, h.siteNodeConnect))   // connect to an active session (via websocket, with auth over websocket)
 	h.GET("/webapi/sites/:site/sessions", h.WithClusterAuth(h.clusterActiveAndPendingSessionsGet)) // get list of active and pending sessions
 
+	h.GET("/webapi/sites/:site/connect/ws", h.WithClusterAuthWebSocket(true, h.podConnect))
+
 	// Audit events handlers.
 	h.GET("/webapi/sites/:site/events/search", h.WithClusterAuth(h.clusterSearchEvents))                 // search site events
 	h.GET("/webapi/sites/:site/events/search/sessions", h.WithClusterAuth(h.clusterSearchSessionEvents)) // search site session events
@@ -3200,6 +3202,94 @@ func (h *Handler) siteNodeConnect(
 	h.log.Infof("Getting terminal to %#v.", req)
 	httplib.MakeTracingHandler(term, teleport.ComponentProxy).ServeHTTP(w, r)
 
+	return nil, nil
+}
+
+type PodExecRequest struct {
+	Namespace string                 `json:"namespace"`
+	Pod       string                 `json:"pod"`
+	User      string                 `json:"user"`
+	Cluster   string                 `json:"cluster"`
+	Term      session.TerminalParams `json:"term"`
+}
+
+func (h *Handler) podConnect(
+	w http.ResponseWriter,
+	r *http.Request,
+	p httprouter.Params,
+	sctx *SessionContext,
+	site reversetunnelclient.RemoteSite,
+	ws *websocket.Conn,
+) (interface{}, error) {
+	q := r.URL.Query()
+	params := q.Get("params")
+	if params == "" {
+		return nil, trace.BadParameter("missing params")
+	}
+	var req PodExecRequest
+	if err := json.Unmarshal([]byte(params), &req); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	clt, err := sctx.GetUserClient(r.Context(), site)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	clusterName := site.GetName()
+
+	accessChecker, err := sctx.GetUserAccessChecker()
+	if err != nil {
+		return session.Session{}, trace.Wrap(err)
+	}
+	policySets := accessChecker.SessionPolicySets()
+	accessEvaluator := auth.NewSessionAccessEvaluator(policySets, types.KubernetesSessionKind, sctx.GetUser())
+
+	sess := session.Session{
+		Kind:                  types.KubernetesSessionKind,
+		Login:                 sctx.GetUser(),
+		ServerID:              req.Cluster,
+		ClusterName:           clusterName,
+		KubernetesClusterName: req.Cluster,
+		Moderated:             accessEvaluator.IsModerated(),
+		ID:                    session.NewID(),
+		Created:               time.Now().UTC(),
+		LastActive:            time.Now().UTC(),
+		Namespace:             apidefaults.Namespace,
+		Owner:                 sctx.GetUser(),
+	}
+
+	h.log.Debugf("New terminal request for pod=%s, namespace=%s. login=%s, sid=%s, websid=%s.",
+		req.Pod, req.User, req.Namespace, sess.ID, sctx.GetSessionID())
+
+	// Try to use the keep alive interval from the request.
+	// When it's not set or below a second, use the cluster's keep alive interval.
+
+	authAccessPoint, err := site.CachingAccessPoint()
+	if err != nil {
+		h.log.Debugf("Unable to get auth access point: %v", err)
+		return nil, trace.Wrap(err)
+	}
+
+	netConfig, err := authAccessPoint.GetClusterNetworkingConfig(r.Context())
+	if err != nil {
+		h.log.WithError(err).Debug("Unable to fetch cluster networking config.")
+		return nil, trace.Wrap(err)
+	}
+
+	keepAliveInterval := netConfig.GetKeepAliveInterval()
+
+	ph := podHandler{
+		req:               req,
+		sess:              sess,
+		sctx:              sctx,
+		ws:                ws,
+		keepAliveInterval: keepAliveInterval,
+		log:               h.log.WithField(teleport.ComponentKey, "pod"),
+		userClient:        clt,
+	}
+
+	ph.ServeHTTP(w, r)
 	return nil, nil
 }
 
