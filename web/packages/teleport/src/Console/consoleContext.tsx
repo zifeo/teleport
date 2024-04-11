@@ -124,7 +124,7 @@ export default class ConsoleContext {
       title,
       serverId: kubeId,
       login: pod,
-      sid: null,
+      sid: '',
       url,
       mode: null,
       created: new Date(),
@@ -230,10 +230,13 @@ export default class ConsoleContext {
     const ctx = context.active();
 
     propagator.inject(ctx, carrier, defaultTextMapSetter);
+    const baseUrl =
+      session.kind === 'k8s' ? cfg.api.ttyKubeExecWsAddr : cfg.api.ttyWsAddr;
 
-    const ttyUrl = cfg.api.ttyWsAddr
+    const ttyUrl = baseUrl
       .replace(':fqdn', getHostName())
       .replace(':clusterId', clusterId)
+      .replace(':clusterName', serverId)
       .replace(':traceparent', carrier['traceparent']);
 
     const addressResolver = new TtyAddressResolver({

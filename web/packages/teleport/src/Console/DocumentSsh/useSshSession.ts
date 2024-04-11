@@ -95,6 +95,7 @@ export default function useSshSession(doc: DocumentSsh) {
         serverId,
         clusterId,
         sid,
+        kind: 'k8s',
       },
       mode
     );
