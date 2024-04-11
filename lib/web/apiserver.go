@@ -3287,7 +3287,9 @@ func (h *Handler) podConnect(
 		ws:                ws,
 		keepAliveInterval: keepAliveInterval,
 		log:               h.log.WithField(teleport.ComponentKey, "pod"),
+		publicProxyAddr:   h.PublicProxyAddr(),
 		userClient:        clt,
+		localAccessPoint:  clt,
 	}
 
 	ph.ServeHTTP(w, r)

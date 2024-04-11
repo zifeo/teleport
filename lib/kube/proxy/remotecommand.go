@@ -360,6 +360,37 @@ type protocolHandler interface {
 // the process' exit code.
 type v4ProtocolHandler struct{}
 
+type IOLogger struct {
+	Name   string
+	Writer io.Writer
+	Reader io.Reader
+	Closer io.Closer
+}
+
+func (l *IOLogger) Write(p []byte) (n int, err error) {
+	n, err = l.Writer.Write(p)
+	if err == nil {
+		log.Debugf("DBGG. Stream %q wrote data(%d): %s", l.Name, n, p[:n])
+	} else {
+		log.Debugf("DBGG. Stream %q write error: %v", l.Name, err)
+	}
+	return n, err
+}
+
+func (l *IOLogger) Read(p []byte) (n int, err error) {
+	n, err = l.Reader.Read(p)
+	if err == nil {
+		log.Debugf("DBGG. Stream %q read data(%d): %s", l.Name, n, p[:n])
+	} else {
+		log.Debugf("DBGG. Stream %q read error: %v", l.Name, err)
+	}
+	return n, err
+}
+
+func (l *IOLogger) Close() error {
+	return l.Closer.Close()
+}
+
 func (*v4ProtocolHandler) waitForStreams(connContext context.Context, streams <-chan streamAndReply, expectedStreams int, expired <-chan time.Time) (*remoteCommandProxy, error) {
 	remoteProxy := &remoteCommandProxy{}
 	receivedStreams := 0
@@ -377,13 +408,13 @@ WaitForStreams:
 				remoteProxy.writeStatus = v4WriteStatusFunc(stream)
 				go waitStreamReply(stopCtx, stream.replySent, replyChan)
 			case StreamTypeStdin:
-				remoteProxy.stdinStream = stream
+				remoteProxy.stdinStream = &IOLogger{Name: "stdin", Writer: stream, Reader: stream, Closer: stream}
 				go waitStreamReply(stopCtx, stream.replySent, replyChan)
 			case StreamTypeStdout:
-				remoteProxy.stdoutStream = stream
+				remoteProxy.stdoutStream = &IOLogger{Name: "stdout", Writer: stream, Reader: stream, Closer: stream}
 				go waitStreamReply(stopCtx, stream.replySent, replyChan)
 			case StreamTypeStderr:
-				remoteProxy.stderrStream = stream
+				remoteProxy.stderrStream = &IOLogger{Name: "stderr", Writer: stream, Reader: stream, Closer: stream}
 				go waitStreamReply(stopCtx, stream.replySent, replyChan)
 			case StreamTypeResize:
 				remoteProxy.resizeStream = stream
