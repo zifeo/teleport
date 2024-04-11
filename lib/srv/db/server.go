@@ -1009,6 +1009,7 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) erro
 
 	monitorConn := clientConn
 	if isWebUI {
+
 		if sessionCtx.DatabaseUser == "join-as-peer" {
 			s.log.WithField("db-user", sessionCtx.DatabaseUser).Debug("got a web ui peer conn")
 			clientConn, err = s.handleWebUIPeerConn(ctx, clientConn)
@@ -1016,8 +1017,12 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) erro
 				return trace.Wrap(err)
 			}
 		} else {
+			sessStart := s.cfg.Clock.Now()
+			s.emitWebSessionStartEvent(rec, sessionCtx)
+			defer s.emitWebSessionEndEvent(sessStart, rec, sessionCtx)
+
 			s.log.WithField("db-user", sessionCtx.DatabaseUser).Debug("got a web ui conn")
-			clientConn, err = s.handleWebUIConn(ctx, clientConn, sessionCtx)
+			clientConn, err = s.handleWebUIConn(ctx, clientConn, sessionCtx, rec)
 			if err != nil {
 				return trace.Wrap(err)
 			}
@@ -1296,7 +1301,7 @@ func (s *Server) handleWebUIPeerConn(ctx context.Context, webConn net.Conn) (net
 	return nil, trace.Errorf("no session found")
 }
 
-func (s *Server) startTermManager(ctx context.Context, webConn net.Conn) io.ReadWriter {
+func (s *Server) startTermManager(ctx context.Context, webConn net.Conn, rec events.SessionPreparerRecorder) io.ReadWriter {
 	manager := srv.NewTermManager()
 	s.sessions[webConn] = manager
 
@@ -1307,12 +1312,64 @@ func (s *Server) startTermManager(ctx context.Context, webConn net.Conn) io.Read
 		s.log.Debugf("== write error %v, %v", id, err)
 	}
 	manager.AddWriter("host", webConn)
+	manager.AddWriter("recorder", rec)
 	manager.AddReader("host", webConn)
 	manager.On()
 	return manager
 }
 
-func (s *Server) handleWebUIConn(ctx context.Context, webConn net.Conn, sessionCtx *common.Session) (net.Conn, error) {
+func (s *Server) newWebSessionStartEvent(sessionCtx *common.Session) *apievents.SessionStart {
+	return &apievents.SessionStart{
+		Metadata: apievents.Metadata{
+			Type:        events.SessionStartEvent,
+			Code:        events.SessionStartCode,
+			ClusterName: sessionCtx.ClusterName,
+			ID:          uuid.New().String(),
+		},
+		ServerMetadata:  common.MakeServerMetadata(sessionCtx),
+		SessionMetadata: common.MakeSessionMetadata(sessionCtx),
+		UserMetadata:    common.MakeUserMetadata(sessionCtx),
+		ConnectionMetadata: apievents.ConnectionMetadata{
+			RemoteAddr: "TODO",
+			Protocol:   events.EventProtocolSSH,
+		},
+		SessionRecording: sessRecordingMode,
+		InitialCommand:   nil,
+	}
+}
+
+func (s *Server) newWebSessionEndEvent(start time.Time, sessionCtx *common.Session) *apievents.SessionEnd {
+	end := time.Now().UTC()
+	return &apievents.SessionEnd{
+		Metadata: apievents.Metadata{
+			Type:        events.SessionEndEvent,
+			Code:        events.SessionEndCode,
+			ClusterName: sessionCtx.ClusterName,
+			ID:          uuid.New().String(),
+		},
+		ServerMetadata: apievents.ServerMetadata{
+			ServerID:        sessionCtx.HostID,
+			ServerNamespace: apidefaults.Namespace,
+			ServerHostname:  s.cfg.Hostname,
+		},
+		SessionMetadata: common.MakeSessionMetadata(sessionCtx),
+		UserMetadata:    common.MakeUserMetadata(sessionCtx),
+		ConnectionMetadata: apievents.ConnectionMetadata{
+			RemoteAddr: "TODO",
+			Protocol:   events.EventProtocolSSH,
+		},
+		EnhancedRecording: false,
+		Interactive:       true,
+		StartTime:         start,
+		EndTime:           end,
+		SessionRecording:  sessRecordingMode,
+		Participants:      []string{sessionCtx.Identity.Username},
+	}
+}
+
+const sessRecordingMode = "node"
+
+func (s *Server) handleWebUIConn(ctx context.Context, webConn net.Conn, sessionCtx *common.Session, rec events.SessionPreparerRecorder) (net.Conn, error) {
 	s.log.Debug("handling a web ui connection")
 
 	// setup a local listener
@@ -1324,7 +1381,7 @@ func (s *Server) handleWebUIConn(ctx context.Context, webConn net.Conn, sessionC
 	defer l.Close()
 	s.log.Debugf("started a local proxy listener at %s", l.Addr())
 
-	manager := s.startTermManager(ctx, webConn)
+	manager := s.startTermManager(ctx, webConn, rec)
 
 	// start psql
 	addr := l.Addr().String()
@@ -1396,4 +1453,34 @@ func (s *Server) isWebUIConn(conn net.Conn) bool {
 	state := tlsConn.ConnectionState()
 	s.log.Debugf("negotiated protocol: %v", state.NegotiatedProtocol)
 	return strings.Contains(state.NegotiatedProtocol, teleport.WebDBClientALPN)
+}
+
+func (s *Server) emitWebSessionStartEvent(rec events.SessionPreparerRecorder, sessionCtx *common.Session) {
+	event, err := rec.PrepareSessionEvent(s.newWebSessionStartEvent(sessionCtx))
+	if err != nil {
+		s.log.WithError(err).Debug("failed to prepare session start event")
+		return
+	}
+	s.log.Debug("prepared session start event")
+	if err := rec.RecordEvent(s.closeContext, event); err != nil {
+		s.log.Debug("failed to record session start event")
+	}
+	if err := s.cfg.Emitter.EmitAuditEvent(s.closeContext, event.GetAuditEvent()); err != nil {
+		s.log.Debug("failed to record session start event")
+	}
+}
+
+func (s *Server) emitWebSessionEndEvent(start time.Time, rec events.SessionPreparerRecorder, sessionCtx *common.Session) {
+	event, err := rec.PrepareSessionEvent(s.newWebSessionEndEvent(start, sessionCtx))
+	if err != nil {
+		s.log.WithError(err).Debug("failed to prepare session end event")
+		return
+	}
+	s.log.Debug("prepared session end event")
+	if err := rec.RecordEvent(s.closeContext, event); err != nil {
+		s.log.Debug("failed to record session end event")
+	}
+	if err := s.cfg.Emitter.EmitAuditEvent(s.closeContext, event.GetAuditEvent()); err != nil {
+		s.log.Debug("failed to record session end event")
+	}
 }
