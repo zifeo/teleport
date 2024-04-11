@@ -1104,6 +1104,13 @@ export interface UrlSshParams {
   clusterId: string;
 }
 
+export interface UrlKubeExecParams {
+  kubeId: string;
+  pod: string;
+  namespace: string;
+  clusterId: string;
+}
+
 export interface UrlSessionRecordingsParams {
   start: string;
   end: string;

@@ -23,7 +23,11 @@ import { W3CTraceContextPropagator } from '@opentelemetry/core';
 
 import webSession from 'teleport/services/websession';
 import history from 'teleport/services/history';
-import cfg, { UrlResourcesParams, UrlSshParams } from 'teleport/config';
+import cfg, {
+  UrlKubeExecParams,
+  UrlResourcesParams,
+  UrlSshParams,
+} from 'teleport/config';
 import { getHostName } from 'teleport/services/api';
 import Tty from 'teleport/lib/term/tty';
 import TtyAddressResolver from 'teleport/lib/term/ttyAddressResolver';
@@ -99,6 +103,35 @@ export default class ConsoleContext {
     });
   }
 
+  addKubeExecDocument({
+    kubeId,
+    clusterId,
+    pod,
+    namespace,
+  }: UrlKubeExecParams) {
+    const title = `${pod}@${kubeId}`;
+    const url = this.getKubeExecDocumentUrl({
+      clusterId,
+      pod,
+      namespace,
+      kubeId,
+    });
+
+    return this.storeDocs.add({
+      kind: 'terminal',
+      status: 'disconnected',
+      clusterId,
+      title,
+      serverId: kubeId,
+      login: pod,
+      sid: null,
+      url,
+      mode: null,
+      created: new Date(),
+      latency: undefined,
+    });
+  }
+
   addSshDocument({ login, serverId, sid, clusterId, mode }: UrlSshParams) {
     const title = login && serverId ? `${login}@${serverId}` : sid;
     const url = this.getSshDocumentUrl({
@@ -136,6 +169,9 @@ export default class ConsoleContext {
     return sshParams.sid
       ? cfg.getSshSessionRoute(sshParams)
       : cfg.getSshConnectRoute(sshParams);
+  }
+  getKubeExecDocumentUrl(kubeExecParams: UrlKubeExecParams) {
+    return cfg.getKubeExecConnectRoute(kubeExecParams);
   }
 
   refreshParties() {
