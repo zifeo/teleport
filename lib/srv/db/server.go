@@ -23,6 +23,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os/exec"
 	"strings"
@@ -305,6 +306,9 @@ type Server struct {
 	connContext context.Context
 	// closeConnFunc is the cancel function of the connContext context.
 	closeConnFunc context.CancelFunc
+
+	// TODO by sesison ID
+	sessions map[net.Conn]*srv.TermManager
 }
 
 // monitoredDatabases is a collection of databases from different sources
@@ -403,6 +407,7 @@ func New(ctx context.Context, config Config) (*Server, error) {
 		},
 		connContext:   connCtx,
 		closeConnFunc: connCancelFunc,
+		sessions:      make(map[net.Conn]*srv.TermManager),
 	}
 
 	// Update TLS config to require client certificate.
@@ -1002,11 +1007,25 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) erro
 		return trace.Wrap(err)
 	}
 
+	monitorConn := clientConn
 	if isWebUI {
-		s.log.Debug("got a web ui conn")
-		clientConn, err = s.handleWebUIConn(ctx, clientConn, sessionCtx)
-		if err != nil {
-			return trace.Wrap(err)
+
+		if sessionCtx.DatabaseUser == "join-as-peer" {
+			s.log.WithField("db-user", sessionCtx.DatabaseUser).Debug("got a web ui peer conn")
+			clientConn, err = s.handleWebUIPeerConn(ctx, clientConn)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+		} else {
+			sessStart := s.cfg.Clock.Now()
+			s.emitWebSessionStartEvent(rec, sessionCtx)
+			defer s.emitWebSessionEndEvent(sessStart, rec, sessionCtx)
+
+			s.log.WithField("db-user", sessionCtx.DatabaseUser).Debug("got a web ui conn")
+			clientConn, err = s.handleWebUIConn(ctx, clientConn, sessionCtx, rec)
+			if err != nil {
+				return trace.Wrap(err)
+			}
 		}
 	} else {
 		s.log.Debug("got a non web ui conn")
@@ -1024,6 +1043,15 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) erro
 		}
 		if err != nil {
 			engine.SendError(err)
+		}
+		if isWebUI {
+			manager, ok := s.sessions[monitorConn]
+			s.log.Debugf("=== cleaning up term manager %v", ok)
+			if ok {
+				manager.Off()
+				manager.Close()
+				delete(s.sessions, monitorConn)
+			}
 		}
 	}()
 
@@ -1260,7 +1288,88 @@ func (s *Server) trackSession(ctx context.Context, sessionCtx *common.Session) e
 	return nil
 }
 
-func (s *Server) handleWebUIConn(ctx context.Context, webConn net.Conn, sessionCtx *common.Session) (net.Conn, error) {
+func (s *Server) handleWebUIPeerConn(ctx context.Context, webConn net.Conn) (net.Conn, error) {
+	s.log.Debug("=== handling a web ui peer connection")
+	// TODO Join any session for now, but need to find by sesion ID.
+	for _, manager := range s.sessions {
+		webConn.Write(manager.GetRecentHistory())
+		manager.AddWriter("peer", webConn)
+		manager.AddReader("peer", webConn)
+		<-manager.TerminateNotifier()
+		return nil, trace.Errorf("peeer success")
+	}
+	return nil, trace.Errorf("no session found")
+}
+
+func (s *Server) startTermManager(ctx context.Context, webConn net.Conn, rec events.SessionPreparerRecorder) io.ReadWriter {
+	manager := srv.NewTermManager()
+	s.sessions[webConn] = manager
+
+	manager.OnReadError = func(id string, err error) {
+		s.log.Debugf("== read error %v, %v", id, err)
+	}
+	manager.OnWriteError = func(id string, err error) {
+		s.log.Debugf("== write error %v, %v", id, err)
+	}
+	manager.AddWriter("host", webConn)
+	manager.AddWriter("recorder", rec)
+	manager.AddReader("host", webConn)
+	manager.On()
+	return manager
+}
+
+func (s *Server) newWebSessionStartEvent(sessionCtx *common.Session) *apievents.SessionStart {
+	return &apievents.SessionStart{
+		Metadata: apievents.Metadata{
+			Type:        events.SessionStartEvent,
+			Code:        events.SessionStartCode,
+			ClusterName: sessionCtx.ClusterName,
+			ID:          uuid.New().String(),
+		},
+		ServerMetadata:  common.MakeServerMetadata(sessionCtx),
+		SessionMetadata: common.MakeSessionMetadata(sessionCtx),
+		UserMetadata:    common.MakeUserMetadata(sessionCtx),
+		ConnectionMetadata: apievents.ConnectionMetadata{
+			RemoteAddr: "TODO",
+			Protocol:   events.EventProtocolSSH,
+		},
+		SessionRecording: sessRecordingMode,
+		InitialCommand:   nil,
+	}
+}
+
+func (s *Server) newWebSessionEndEvent(start time.Time, sessionCtx *common.Session) *apievents.SessionEnd {
+	end := time.Now().UTC()
+	return &apievents.SessionEnd{
+		Metadata: apievents.Metadata{
+			Type:        events.SessionEndEvent,
+			Code:        events.SessionEndCode,
+			ClusterName: sessionCtx.ClusterName,
+			ID:          uuid.New().String(),
+		},
+		ServerMetadata: apievents.ServerMetadata{
+			ServerID:        sessionCtx.HostID,
+			ServerNamespace: apidefaults.Namespace,
+			ServerHostname:  s.cfg.Hostname,
+		},
+		SessionMetadata: common.MakeSessionMetadata(sessionCtx),
+		UserMetadata:    common.MakeUserMetadata(sessionCtx),
+		ConnectionMetadata: apievents.ConnectionMetadata{
+			RemoteAddr: "TODO",
+			Protocol:   events.EventProtocolSSH,
+		},
+		EnhancedRecording: false,
+		Interactive:       true,
+		StartTime:         start,
+		EndTime:           end,
+		SessionRecording:  sessRecordingMode,
+		Participants:      []string{sessionCtx.Identity.Username},
+	}
+}
+
+const sessRecordingMode = "node"
+
+func (s *Server) handleWebUIConn(ctx context.Context, webConn net.Conn, sessionCtx *common.Session, rec events.SessionPreparerRecorder) (net.Conn, error) {
 	s.log.Debug("handling a web ui connection")
 
 	// setup a local listener
@@ -1272,9 +1381,11 @@ func (s *Server) handleWebUIConn(ctx context.Context, webConn net.Conn, sessionC
 	defer l.Close()
 	s.log.Debugf("started a local proxy listener at %s", l.Addr())
 
+	manager := s.startTermManager(ctx, webConn, rec)
+
 	// start psql
 	addr := l.Addr().String()
-	if err := s.pSQLConnect(ctx, addr, webConn, sessionCtx); err != nil {
+	if err := s.pSQLConnect(ctx, addr, webConn, sessionCtx, manager); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
@@ -1286,7 +1397,21 @@ func (s *Server) handleWebUIConn(ctx context.Context, webConn net.Conn, sessionC
 	return localConn, nil
 }
 
-func (s *Server) pSQLConnect(ctx context.Context, addr string, webConn net.Conn, sessionCtx *common.Session) error {
+// TODO tmp hack, fix term manager Close func to satisfy io.ReadWriteCloser
+type nopReadWriteCloser struct {
+	io.ReadWriter
+}
+
+func newNopReadWriterCloser(in io.ReadWriter) io.ReadWriteCloser {
+	return &nopReadWriteCloser{
+		ReadWriter: in,
+	}
+}
+func (n *nopReadWriteCloser) Close() error {
+	return nil
+}
+
+func (s *Server) pSQLConnect(ctx context.Context, addr string, webConn net.Conn, sessionCtx *common.Session, manager io.ReadWriter) error {
 	dbUser := sessionCtx.DatabaseUser
 	dbName := sessionCtx.DatabaseName
 	pgURL := fmt.Sprintf("postgres://%s@%s/%s?sslmode=disable", dbUser, addr, dbName)
@@ -1298,8 +1423,9 @@ func (s *Server) pSQLConnect(ctx context.Context, addr string, webConn net.Conn,
 		s.log.WithError(err).Debug("failed to get a pty")
 		return trace.Wrap(err)
 	}
+
 	go func() {
-		err := utils.ProxyConn(ctx, webConn, ptmx)
+		err := utils.ProxyConn(ctx, newNopReadWriterCloser(manager), ptmx)
 		s.log.WithError(err).Debug("finished copying between web conn and psql")
 	}()
 
@@ -1310,12 +1436,12 @@ func (s *Server) pSQLConnect(ctx context.Context, addr string, webConn net.Conn,
 	// 	s.log.WithError(err).Debug("failed to start psql")
 	// 	return trace.Wrap(err)
 	// }
-	go func() {
+	go func(webConn net.Conn) {
 		// reap psql when it exits
 		err := cmd.Wait()
 		webConn.Write([]byte("psql exited: " + err.Error()))
 		s.log.WithError(err).Debug("psql exited")
-	}()
+	}(webConn)
 	return nil
 }
 
@@ -1327,4 +1453,34 @@ func (s *Server) isWebUIConn(conn net.Conn) bool {
 	state := tlsConn.ConnectionState()
 	s.log.Debugf("negotiated protocol: %v", state.NegotiatedProtocol)
 	return strings.Contains(state.NegotiatedProtocol, teleport.WebDBClientALPN)
+}
+
+func (s *Server) emitWebSessionStartEvent(rec events.SessionPreparerRecorder, sessionCtx *common.Session) {
+	event, err := rec.PrepareSessionEvent(s.newWebSessionStartEvent(sessionCtx))
+	if err != nil {
+		s.log.WithError(err).Debug("failed to prepare session start event")
+		return
+	}
+	s.log.Debug("prepared session start event")
+	if err := rec.RecordEvent(s.closeContext, event); err != nil {
+		s.log.Debug("failed to record session start event")
+	}
+	if err := s.cfg.Emitter.EmitAuditEvent(s.closeContext, event.GetAuditEvent()); err != nil {
+		s.log.Debug("failed to record session start event")
+	}
+}
+
+func (s *Server) emitWebSessionEndEvent(start time.Time, rec events.SessionPreparerRecorder, sessionCtx *common.Session) {
+	event, err := rec.PrepareSessionEvent(s.newWebSessionEndEvent(start, sessionCtx))
+	if err != nil {
+		s.log.WithError(err).Debug("failed to prepare session end event")
+		return
+	}
+	s.log.Debug("prepared session end event")
+	if err := rec.RecordEvent(s.closeContext, event); err != nil {
+		s.log.Debug("failed to record session end event")
+	}
+	if err := s.cfg.Emitter.EmitAuditEvent(s.closeContext, event.GetAuditEvent()); err != nil {
+		s.log.Debug("failed to record session end event")
+	}
 }
