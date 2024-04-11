@@ -539,7 +539,11 @@ func (t *TerminalHandler) handler(ws *websocket.Conn, r *http.Request) {
 		}
 
 		// dial the proxy (aka dialing myself)
-		tlsConn, err := apiclient.DialALPN(ctx, tc.WebProxyAddr, apiclient.ALPNDialerConfig{
+		t.log.WithFields(logrus.Fields{
+			"tc.WebProxyAddr":   tc.WebProxyAddr,
+			"t.proxyPublicAddr": t.proxyPublicAddr,
+		}).Debug("dialing proxy with web-db ALPN")
+		tlsConn, err := apiclient.DialALPN(ctx, t.proxyPublicAddr, apiclient.ALPNDialerConfig{
 			TLSConfig: tlsCfg,
 		})
 		if err != nil {
