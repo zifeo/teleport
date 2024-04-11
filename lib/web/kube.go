@@ -200,7 +200,7 @@ func (t *podHandler) handler(r *http.Request) {
 		return
 	}
 	cfg.Clusters["cluster1"] = &clientcmdapi.Cluster{
-		Server:                t.publicProxyAddr,
+		Server:                "https://" + t.publicProxyAddr,
 		InsecureSkipTLSVerify: true,
 		TLSServerName:         fmt.Sprintf("%s.%s", constants.KubeTeleportProxyALPNPrefix, host),
 	}
