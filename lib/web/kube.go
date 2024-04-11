@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -20,12 +21,15 @@ import (
 
 	clientproto "github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/constants"
+	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
+	"github.com/gravitational/teleport/api/mfa"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/utils/keys"
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/client"
 	"github.com/gravitational/teleport/lib/defaults"
 	proxy2 "github.com/gravitational/teleport/lib/kube/proxy"
+	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/utils"
 )
@@ -72,6 +76,8 @@ func (t *podHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
 		t.sendError(err)
 		return
 	}
+
+	t.handler(r)
 }
 
 func (t *podHandler) Close() error {
@@ -103,6 +109,7 @@ func (t *podHandler) handler(r *http.Request) {
 	pk, err := keys.ParsePrivateKey(t.sctx.cfg.Session.GetPriv())
 	if err != nil {
 		t.log.WithError(err).Warn("Failed getting private key")
+		t.sendError(err)
 		return
 	}
 	key := &client.Key{
@@ -120,22 +127,58 @@ func (t *podHandler) handler(r *http.Request) {
 	_ = CACert
 	if err != nil {
 		t.log.WithError(err).Warn("Failed getting private key")
+		t.sendError(err)
 		return
 	}
 
-	cert, err := t.userClient.GenerateUserCerts(r.Context(), clientproto.UserCertsRequest{
-		PublicKey:         t.sctx.cfg.Session.GetPub(),
+	stream := NewTerminalStream(ctx, TerminalStreamConfig{WS: t.ws, Logger: t.log})
+
+	userKey := &client.Key{
+		PrivateKey: pk,
+		Cert:       t.sctx.cfg.Session.GetPub(),
+		TLSCert:    t.sctx.cfg.Session.GetTLSCert(),
+	}
+
+	certsReq := clientproto.UserCertsRequest{
+		PublicKey:         userKey.MarshalSSHPublicKey(),
 		Username:          t.sctx.GetUser(),
 		Expires:           t.sctx.cfg.Session.GetExpiryTime(),
 		Format:            constants.CertificateFormatStandard,
 		RouteToCluster:    t.cluster,
 		KubernetesCluster: t.req.Cluster,
 		Usage:             clientproto.UserCertsRequest_Kubernetes,
+	}
+
+	_, certs, err := client.PerformMFACeremony(ctx, client.PerformMFACeremonyParams{
+		CurrentAuthClient: t.userClient,
+		RootAuthClient:    t.sctx.cfg.RootClient,
+		MFAPrompt: mfa.PromptFunc(func(ctx context.Context, chal *clientproto.MFAAuthenticateChallenge) (*clientproto.MFAAuthenticateResponse, error) {
+			assertion, err := promptMFAChallenge(stream.WSStream, protobufMFACodec{}).Run(ctx, chal)
+			return assertion, trace.Wrap(err)
+		}),
+		MFAAgainstRoot: t.sctx.cfg.RootClusterName == t.cluster,
+		MFARequiredReq: &clientproto.IsMFARequiredRequest{
+			Target: &clientproto.IsMFARequiredRequest_KubernetesCluster{KubernetesCluster: t.req.Cluster},
+		},
+		ChallengeExtensions: mfav1.ChallengeExtensions{
+			Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_USER_SESSION,
+		},
+		CertsReq: &certsReq,
+		Key:      key,
 	})
-	if err != nil {
-		t.log.WithError(err).Warn("Failed creating user certs")
+	if err != nil && !errors.Is(err, services.ErrSessionMFANotRequired) {
+		t.log.WithError(err).Warn("Failed performing mfa ceremony")
 		t.sendError(err)
 		return
+	}
+
+	if certs == nil {
+		certs, err = t.sctx.cfg.RootClient.GenerateUserCerts(ctx, certsReq)
+		if err != nil {
+			t.log.WithError(err).Warn("Failed issuing user certs")
+			t.sendError(err)
+			return
+		}
 	}
 
 	rsaKey, err := key.PrivateKey.RSAPrivateKeyPEM()
@@ -153,6 +196,7 @@ func (t *podHandler) handler(r *http.Request) {
 	host, _, err := utils.SplitHostPort(t.publicProxyAddr)
 	if err != nil {
 		t.log.WithError(err).Warn("Failed splitting public proxy address")
+		t.sendError(err)
 		return
 	}
 	cfg.Clusters["cluster1"] = &clientcmdapi.Cluster{
@@ -161,7 +205,7 @@ func (t *podHandler) handler(r *http.Request) {
 		TLSServerName:         fmt.Sprintf("%s.%s", constants.KubeTeleportProxyALPNPrefix, host),
 	}
 	cfg.AuthInfos["user1"] = &clientcmdapi.AuthInfo{
-		ClientCertificateData: cert.TLS,
+		ClientCertificateData: certs.TLS,
 		ClientKeyData:         rsaKey,
 	}
 	cfg.Contexts["context1"] = &clientcmdapi.Context{
@@ -174,44 +218,40 @@ func (t *podHandler) handler(r *http.Request) {
 
 	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		t.log.Error(err)
+		t.log.WithError(err).Warn("creating kubernetes config failed")
+		t.sendError(err)
 		return
 	}
 
-	cmd := []string{"sh"}
 	req := kubeClient.CoreV1().RESTClient().Post().Resource("pods").Name(t.req.Pod).
 		Namespace(t.req.Namespace).SubResource("exec")
 	option := &v1.PodExecOptions{
-		Command: cmd,
+		Command: []string{"sh"},
 		Stdin:   true,
 		Stdout:  true,
 		Stderr:  true,
 		TTY:     true,
 	}
 
-	req.VersionedParams(
-		option,
-		scheme.ParameterCodec,
-	)
+	req.VersionedParams(option, scheme.ParameterCodec)
 	t.log.Debugf("Request URL: %s", req.URL())
 
 	wsExec, err := remotecommand.NewWebSocketExecutor(config, "POST", req.URL().String())
 	if err != nil {
-		t.log.Error(err)
+		t.log.WithError(err).Warn("created websocket executor failed")
+		t.sendError(err)
 		return
 	}
 
-	stream := NewTerminalStream(ctx, TerminalStreamConfig{WS: t.ws, Logger: t.log})
-
 	stderrStream := stderrWriter{stream: stream}
-	err = wsExec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+	if err := wsExec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
 		Stdin:  &proxy2.IOLogger{Name: "term_stdin", Reader: stream, Writer: stream, Closer: stream},
 		Stdout: &proxy2.IOLogger{Name: "term_stdout", Reader: stream, Writer: stream, Closer: stream},
 		Stderr: &proxy2.IOLogger{Name: "term_stderr", Reader: stream, Writer: stderrStream, Closer: stream},
 		Tty:    true,
-	})
-	if err != nil {
-		t.log.Error(err)
+	}); err != nil {
+		t.log.WithError(err).Warn("kube exec streaming failed")
+		t.sendError(err)
 		return
 	}
 }

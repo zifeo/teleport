@@ -124,7 +124,7 @@ export default class ConsoleContext {
       title,
       serverId: kubeId,
       login: pod,
-      sid: '',
+      sid: namespace,
       url,
       mode: null,
       created: new Date(),

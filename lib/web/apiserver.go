@@ -3226,9 +3226,17 @@ func (h *Handler) podConnect(
 	if params == "" {
 		return nil, trace.BadParameter("missing params")
 	}
-	var req PodExecRequest
+	var req TerminalRequest
 	if err := json.Unmarshal([]byte(params), &req); err != nil {
 		return nil, trace.Wrap(err)
+	}
+
+	execReq := PodExecRequest{
+		Namespace: string(req.SessionID),
+		Pod:       req.Login,
+		User:      "",
+		Cluster:   req.Server,
+		Term:      req.Term,
 	}
 
 	clt, err := sctx.GetUserClient(r.Context(), site)
@@ -3248,9 +3256,8 @@ func (h *Handler) podConnect(
 	sess := session.Session{
 		Kind:                  types.KubernetesSessionKind,
 		Login:                 sctx.GetUser(),
-		ServerID:              req.Cluster,
 		ClusterName:           clusterName,
-		KubernetesClusterName: req.Cluster,
+		KubernetesClusterName: execReq.Cluster,
 		Moderated:             accessEvaluator.IsModerated(),
 		ID:                    session.NewID(),
 		Created:               time.Now().UTC(),
@@ -3260,7 +3267,7 @@ func (h *Handler) podConnect(
 	}
 
 	h.log.Debugf("New terminal request for pod=%s, namespace=%s. login=%s, sid=%s, websid=%s.",
-		req.Pod, req.User, req.Namespace, sess.ID, sctx.GetSessionID())
+		execReq.Pod, execReq.User, execReq.Namespace, sess.ID, sctx.GetSessionID())
 
 	// Try to use the keep alive interval from the request.
 	// When it's not set or below a second, use the cluster's keep alive interval.
@@ -3280,7 +3287,7 @@ func (h *Handler) podConnect(
 	keepAliveInterval := netConfig.GetKeepAliveInterval()
 
 	ph := podHandler{
-		req:               req,
+		req:               execReq,
 		sess:              sess,
 		sctx:              sctx,
 		cluster:           site.GetName(),
