@@ -33,7 +33,8 @@ export interface DocumentBlank extends DocumentBase {
 
 export interface DocumentSsh extends DocumentBase {
   status: 'connected' | 'disconnected';
-  kind: 'terminal' | 'kube-terminal';
+  kind: 'terminal';
+  kubeExec?: boolean;
   sid?: string;
   mode?: ParticipantMode;
   serverId: string;

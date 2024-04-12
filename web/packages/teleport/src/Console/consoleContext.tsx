@@ -119,6 +119,7 @@ export default class ConsoleContext {
 
     return this.storeDocs.add({
       kind: 'terminal',
+      kubeExec: true,
       status: 'disconnected',
       clusterId,
       title,
@@ -230,8 +231,9 @@ export default class ConsoleContext {
     const ctx = context.active();
 
     propagator.inject(ctx, carrier, defaultTextMapSetter);
-    const baseUrl =
-      session.kind === 'k8s' ? cfg.api.ttyKubeExecWsAddr : cfg.api.ttyWsAddr;
+    const baseUrl = session.kubeExec
+      ? cfg.api.ttyKubeExecWsAddr
+      : cfg.api.ttyWsAddr;
 
     const ttyUrl = baseUrl
       .replace(':fqdn', getHostName())

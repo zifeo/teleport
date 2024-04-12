@@ -31,6 +31,7 @@ export interface Session {
   clusterId: string;
   parties: Participant[];
   addr: string;
+  kubeExec?: boolean;
   // resourceName depending on the "kind" field, is the name
   // of resource that the session is running in:
   //  - ssh: is referring to the hostname
