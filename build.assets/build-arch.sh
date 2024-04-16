@@ -93,7 +93,8 @@ git clone https://github.com/arachsys/libelf.git
 cd libelf
 
 # libelf build system is a bit weird, so we need to do this
-make -j$(nproc)
+make CFLAGS+=-fPIE libelf.a -j$(nproc)
+make libelf.so -j$(nproc)
 make install PREFIX=${SYSROOT}/
 
 cd ..
