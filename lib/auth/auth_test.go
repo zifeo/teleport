@@ -112,6 +112,11 @@ func newTestPack(
 
 	p.versionStorage = NewFakeTeleportVersion()
 
+	identityService, err := local.NewTestIdentityService(p.bk)
+	if err != nil {
+		return p, trace.Wrap(err)
+	}
+
 	p.mockEmitter = &eventstest.MockRecorderEmitter{}
 	authConfig := &InitConfig{
 		DataDir:        dataDir,
@@ -121,7 +126,7 @@ func newTestPack(
 		Authority:      testauthority.New(),
 		Emitter:        p.mockEmitter,
 		// This uses lower bcrypt costs for faster tests.
-		Identity:               local.NewTestIdentityService(p.bk),
+		Identity:               identityService,
 		SkipPeriodicOperations: true,
 	}
 	p.a, err = NewServer(authConfig, opts...)
@@ -3814,11 +3819,14 @@ func newTestServices(t *testing.T) Services {
 	configService, err := local.NewClusterConfigurationService(bk)
 	require.NoError(t, err)
 
+	identityService, err := local.NewTestIdentityService(bk)
+	require.NoError(t, err)
+
 	return Services{
 		TrustInternal:           local.NewCAService(bk),
 		PresenceInternal:        local.NewPresenceService(bk),
 		Provisioner:             local.NewProvisioningService(bk),
-		Identity:                local.NewTestIdentityService(bk),
+		Identity:                identityService,
 		Access:                  local.NewAccessService(bk),
 		DynamicAccessExt:        local.NewDynamicAccessService(bk),
 		ClusterConfiguration:    configService,
