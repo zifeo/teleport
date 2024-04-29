@@ -157,7 +157,13 @@ func TestVnetEcho(t *testing.T) {
 	ctx := context.Background()
 	p := newTestPack(t, ctx)
 
-	dialAddress, err := p.manager.assignTCPHandler(echoHandler{})
+	echoHandler := func(_ context.Context, conn *gonet.TCPConn) error {
+		defer conn.Close()
+		_, err := io.Copy(conn, conn)
+		return trace.Wrap(err)
+	}
+
+	dialAddress, err := p.manager.assignTCPHandler(echoHandler)
 	require.NoError(t, err)
 
 	for i := 0; i < 10; i++ {
@@ -179,18 +185,6 @@ func TestVnetEcho(t *testing.T) {
 			require.Equal(t, strings.TrimSuffix(testString, "\n"), line)
 		})
 	}
-}
-
-type echoHandler struct{}
-
-func (echoHandler) handleTCP(ctx context.Context, connector tcpConnector) error {
-	conn, err := connector()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer conn.Close()
-	_, err = io.Copy(conn, conn)
-	return trace.Wrap(err)
 }
 
 func randomULAAddress() (tcpip.Address, error) {

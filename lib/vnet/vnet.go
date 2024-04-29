@@ -21,7 +21,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -138,10 +137,47 @@ func newState() state {
 	}
 }
 
-// tcpConnector is a type of function that can be called to consume a TCP connection.
-type tcpConnector func() (io.ReadWriteCloser, error)
-type tcpHandler interface {
-	handleTCP(context.Context, tcpConnector) error
+type tcpHandler struct {
+	// parentManager is the manager that this handler belongs to.
+	parentManager *Manager
+	// handleTCPfunc is the function that handles the TCP connection.
+	handleTCPfunc func(context.Context, *gonet.TCPConn) error
+}
+
+func (h *tcpHandler) handleTCP(ctx context.Context, req *tcp.ForwarderRequest) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var wq waiter.Queue
+	waitEntry, notifyCh := waiter.NewChannelEntry(waiter.EventErr | waiter.EventHUp)
+	wq.EventRegister(&waitEntry)
+	defer wq.EventUnregister(&waitEntry)
+
+	endpoint, err := req.CreateEndpoint(&wq)
+	if err != nil {
+		// This err doesn't actually implement [error]
+		return trace.Errorf("creating TCP endpoint: %s", err)
+	}
+
+	req.Complete(false /*don't send TCP reset*/)
+
+	endpoint.SocketOptions().SetKeepAlive(true)
+
+	conn := gonet.NewTCPConn(&wq, endpoint)
+	h.parentManager.wg.Add(1)
+	go func() {
+		defer h.parentManager.wg.Done()
+		select {
+		case <-notifyCh:
+			slog.DebugContext(ctx, "Got HUP or ERR, closing TCP conn.")
+		case <-h.parentManager.destroyed:
+			slog.DebugContext(ctx, "VNet is being destroyed, closing TCP conn.")
+		}
+		cancel()
+		conn.Close()
+	}()
+
+	return h.handleTCPfunc(ctx, conn)
 }
 
 // NewManager creates a new VNet manager with the given configuration and root
@@ -239,14 +275,6 @@ func (m *Manager) handleTCP(req *tcp.ForwarderRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Clients of *tcp.ForwarderRequest must eventually call Complete on it exactly once.
-	var completed bool
-	defer func() {
-		if !completed {
-			req.Complete(true /*send TCP reset*/)
-		}
-	}()
-
 	id := req.ID()
 	slog := m.slog.With("request", id)
 	slog.DebugContext(ctx, "Handling TCP connection.")
@@ -255,44 +283,11 @@ func (m *Manager) handleTCP(req *tcp.ForwarderRequest) {
 	handler, ok := m.getTCPHandler(id.LocalAddress)
 	if !ok {
 		slog.With("addr", id.LocalAddress).DebugContext(ctx, "No handler for address.")
+		req.Complete(true /*send TCP reset*/)
 		return
 	}
 
-	connector := func() (io.ReadWriteCloser, error) {
-		var wq waiter.Queue
-		waitEntry, notifyCh := waiter.NewChannelEntry(waiter.EventErr | waiter.EventHUp)
-		wq.EventRegister(&waitEntry)
-		defer wq.EventUnregister(&waitEntry)
-
-		endpoint, err := req.CreateEndpoint(&wq)
-		if err != nil {
-			// This err doesn't actually implement [error]
-			return nil, trace.Errorf("creating TCP endpoint: %s", err)
-		}
-
-		completed = true
-		req.Complete(false /*don't send TCP reset*/)
-
-		endpoint.SocketOptions().SetKeepAlive(true)
-
-		conn := gonet.NewTCPConn(&wq, endpoint)
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
-			select {
-			case <-notifyCh:
-				slog.DebugContext(ctx, "Got HUP or ERR, closing TCP conn.")
-			case <-m.destroyed:
-				slog.DebugContext(ctx, "VNet is being destroyed, closing TCP conn.")
-			}
-			cancel()
-			conn.Close()
-		}()
-
-		return conn, nil
-	}
-
-	if err := handler.handleTCP(ctx, connector); err != nil {
+	if err := handler.handleTCP(ctx, req); err != nil {
 		if errors.Is(err, context.Canceled) {
 			slog.DebugContext(ctx, "TCP connection handler returned early due to canceled context.")
 		} else {
@@ -308,7 +303,7 @@ func (m *Manager) getTCPHandler(addr tcpip.Address) (tcpHandler, bool) {
 	return handler, ok
 }
 
-func (m *Manager) assignTCPHandler(handler tcpHandler) (tcpip.Address, error) {
+func (m *Manager) assignTCPHandler(handlerFunc func(context.Context, *gonet.TCPConn) error) (tcpip.Address, error) {
 	m.state.mu.Lock()
 	defer m.state.mu.Unlock()
 
@@ -317,7 +312,10 @@ func (m *Manager) assignTCPHandler(handler tcpHandler) (tcpip.Address, error) {
 
 	addr := ipv6WithSuffix(m.ipv6Prefix, u32ToBytes(ipSuffix))
 
-	m.state.tcpHandlers[addr] = handler
+	m.state.tcpHandlers[addr] = tcpHandler{
+		parentManager: m,
+		handleTCPfunc: handlerFunc,
+	}
 	if err := m.addProtocolAddress(addr); err != nil {
 		return addr, trace.Wrap(err)
 	}
