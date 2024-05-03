@@ -470,7 +470,7 @@ func (c *Client) startInputStreaming(stopCh chan struct{}) error {
 				return trace.Errorf("KeyboardButton: client_write_rdp_keyboard: %v", errCode)
 			}
 		case tdp.SyncKeys:
-			if errCode := C.client_write_rdp_sync_keys(C.ulong(c.handle),
+			if errCode := C.client_write_rdp_sync_keys(C.size_t(c.handle),
 				C.CGOSyncKeys{
 					scroll_lock_down: m.ScrollLockState == tdp.ButtonPressed,
 					num_lock_down:    m.NumLockState == tdp.ButtonPressed,
@@ -624,7 +624,7 @@ func (c *Client) startInputStreaming(stopCh chan struct{}) error {
 			}
 		case tdp.SharedDirectoryTruncateResponse:
 			if c.cfg.AllowDirectorySharing {
-				if errCode := C.client_handle_tdp_sd_truncate_response(C.ulong(c.handle), C.CGOSharedDirectoryTruncateResponse{
+				if errCode := C.client_handle_tdp_sd_truncate_response(C.size_t(c.handle), C.CGOSharedDirectoryTruncateResponse{
 					completion_id: C.uint32_t(m.CompletionID),
 					err_code:      m.ErrCode,
 				}); errCode != C.ErrCodeSuccess {
