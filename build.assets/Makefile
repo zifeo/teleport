@@ -440,6 +440,14 @@ enter/arm: buildbox-arm
 teleport-build-docker:
 	docker build -f Dockerfile-build --build-arg GOLANG_VERSION=$(GOLANG_VERSION) --build-arg RUST_VERSION=$(RUST_VERSION) -t teleport-multibuild .
 
+.PHONY: enter/multibuild
+enter/multibuild:
+	docker run -it --rm -v toolchain:/home/ubuntu/x-tools \
+	-v 3rdparty:/home/ubuntu/teleport/build.assets/3rdparty \
+	-v $(shell pwd)/build-arch.sh:/home/ubuntu/teleport/build.assets/build-arch.sh:ro \
+	-v $(shell pwd)/..:/home/ubuntu/teleport \
+	-w /home/ubuntu/teleport $(NOROOT) teleport-multibuild /bin/bash
+
 # AMD64 builds are done on CentOS 7 build boxes for broader glibc compatibility.
 .PHONY: release-amd64
 release-amd64: teleport-build-docker
