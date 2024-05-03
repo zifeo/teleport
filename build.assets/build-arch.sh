@@ -73,8 +73,8 @@ chmod -R +w "${SYSROOT}"
 #zlib
 git clone https://github.com/madler/zlib.git
 cd zlib
-./configure --prefix="${SYSROOT}"
-make -j$(nproc)
+./configure --prefix="${SYSROOT}" --static
+make CFLAGS+=-fPIE -j$(nproc)
 make install
 
 cd ..
@@ -83,7 +83,7 @@ cd ..
 git clone https://github.com/facebook/zstd.git
 cd zstd
 
-make -j$(nproc)
+make CPPFLAGS_STATICLIB+=-fPIE -j$(nproc)
 make install PREFIX=${SYSROOT}
 
 cd ..
@@ -93,8 +93,8 @@ git clone https://github.com/arachsys/libelf.git
 cd libelf
 
 # libelf build system is a bit weird, so we need to do this
-make CFLAGS+=-fPIE libelf.a -j$(nproc)
-make libelf.so -j$(nproc)
+make CFLAGS+=-fPIE -j$(nproc) libelf.a
+make -j$(nproc) libelf.so
 make install PREFIX=${SYSROOT}/
 
 cd ..
@@ -103,7 +103,7 @@ cd ..
 git clone https://github.com/libbpf/libbpf.git
 cd libbpf/src
 
-BUILD_STATIC_ONLY=y EXTRA_CFLAGS=-fPIC DESTDIR=${SYSROOT} V=1 make install install_uapi_headers
+BUILD_STATIC_ONLY=y EXTRA_CFLAGS=-fPIE DESTDIR=${SYSROOT} V=1 make install install_uapi_headers
 
 cd  ../..
 
@@ -112,7 +112,7 @@ wget https://zenlayer.dl.sourceforge.net/project/libtirpc/libtirpc/1.3.4/libtirp
 tar xvf libtirpc-1.3.4.tar.bz2
 cd libtirpc-1.3.4
 
-./configure --prefix="${SYSROOT}" --disable-gssapi --host=${ARCH}-centos7-linux-gnu
+CFLAGS=-fPIE ./configure --prefix="${SYSROOT}" --disable-gssapi --host=${ARCH}-centos7-linux-gnu
 make -j$(nproc)
 make install
 
@@ -123,7 +123,7 @@ git clone https://github.com/linux-pam/linux-pam.git
 cd linux-pam
 
 ./autogen.sh
-CFLAGS=-fPIC ./configure --prefix="${SYSROOT}" --disable-doc  --disable-examples --includedir="${SYSROOT}/include/security" --host=${ARCH}
+CFLAGS=-fPIE ./configure --prefix="${SYSROOT}" --disable-doc  --disable-examples --includedir="${SYSROOT}/include/security" --host=${ARCH}
 make -j$(nproc)
 make install
 
