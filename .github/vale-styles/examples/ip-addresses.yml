@@ -1,0 +1,8 @@
+extends: substitution
+message: "Do not use IP addresses in documentation that are not reserved for this purpose. Instead of %s, use `192.0.2.0`, `198.51.100.0`, or `203.0.113.0`. See RFC 5737 for details."
+link: 'https://datatracker.ietf.org/doc/html/rfc5737'
+level: error
+swap:
+  '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}': '192.0.2.0'
+  '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}': '198.51.100.0'
+  '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}': '203.0.113.0'
