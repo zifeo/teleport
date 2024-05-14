@@ -27,6 +27,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/gravitational/teleport/api/client/proto"
+	accessmonitoringrules "github.com/gravitational/teleport/api/gen/proto/go/teleport/accessmonitoringrules/v1"
+	crownjewelv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/crownjewel/v1"
 	integrationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/integration/v1"
 	kubewaitingcontainerpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/kubewaitingcontainer/v1"
 	userspb "github.com/gravitational/teleport/api/gen/proto/go/teleport/users/v1"
@@ -787,6 +789,9 @@ type DiscoveryAccessPoint interface {
 
 	// Ping gets basic info about the auth server.
 	Ping(context.Context) (proto.PingResponse, error)
+
+	// UpdateDiscoveryConfigStatus updates the status of a discovery config.
+	UpdateDiscoveryConfigStatus(ctx context.Context, name string, status discoveryconfig.Status) (*discoveryconfig.DiscoveryConfig, error)
 }
 
 // ReadOktaAccessPoint is a read only API interface to be
@@ -922,6 +927,13 @@ type AccessCache interface {
 
 	// GetClusterName gets the name of the cluster from the backend.
 	GetClusterName(opts ...services.MarshalOption) (types.ClusterName, error)
+}
+
+// AccessCacheWithEvents extends the AccessCache interface with events. Useful for trust-related components
+// that need to watch for changes.
+type AccessCacheWithEvents interface {
+	AccessCache
+	types.Events
 }
 
 // Cache is a subset of the auth interface handling
@@ -1146,11 +1158,22 @@ type Cache interface {
 	// ListAccessListReviews will list access list reviews for a particular access list.
 	ListAccessListReviews(ctx context.Context, accessList string, pageSize int, pageToken string) (reviews []*accesslist.Review, nextToken string, err error)
 
+	// ListCrownJewels returns a paginated list of crown jewels.
+	ListCrownJewels(ctx context.Context, pageSize int64, nextToken string) ([]*crownjewelv1.CrownJewel, string, error)
+
+	// GetCrownJewel returns the specified crown jewel.
+	GetCrownJewel(ctx context.Context, name string) (*crownjewelv1.CrownJewel, error)
+
 	// IntegrationsGetter defines read/list methods for integrations.
 	services.IntegrationsGetter
 
-	// NotificationsGetter defines list methods for notifications.
+	// NotificationGetter defines list methods for notifications.
 	services.NotificationGetter
+
+	// ListAccessMonitoringRules returns a paginated list of access monitoring rules.
+	ListAccessMonitoringRules(ctx context.Context, limit int, startKey string) ([]*accessmonitoringrules.AccessMonitoringRule, string, error)
+	// GetAccessMonitoringRule returns the specified access monitoring rule.
+	GetAccessMonitoringRule(ctx context.Context, name string) (*accessmonitoringrules.AccessMonitoringRule, error)
 }
 
 type NodeWrapper struct {
@@ -1379,6 +1402,11 @@ func (w *DiscoveryWrapper) EnrollEKSClusters(ctx context.Context, req *integrati
 // Ping gets basic info about the auth server.
 func (w *DiscoveryWrapper) Ping(ctx context.Context) (proto.PingResponse, error) {
 	return w.NoCache.Ping(ctx)
+}
+
+// UpdateDiscoveryConfigStatus updates the status of a discovery config.
+func (w *DiscoveryWrapper) UpdateDiscoveryConfigStatus(ctx context.Context, name string, status discoveryconfig.Status) (*discoveryconfig.DiscoveryConfig, error) {
+	return w.NoCache.UpdateDiscoveryConfigStatus(ctx, name, status)
 }
 
 // Close closes all associated resources

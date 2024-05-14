@@ -230,6 +230,12 @@ const (
 	// This is indicates that the database agent http transport failed to round trip the request.
 	DynamoDBRequestFailureCode = "TDY01E"
 
+	// SpannerRPCCode is the db.session.spanner.rpc event code.
+	SpannerRPCCode = "TSPN001I"
+	// SpannerRPCDeniedCode is the warning event code for a Spanner client RPC
+	// that is denied.
+	SpannerRPCDeniedCode = "TSPN001W"
+
 	// DatabaseCreateCode is the db.create event code.
 	DatabaseCreateCode = "TDB03I"
 	// DatabaseUpdateCode is the db.update event code.
@@ -358,7 +364,7 @@ const (
 	// SessionNetworkCode is a session network code.
 	SessionNetworkCode = "T4002I"
 
-	// AccessRequestCreateCode is the the access request creation code.
+	// AccessRequestCreateCode is the access request creation code.
 	AccessRequestCreateCode = "T5000I"
 	// AccessRequestUpdateCode is the access request state update code.
 	AccessRequestUpdateCode = "T5001I"
@@ -420,8 +426,12 @@ const (
 
 	// BotJoinCode is the 'bot.join' event code.
 	BotJoinCode = "TJ001I"
+	// BotJoinFailureCode is the 'bot.join' event code for failures.
+	BotJoinFailureCode = "TJ001E"
 	// InstanceJoinCode is the 'node.join' event code.
 	InstanceJoinCode = "TJ002I"
+	// InstanceJoinFailureCode is the 'node.join' event code for failures.
+	InstanceJoinFailureCode = "TJ002E"
 
 	// BotCreateCode is the `bot.create` event code.
 	BotCreateCode = "TB001I"
@@ -466,6 +476,8 @@ const (
 	DeviceUpdateCode = "TV007I"
 	// DeviceWebTokenCreateCode is the device web token creation code.
 	DeviceWebTokenCreateCode = "TV008I"
+	// DeviceAuthenticateConfirmCode is the device authentication confirm code.
+	DeviceAuthenticateConfirmCode = "TV009I"
 
 	// LoginRuleCreateCode is the login rule create code.
 	LoginRuleCreateCode = "TLR00I"
@@ -602,6 +614,9 @@ const (
 	ClusterNetworkingConfigUpdateCode = "TCNET002I"
 	// SessionRecordingConfigUpdateCode is the session recording config updated event code.
 	SessionRecordingConfigUpdateCode = "TCREC003I"
+
+	// AccessGraphAccessPathChangedCode is the access graph access path changed event code.
+	AccessGraphAccessPathChangedCode = "TAG001I"
 
 	// SCIMResourceProvisionSuccessCode indicates a resource was successfully
 	// provisioned via SCIM

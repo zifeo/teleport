@@ -532,6 +532,10 @@ const (
 	// DatabaseSessionCassandraRegisterEvent is emitted when a Cassandra client sends the register packet.
 	DatabaseSessionCassandraRegisterEvent = "db.session.cassandra.register"
 
+	// DatabaseSessionSpannerRPCEvent is emitted when a Spanner client
+	// calls a Spanner RPC.
+	DatabaseSessionSpannerRPCEvent = "db.session.spanner.rpc"
+
 	// SessionRejectedReasonMaxConnections indicates that a session.rejected event
 	// corresponds to enforcement of the max_connections control.
 	SessionRejectedReasonMaxConnections = "max_connections limit reached"
@@ -643,6 +647,11 @@ const (
 	// Tokens are spent in exchange for a single on-behalf-of device
 	// authentication attempt.
 	DeviceWebTokenCreateEvent = "device.webtoken.create"
+	// DeviceAuthenticateConfirmEvent is emitted when a device web authentication
+	// attempt is confirmed (via the ConfirmDeviceWebAuthentication RPC).
+	// A confirmed web authentication means the WebSession itself now holds
+	// augmented TLS and SSH certificates.
+	DeviceAuthenticateConfirmEvent = "device.authenticate.confirm"
 
 	// BotJoinEvent is emitted when a bot joins
 	BotJoinEvent = "bot.join"
@@ -752,6 +761,10 @@ const (
 	ClusterNetworkingConfigUpdateEvent = "cluster_networking_config.update"
 	// SessionRecordingConfigUpdateEvent is emitted when a user updates the cluster session recording configuration.
 	SessionRecordingConfigUpdateEvent = "session_recording_config.update"
+
+	// AccessGraphAccessPathChanged is emitted when an access path is changed in the access graph
+	// and an identity/resource is affected.
+	AccessGraphAccessPathChanged = "access_graph.access_path_changed"
 
 	// SCIMProvisionEvent is emitted when a new resource is provisioned by the
 	// SCIM service. This includes taking ownership of existing users.
