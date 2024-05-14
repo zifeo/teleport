@@ -1657,6 +1657,10 @@ export type RawEvents = {
       user: string;
     }
   >;
+  [eventCodes.SPANNER_RPC]: RawSpannerRPCEvent<typeof eventCodes.SPANNER_RPC>;
+  [eventCodes.SPANNER_RPC_DENIED]: RawSpannerRPCEvent<
+    typeof eventCodes.SPANNER_RPC_DENIED
+  >;
 };
 
 /**
