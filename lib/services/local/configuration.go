@@ -285,7 +285,7 @@ func (s *ClusterConfigurationService) DeleteAuthPreference(ctx context.Context) 
 }
 
 // GetClusterAuditConfig gets cluster audit config from the backend.
-func (s *ClusterConfigurationService) GetClusterAuditConfig(ctx context.Context) (types.ClusterAuditConfig, error) {
+func (s *ClusterConfigurationService) GetClusterAuditConfig(ctx context.Context, opts ...services.MarshalOption) (types.ClusterAuditConfig, error) {
 	item, err := s.Get(ctx, backend.Key(clusterConfigPrefix, auditPrefix))
 	if err != nil {
 		if trace.IsNotFound(err) {
@@ -293,7 +293,7 @@ func (s *ClusterConfigurationService) GetClusterAuditConfig(ctx context.Context)
 		}
 		return nil, trace.Wrap(err)
 	}
-	return services.UnmarshalClusterAuditConfig(item.Value, services.WithResourceID(item.ID), services.WithExpires(item.Expires), services.WithRevision(item.Revision))
+	return services.UnmarshalClusterAuditConfig(item.Value, append(opts, services.WithResourceID(item.ID), services.WithExpires(item.Expires), services.WithRevision(item.Revision))...)
 }
 
 // SetClusterAuditConfig sets the cluster audit config on the backend.
@@ -347,14 +347,16 @@ func (s *ClusterConfigurationService) UpdateClusterAuditConfig(ctx context.Conte
 
 // UpsertClusterAuditConfig creates a new cluster audit config or overwrites the existing cluster audit config.
 func (s *ClusterConfigurationService) UpsertClusterAuditConfig(ctx context.Context, cfg types.ClusterAuditConfig) (types.ClusterAuditConfig, error) {
+	rev := cfg.GetRevision()
 	value, err := services.MarshalClusterAuditConfig(cfg)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	item := backend.Item{
-		Key:   backend.Key(clusterConfigPrefix, auditPrefix),
-		Value: value,
+		Key:      backend.Key(clusterConfigPrefix, auditPrefix),
+		Value:    value,
+		Revision: rev,
 	}
 
 	lease, err := s.Backend.Put(ctx, item)

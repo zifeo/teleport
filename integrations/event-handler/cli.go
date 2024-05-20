@@ -24,10 +24,9 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/gravitational/trace"
 
+	"github.com/gravitational/teleport/integrations/event-handler/lib"
 	"github.com/gravitational/teleport/integrations/lib/logger"
 	"github.com/gravitational/teleport/integrations/lib/stringset"
-
-	"github.com/gravitational/teleport/integrations/event-handler/lib"
 )
 
 // FluentdConfig represents fluentd instance configuration
@@ -123,12 +122,6 @@ type IngestConfig struct {
 
 	// Types are event types to log
 	Types []string `help:"Comma-separated list of event types to forward" env:"FDFWD_TYPES"`
-
-	// SkipEventTypesRaw are event types to skip
-	SkipEventTypesRaw []string `name:"skip-event-types" help:"Comma-separated list of event types to skip" env:"FDFWD_SKIP_EVENT_TYPES"`
-
-	// SkipEventTypes is a map generated from SkipEventTypesRaw
-	SkipEventTypes map[string]struct{} `kong:"-"`
 
 	// SkipSessionTypes are session event types to skip
 	SkipSessionTypesRaw []string `name:"skip-session-types" help:"Comma-separated list of session event types to skip" default:"print" env:"FDFWD_SKIP_SESSION_TYPES"`
@@ -233,7 +226,6 @@ func (c *StartCmdConfig) Validate() error {
 		return trace.Wrap(err)
 	}
 	c.SkipSessionTypes = lib.SliceToAnonymousMap(c.SkipSessionTypesRaw)
-	c.SkipEventTypes = lib.SliceToAnonymousMap(c.SkipEventTypesRaw)
 
 	return nil
 }
@@ -245,7 +237,6 @@ func (c *StartCmdConfig) Dump(ctx context.Context) {
 	// Log configuration variables
 	log.WithField("batch", c.BatchSize).Info("Using batch size")
 	log.WithField("types", c.Types).Info("Using type filter")
-	log.WithField("skip-event-types", c.SkipEventTypes).Info("Using type exclude filter")
 	log.WithField("types", c.SkipSessionTypes).Info("Skipping session events of type")
 	log.WithField("value", c.StartTime).Info("Using start time")
 	log.WithField("timeout", c.Timeout).Info("Using timeout")

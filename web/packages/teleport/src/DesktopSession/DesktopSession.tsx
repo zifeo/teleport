@@ -81,7 +81,6 @@ export function DesktopSession(props: State) {
     clientScreenSpecToRequest,
     clipboardSharingState,
     onShareDirectory,
-    onCtrlAltDel,
     warnings,
     onRemoveWarning,
     fetchAttempt,
@@ -134,7 +133,6 @@ export function DesktopSession(props: State) {
         isSharingDirectory={isSharingDirectory(directorySharingState)}
         isSharingClipboard={isSharingClipboard(clipboardSharingState)}
         onShareDirectory={onShareDirectory}
-        onCtrlAltDel={onCtrlAltDel}
         warnings={warnings}
         onRemoveWarning={onRemoveWarning}
       />

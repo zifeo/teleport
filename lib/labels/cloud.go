@@ -41,9 +41,6 @@ const (
 	// AzureLabelNamespace is used as the namespace prefix for any labels
 	// imported from Azure.
 	AzureLabelNamespace = "azure"
-	// GCPLabelNamespace is used as the namespace prefix for any labels imported
-	// from GCP.
-	GCPLabelNamespace = "gcp"
 	// labelUpdatePeriod is the period for updating cloud labels.
 	labelUpdatePeriod = time.Hour
 )
@@ -51,7 +48,6 @@ const (
 const (
 	awsErrorMessage   = "Could not fetch EC2 instance's tags, please ensure 'allow instance tags in metadata' is enabled on the instance."
 	azureErrorMessage = "Could not fetch Azure instance's tags."
-	gcpErrorMessage   = "Could not fetch GCP instance's labels, please ensure instance's service principal has read access to instances."
 )
 
 // CloudConfig is the configuration for a cloud label service.
@@ -105,8 +101,6 @@ func NewCloudImporter(ctx context.Context, c *CloudConfig) (*CloudImporter, erro
 		cloudImporter.initEC2()
 	case types.InstanceMetadataTypeAzure:
 		cloudImporter.initAzure()
-	case types.InstanceMetadataTypeGCP:
-		cloudImporter.initGCP()
 	}
 	return cloudImporter, nil
 }
@@ -119,11 +113,6 @@ func (l *CloudImporter) initEC2() {
 func (l *CloudImporter) initAzure() {
 	l.namespace = AzureLabelNamespace
 	l.instanceMetadataHint = azureErrorMessage
-}
-
-func (l *CloudImporter) initGCP() {
-	l.namespace = GCPLabelNamespace
-	l.instanceMetadataHint = gcpErrorMessage
 }
 
 // Get returns the list of updated cloud labels.
@@ -147,7 +136,7 @@ func (l *CloudImporter) Apply(r types.ResourceWithLabels) {
 func (l *CloudImporter) Sync(ctx context.Context) error {
 	tags, err := l.Client.GetTags(ctx)
 	if err != nil {
-		if trace.IsNotFound(err) || trace.IsAccessDenied(err) {
+		if trace.IsNotFound(err) {
 			// Only show the error the first time around.
 			l.instanceTagsNotFoundOnce.Do(func() {
 				l.Log.Warning(l.instanceMetadataHint)

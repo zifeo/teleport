@@ -124,8 +124,6 @@ export const eventCodes = {
   DEVICE_ENROLL: 'TV005I',
   DEVICE_AUTHENTICATE: 'TV006I',
   DEVICE_UPDATE: 'TV007I',
-  DEVICE_WEB_TOKEN_CREATE: 'TV008I',
-  DEVICE_AUTHENTICATE_CONFIRM: 'TV009I',
   EXEC_FAILURE: 'T3002E',
   EXEC: 'T3002I',
   GITHUB_CONNECTOR_CREATED: 'T8000I',
@@ -271,8 +269,6 @@ export const eventCodes = {
   OKTA_ASSIGNMENT_CLEANUP_FAILURE: 'TOK005E',
   OKTA_ACCESS_LIST_SYNC: 'TOK006I',
   OKTA_ACCESS_LIST_SYNC_FAILURE: 'TOK006E',
-  OKTA_USER_SYNC: 'TOK007I',
-  OKTA_USER_SYNC_FAILURE: 'TOK007E',
   ACCESS_LIST_CREATE: 'TAL001I',
   ACCESS_LIST_CREATE_FAILURE: 'TAL001E',
   ACCESS_LIST_UPDATE: 'TAL002I',
@@ -298,8 +294,6 @@ export const eventCodes = {
   AUTH_PREFERENCE_UPDATE: 'TCAUTH001I',
   CLUSTER_NETWORKING_CONFIG_UPDATE: 'TCNET002I',
   SESSION_RECORDING_CONFIG_UPDATE: 'TCREC003I',
-  SPANNER_RPC: 'TSPN001I',
-  SPANNER_RPC_DENIED: 'TSPN001W',
 } as const;
 
 /**
@@ -1250,12 +1244,6 @@ export type RawEvents = {
     typeof eventCodes.DEVICE_AUTHENTICATE
   >;
   [eventCodes.DEVICE_UPDATE]: RawDeviceEvent<typeof eventCodes.DEVICE_UPDATE>;
-  [eventCodes.DEVICE_WEB_TOKEN_CREATE]: RawDeviceEvent<
-    typeof eventCodes.DEVICE_WEB_TOKEN_CREATE
-  >;
-  [eventCodes.DEVICE_AUTHENTICATE_CONFIRM]: RawDeviceEvent<
-    typeof eventCodes.DEVICE_AUTHENTICATE_CONFIRM
-  >;
   [eventCodes.UNKNOWN]: RawEvent<
     typeof eventCodes.UNKNOWN,
     {
@@ -1470,17 +1458,6 @@ export type RawEvents = {
       source: string;
     }
   >;
-  [eventCodes.OKTA_USER_SYNC]: RawEvent<
-    typeof eventCodes.OKTA_USER_SYNC,
-    {
-      num_users_created: number;
-      num_users_modified: number;
-      num_users_deleted: number;
-    }
-  >;
-  [eventCodes.OKTA_USER_SYNC_FAILURE]: RawEvent<
-    typeof eventCodes.OKTA_USER_SYNC_FAILURE
-  >;
   [eventCodes.OKTA_ACCESS_LIST_SYNC]: RawEvent<
     typeof eventCodes.OKTA_ACCESS_LIST_SYNC
   >;
@@ -1650,10 +1627,6 @@ export type RawEvents = {
     {
       user: string;
     }
-  >;
-  [eventCodes.SPANNER_RPC]: RawSpannerRPCEvent<typeof eventCodes.SPANNER_RPC>;
-  [eventCodes.SPANNER_RPC_DENIED]: RawSpannerRPCEvent<
-    typeof eventCodes.SPANNER_RPC_DENIED
   >;
 };
 
@@ -1843,16 +1816,6 @@ type RawDatabaseSessionEvent<T extends EventCode, K = unknown> = Merge<
     }
   >,
   K
->;
-
-type RawSpannerRPCEvent<T extends EventCode> = RawEvent<
-  T,
-  {
-    procedure: string;
-    db_service: string;
-    db_name: string;
-    args: { sql?: string };
-  }
 >;
 
 /**

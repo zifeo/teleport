@@ -20,6 +20,7 @@ package gateway
 
 import (
 	"context"
+	"crypto/tls"
 	"testing"
 	"time"
 
@@ -123,7 +124,7 @@ func TestDBMiddleware_OnNewConnection(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			localProxy.SetCert(tlsCert)
+			localProxy.SetCerts([]tls.Certificate{tlsCert})
 
 			err = middleware.OnNewConnection(ctx, localProxy, nil /* net.Conn, not used by middleware */)
 			tt.expectation(t, err, hasCalledOnExpiredCert)

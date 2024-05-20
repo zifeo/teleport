@@ -122,10 +122,6 @@ func (m *mockInstance) GetInstance(ctx context.Context, req *InstanceRequest) (*
 	return m.instance, nil
 }
 
-func (m *mockInstance) GetInstanceTags(ctx context.Context, req *InstanceRequest) (map[string]string, error) {
-	return nil, nil
-}
-
 func (m *mockInstance) AddSSHKey(ctx context.Context, req *SSHKeyRequest) error {
 	m.authorizedKey = req.PublicKey
 	return nil

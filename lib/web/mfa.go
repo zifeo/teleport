@@ -19,7 +19,6 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -154,7 +153,7 @@ func (h *Handler) createAuthenticateChallengeHandle(w http.ResponseWriter, r *ht
 
 	var mfaRequiredCheckProto *proto.IsMFARequiredRequest
 	if req.IsMFARequiredRequest != nil {
-		mfaRequiredCheckProto, err = h.checkAndGetProtoRequest(r.Context(), c, req.IsMFARequiredRequest)
+		mfaRequiredCheckProto, err = req.IsMFARequiredRequest.checkAndGetProtoRequest()
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -293,11 +292,6 @@ type isMFARequiredWindowsDesktop struct {
 	Login string `json:"login"`
 }
 
-type isMFARequiredApp struct {
-	// ResolveAppParams contains info used to resolve an application
-	ResolveAppParams
-}
-
 type isMFARequiredAdminAction struct{}
 
 type isMFARequiredRequest struct {
@@ -313,14 +307,11 @@ type isMFARequiredRequest struct {
 	// Kube is the name of the kube cluster to check if target cluster
 	// requires MFA check.
 	Kube *isMFARequiredKube `json:"kube,omitempty"`
-	// App contains fields required to resolve an application and check if
-	// the target application requires MFA check.
-	App *isMFARequiredApp `json:"app,omitempty"`
 	// AdminAction is the name of the admin action RPC to check if MFA is required.
-	AdminAction *isMFARequiredAdminAction `json:"admin_action,omitempty"`
+	AdminAction *isMFARequiredAdminAction `json:"admin_action"`
 }
 
-func (h *Handler) checkAndGetProtoRequest(ctx context.Context, scx *SessionContext, r *isMFARequiredRequest) (*proto.IsMFARequiredRequest, error) {
+func (r *isMFARequiredRequest) checkAndGetProtoRequest() (*proto.IsMFARequiredRequest, error) {
 	numRequests := 0
 	var protoReq *proto.IsMFARequiredRequest
 
@@ -396,22 +387,6 @@ func (h *Handler) checkAndGetProtoRequest(ctx context.Context, scx *SessionConte
 		}
 	}
 
-	if r.App != nil {
-		resolvedApp, err := h.resolveApp(ctx, scx, r.App.ResolveAppParams)
-		if err != nil {
-			return nil, trace.Wrap(err, "unable to resolve FQDN: %v", r.App.FQDNHint)
-		}
-
-		numRequests++
-		protoReq = &proto.IsMFARequiredRequest{
-			Target: &proto.IsMFARequiredRequest_App{
-				App: &proto.RouteToApp{
-					Name: resolvedApp.App.GetName(),
-				},
-			},
-		}
-	}
-
 	if r.AdminAction != nil {
 		numRequests++
 		protoReq = &proto.IsMFARequiredRequest{
@@ -442,7 +417,7 @@ func (h *Handler) isMFARequired(w http.ResponseWriter, r *http.Request, p httpro
 		return nil, trace.Wrap(err)
 	}
 
-	protoReq, err := h.checkAndGetProtoRequest(r.Context(), sctx, httpReq)
+	protoReq, err := httpReq.checkAndGetProtoRequest()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}

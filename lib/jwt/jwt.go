@@ -145,13 +145,12 @@ func (p *SignParams) Check() error {
 }
 
 // sign will return a signed JWT with the passed in claims embedded within.
-// `opts`, when not nil, specifies additional signing options, such as additional JWT headers.
-func (k *Key) sign(claims any, opts *jose.SignerOptions) (string, error) {
-	return k.signAny(claims, opts)
+func (k *Key) sign(claims any) (string, error) {
+	return k.signAny(claims)
 }
 
 // signAny will return a signed JWT with the passed in claims embedded within; unlike sign it allows more flexibility in the claim data.
-func (k *Key) signAny(claims any, opts *jose.SignerOptions) (string, error) {
+func (k *Key) signAny(claims any) (string, error) {
 	if k.config.PrivateKey == nil {
 		return "", trace.BadParameter("can not sign token with non-signing key")
 	}
@@ -168,12 +167,7 @@ func (k *Key) signAny(claims any, opts *jose.SignerOptions) (string, error) {
 		Algorithm: k.config.Algorithm,
 		Key:       signer,
 	}
-
-	if opts == nil {
-		opts = &jose.SignerOptions{}
-	}
-	opts = opts.WithType("JWT")
-	sig, err := jose.NewSigner(signingKey, opts)
+	sig, err := jose.NewSigner(signingKey, (&jose.SignerOptions{}).WithType("JWT"))
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
@@ -205,7 +199,7 @@ func (k *Key) Sign(p SignParams) (string, error) {
 		Traits:   p.Traits,
 	}
 
-	return k.sign(claims, nil)
+	return k.sign(claims)
 }
 
 // awsOIDCCustomClaims defines the require claims for the JWT token used in AWS OIDC Integration.
@@ -222,7 +216,7 @@ type awsOIDCCustomClaims struct {
 // - Issuer: stored as Issuer (iss) claim
 // - Subject: stored as Subject (sub) claim
 // - Audience: stored as Audience (aud) claim
-// - Expires: stored as Expiry (exp) claim
+// - Expiries: stored as Expiry (exp) claim
 func (k *Key) SignAWSOIDC(p SignParams) (string, error) {
 	// Sign the claims and create a JWT token.
 	claims := awsOIDCCustomClaims{
@@ -238,42 +232,7 @@ func (k *Key) SignAWSOIDC(p SignParams) (string, error) {
 		},
 	}
 
-	// AWS does not require `kid` claim in the JWT per se,
-	// but it seems to (NB: educated guess) require it if JWKS has multiple JWK-s with different `kid`-s.
-	opts := (&jose.SignerOptions{}).
-		WithHeader(jose.HeaderKey("kid"), "")
-
-	return k.sign(claims, opts)
-}
-
-// SignEntraOIDC signs a JWT for the Entra ID Integration.
-// Required Params:
-// - Issuer: stored as Issuer (iss) claim
-// - Subject: stored as Subject (sub) claim
-// - Audience: stored as Audience (aud) claim
-// - Expires: stored as Expiry (exp) claim
-func (k *Key) SignEntraOIDC(p SignParams) (string, error) {
-	// Sign the claims and create a JWT token.
-	claims := jwt.Claims{
-		Issuer:    p.Issuer,
-		Subject:   p.Subject,
-		Audience:  jwt.Audience{p.Audience},
-		ID:        uuid.NewString(),
-		NotBefore: jwt.NewNumericDate(k.config.Clock.Now().Add(-10 * time.Second)),
-		Expiry:    jwt.NewNumericDate(p.Expires),
-		IssuedAt:  jwt.NewNumericDate(k.config.Clock.Now().Add(-10 * time.Second)),
-	}
-
-	// Azure expect a `kid` header to be present and non-empty,
-	// unlike e.g. AWS which accepts an empty `kid` string value.
-	publicKey, ok := k.config.PublicKey.(*rsa.PublicKey)
-	if !ok {
-		return "", trace.BadParameter("expected an RSA public key")
-	}
-	kid := KeyID(publicKey)
-	opts := (&jose.SignerOptions{}).
-		WithHeader(jose.HeaderKey("kid"), kid)
-	return k.sign(claims, opts)
+	return k.sign(claims)
 }
 
 func (k *Key) SignSnowflake(p SignParams, issuer string) (string, error) {
@@ -288,7 +247,7 @@ func (k *Key) SignSnowflake(p SignParams, issuer string) (string, error) {
 		},
 	}
 
-	return k.sign(claims, nil)
+	return k.sign(claims)
 }
 
 // AzureTokenClaims represent a minimal set of claims that will be encoded as JWT in Azure access token and passed back to az CLI.
@@ -301,7 +260,7 @@ type AzureTokenClaims struct {
 
 // SignAzureToken signs AzureTokenClaims
 func (k *Key) SignAzureToken(claims AzureTokenClaims) (string, error) {
-	return k.signAny(claims, nil)
+	return k.signAny(claims)
 }
 
 type PROXYSignParams struct {
@@ -325,7 +284,7 @@ func (k *Key) SignPROXYJWT(p PROXYSignParams) (string, error) {
 		},
 	}
 
-	return k.sign(claims, nil)
+	return k.sign(claims)
 }
 
 // VerifyParams are the parameters needed to pass the token and data needed to verify.

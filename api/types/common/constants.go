@@ -65,10 +65,6 @@ const (
 	// OriginDiscoveryKubernetes indicates that the resource was imported
 	// from kubernetes cluster by discovery service.
 	OriginDiscoveryKubernetes = "discovery-kubernetes"
-
-	// OriginEntraID indicates that the resource was imported
-	// from the Entra ID directory.
-	OriginEntraID = "entra-id"
 )
 
 // OriginValues lists all possible origin values.
@@ -81,5 +77,4 @@ var OriginValues = []string{
 	OriginOkta,
 	OriginSCIM,
 	OriginDiscoveryKubernetes,
-	OriginEntraID,
 }

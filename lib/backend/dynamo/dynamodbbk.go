@@ -21,7 +21,6 @@ package dynamo
 import (
 	"bytes"
 	"context"
-	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -1057,8 +1056,8 @@ func convertError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var aerr awserr.Error
-	if !errors.As(err, &aerr) {
+	aerr, ok := err.(awserr.Error)
+	if !ok {
 		return err
 	}
 	switch aerr.Code() {

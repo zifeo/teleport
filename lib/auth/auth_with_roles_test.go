@@ -2511,7 +2511,6 @@ func TestGetAndList_ApplicationServers(t *testing.T) {
 }
 
 // TestGetAndList_AppServersAndSAMLIdPServiceProviders verifies RBAC and filtering is applied when fetching App Servers and SAML IdP Service Providers.
-// DELETE IN 17.0
 func TestGetAndList_AppServersAndSAMLIdPServiceProviders(t *testing.T) {
 	ctx := context.Background()
 	srv := newTestTLSServer(t)
@@ -2544,7 +2543,15 @@ func TestGetAndList_AppServersAndSAMLIdPServiceProviders(t *testing.T) {
 				Name:      name,
 				Namespace: apidefaults.Namespace,
 			}, types.SAMLIdPServiceProviderSpecV1{
-				ACSURL:   fmt.Sprintf("entity-id-%v", i),
+				EntityDescriptor: fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+				<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" entityID="entity-id-%v" validUntil="2025-12-09T09:13:31.006Z">
+					 <md:SPSSODescriptor AuthnRequestsSigned="false" WantAssertionsSigned="true" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+							<md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified</md:NameIDFormat>
+							<md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</md:NameIDFormat>
+							<md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://sptest.iamshowcase.com/acs" index="0" isDefault="true"/>
+					 </md:SPSSODescriptor>
+				</md:EntityDescriptor>
+				`, i),
 				EntityID: fmt.Sprintf("entity-id-%v", i),
 			})
 			require.NoError(t, err)
@@ -2611,6 +2618,7 @@ func TestGetAndList_AppServersAndSAMLIdPServiceProviders(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Resources, len(testResources))
 	require.Empty(t, cmp.Diff(testResources, resp.Resources))
+
 	// Test various filtering.
 	baseRequest := proto.ListResourcesRequest{
 		Namespace:    apidefaults.Namespace,
@@ -2678,99 +2686,6 @@ func TestGetAndList_AppServersAndSAMLIdPServiceProviders(t *testing.T) {
 	resp, err = clt.ListResources(ctx, listRequest)
 	require.NoError(t, err)
 	require.Empty(t, resp.Resources)
-}
-
-// TestGetAndList_SAMLIdPServiceProviders verifies RBAC when fetching SAML IdP service providers.
-// TODO(sshah): update test with ListResources() instead of directly using listResourcesWithSort()
-// once SAMLIdPServiceProvider supports label matcher.
-func TestGetAndList_SAMLIdPServiceProviders(t *testing.T) {
-	ctx := context.Background()
-	srv, err := NewTestAuthServer(TestAuthServerConfig{Dir: t.TempDir()})
-	require.NoError(t, err)
-
-	// Set license to enterprise in order to be able to list SAML IdP Service Providers.
-	modules.SetTestModules(t, &modules.TestModules{
-		TestBuildType: modules.BuildEnterprise,
-	})
-
-	// Create SAML IdP service providers.
-	for i := 0; i < 3; i++ {
-		name := fmt.Sprintf("saml-app-%v", i)
-		sp, err := types.NewSAMLIdPServiceProvider(types.Metadata{
-			Name:      name,
-			Namespace: apidefaults.Namespace,
-		}, types.SAMLIdPServiceProviderSpecV1{
-			ACSURL:   fmt.Sprintf("entity-id-%v", i),
-			EntityID: fmt.Sprintf("entity-id-%v", i),
-		})
-		require.NoError(t, err)
-		err = srv.AuthServer.CreateSAMLIdPServiceProvider(ctx, sp)
-		require.NoError(t, err)
-
-	}
-
-	testServiceProviders, _, err := srv.AuthServer.ListSAMLIdPServiceProviders(ctx, 0, "")
-	require.NoError(t, err)
-
-	numResources := len(testServiceProviders)
-
-	testResources := make([]types.ResourceWithLabels, numResources)
-	for i, sp := range testServiceProviders {
-		testResources[i] = sp
-	}
-
-	// create user, role, and client
-	username := "user"
-	user, role, err := CreateUserAndRole(srv.AuthServer, username, nil, nil)
-	require.NoError(t, err)
-	identity := TestUser(user.GetName())
-	require.NoError(t, err)
-
-	ctxWithUser := authz.ContextWithUser(ctx, identity.I)
-	authContext, err := srv.Authorizer.Authorize(ctxWithUser)
-	require.NoError(t, err)
-	s := &ServerWithRoles{
-		authServer: srv.AuthServer,
-		alog:       srv.AuditLog,
-		context:    *authContext,
-	}
-
-	listSAMLIdPSPRequest := proto.ListResourcesRequest{
-		Namespace: apidefaults.Namespace,
-		// Guarantee that the list will have all SAML IdP service providers.
-		Limit:        int32(numResources + 1),
-		ResourceType: types.KindSAMLIdPServiceProvider,
-	}
-
-	// Test getting all SAML IdP service providers.
-	resp, err := s.listResourcesWithSort(ctxWithUser, listSAMLIdPSPRequest)
-	require.NoError(t, err)
-	require.Len(t, resp.Resources, len(testResources))
-	require.Empty(t, cmp.Diff(testResources, resp.Resources))
-
-	// deny user to get all service providers
-	role.SetRules(types.Deny, []types.Rule{
-		{
-			Resources: []string{types.KindSAMLIdPServiceProvider},
-			Verbs:     []string{types.VerbList},
-		},
-	})
-	_, err = srv.AuthServer.UpsertRole(ctxWithUser, role)
-	require.NoError(t, err)
-
-	// setup new context and ServerWithRoles env
-	ctxWithUser = authz.ContextWithUser(ctx, identity.I)
-	authContext, err = srv.Authorizer.Authorize(ctxWithUser)
-	require.NoError(t, err)
-	s = &ServerWithRoles{
-		authServer: srv.AuthServer,
-		alog:       srv.AuditLog,
-		context:    *authContext,
-	}
-
-	resp2, err := s.listResourcesWithSort(ctxWithUser, listSAMLIdPSPRequest)
-	require.NoError(t, err)
-	require.Empty(t, resp2.Resources)
 }
 
 // TestApps verifies RBAC is applied to app resources.
@@ -3628,7 +3543,8 @@ func TestListResources_SearchAsRoles(t *testing.T) {
 		},
 		{
 			// this tests the case where the request includes UseSearchAsRoles
-			// and UsePreviewAsRoles, but the user has none
+			// and UsePreviewAsRoles, but the user has none, so there should be
+			// no audit event.
 			desc: "no extra roles",
 			clt:  adminClt,
 			requestOpt: func(req *proto.ListResourcesRequest) {
@@ -3639,6 +3555,11 @@ func TestListResources_SearchAsRoles(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
+			// Overwrite the auth server emitter to capture all events emitted
+			// during this test case.
+			emitter := eventstest.NewChannelEmitter(1)
+			srv.AuthServer.AuthServer.emitter = emitter
+
 			req := proto.ListResourcesRequest{
 				ResourceType: types.KindNode,
 				Limit:        int32(len(testNodes)),
@@ -3654,6 +3575,14 @@ func TestListResources_SearchAsRoles(t *testing.T) {
 				gotNodes = append(gotNodes, node.GetName())
 			}
 			require.ElementsMatch(t, tc.expectNodes, gotNodes)
+
+			if len(tc.expectSearchEventRoles) > 0 {
+				searchEvent := <-emitter.C()
+				require.ElementsMatch(t, tc.expectSearchEventRoles, searchEvent.(*apievents.AccessRequestResourceSearch).SearchAsRoles)
+			} else {
+				// expect no event to have been emitted
+				require.Empty(t, emitter.C())
+			}
 		})
 	}
 }
@@ -4221,7 +4150,7 @@ func TestDeleteUserAppSessions(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create a session for alice.
-		_, err = aliceClt.CreateAppSession(ctx, &proto.CreateAppSessionRequest{
+		_, err = aliceClt.CreateAppSession(ctx, types.CreateAppSessionRequest{
 			Username:    "alice",
 			PublicAddr:  application.publicAddr,
 			ClusterName: "localhost",
@@ -4229,7 +4158,7 @@ func TestDeleteUserAppSessions(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create a session for bob.
-		_, err = bobClt.CreateAppSession(ctx, &proto.CreateAppSessionRequest{
+		_, err = bobClt.CreateAppSession(ctx, types.CreateAppSessionRequest{
 			Username:    "bob",
 			PublicAddr:  application.publicAddr,
 			ClusterName: "localhost",
@@ -4740,113 +4669,6 @@ func TestListUnifiedResources_WithLogins(t *testing.T) {
 	}
 }
 
-func TestListUnifiedResources_IncludeRequestable(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	srv := newTestTLSServer(t)
-
-	// Create test nodes.
-	const numTestNodes = 3
-	for i := 0; i < numTestNodes; i++ {
-		name := fmt.Sprintf("node%d", i)
-		node, err := types.NewServerWithLabels(
-			name,
-			types.KindNode,
-			types.ServerSpecV2{},
-			map[string]string{"name": name},
-		)
-		require.NoError(t, err)
-
-		_, err = srv.Auth().UpsertNode(ctx, node)
-		require.NoError(t, err)
-	}
-
-	testNodes, err := srv.Auth().GetNodes(ctx, apidefaults.Namespace)
-	require.NoError(t, err)
-	require.Len(t, testNodes, numTestNodes)
-
-	// create user and client
-	requester, role, err := CreateUserAndRole(srv.Auth(), "requester", []string{"requester"}, nil)
-	require.NoError(t, err)
-
-	// only allow user to see first node
-	role.SetNodeLabels(types.Allow, types.Labels{"name": {testNodes[0].GetName()}})
-
-	// create a new role which can see second node
-	searchAsRole := services.RoleForUser(requester)
-	searchAsRole.SetName("test_search_role")
-	searchAsRole.SetNodeLabels(types.Allow, types.Labels{"name": {testNodes[1].GetName()}})
-	searchAsRole.SetLogins(types.Allow, []string{"requester"})
-	_, err = srv.Auth().UpsertRole(ctx, searchAsRole)
-	require.NoError(t, err)
-
-	role.SetSearchAsRoles(types.Allow, []string{searchAsRole.GetName()})
-	_, err = srv.Auth().UpsertRole(ctx, role)
-	require.NoError(t, err)
-
-	requesterClt, err := srv.NewClient(TestUser(requester.GetName()))
-	require.NoError(t, err)
-
-	type expected struct {
-		name        string
-		requestable bool
-	}
-
-	for _, tc := range []struct {
-		desc              string
-		clt               *authclient.Client
-		requestOpt        func(*proto.ListUnifiedResourcesRequest)
-		expectedResources []expected
-	}{
-		{
-			desc:              "no search",
-			clt:               requesterClt,
-			expectedResources: []expected{{name: testNodes[0].GetName(), requestable: false}},
-		},
-		{
-			desc: "search as roles without requestable",
-			clt:  requesterClt,
-			requestOpt: func(req *proto.ListUnifiedResourcesRequest) {
-				req.UseSearchAsRoles = true
-			},
-			expectedResources: []expected{
-				{name: testNodes[0].GetName(), requestable: false},
-				{name: testNodes[1].GetName(), requestable: false},
-			},
-		},
-		{
-			desc: "search as roles with requestable",
-			clt:  requesterClt,
-			requestOpt: func(req *proto.ListUnifiedResourcesRequest) {
-				req.IncludeRequestable = true
-				req.UseSearchAsRoles = true
-			},
-			expectedResources: []expected{
-				{name: testNodes[0].GetName(), requestable: false},
-				{name: testNodes[1].GetName(), requestable: true},
-			},
-		},
-	} {
-		t.Run(tc.desc, func(t *testing.T) {
-			req := proto.ListUnifiedResourcesRequest{
-				SortBy: types.SortBy{Field: "name", IsDesc: false},
-				Limit:  int32(len(testNodes)),
-			}
-			if tc.requestOpt != nil {
-				tc.requestOpt(&req)
-			}
-			resp, err := tc.clt.ListUnifiedResources(ctx, &req)
-			require.NoError(t, err)
-			require.Len(t, resp.Resources, len(tc.expectedResources))
-			var resources []expected
-			for _, resource := range resp.Resources {
-				resources = append(resources, expected{name: resource.GetNode().GetName(), requestable: resource.RequiresRequest})
-			}
-			require.ElementsMatch(t, tc.expectedResources, resources)
-		})
-	}
-}
-
 // TestListUnifiedResources_KindsFilter will generate multiple resources
 // and filter for only one kind.
 func TestListUnifiedResources_KindsFilter(t *testing.T) {
@@ -5023,8 +4845,8 @@ func TestListUnifiedResources_WithSearch(t *testing.T) {
 			},
 		},
 		Spec: types.SAMLIdPServiceProviderSpecV1{
-			ACSURL:   "tifaSAML",
-			EntityID: "tifaSAML",
+			EntityDescriptor: newEntityDescriptor("tifaSAML"),
+			EntityID:         "tifaSAML",
 		},
 	}
 	require.NoError(t, srv.Auth().CreateSAMLIdPServiceProvider(ctx, sp))
@@ -5051,7 +4873,7 @@ func TestListUnifiedResources_WithSearch(t *testing.T) {
 
 	// Check that our returned resource has the correct name
 	for _, resource := range resp.Resources {
-		r := resource.GetSAMLIdPServiceProvider()
+		r := resource.GetAppServerOrSAMLIdPServiceProvider()
 		require.True(t, strings.Contains(r.GetName(), "tifa"))
 	}
 }
@@ -5661,6 +5483,10 @@ func TestGenerateHostCert(t *testing.T) {
 			client, err := srv.NewClient(TestUser(user.GetName()))
 			require.NoError(t, err)
 
+			// Calls deprecated HTTP endpoint to verify migrated code works
+			// fine.
+			_, err = client.GenerateHostCertHTTP(ctx, pub, "", "", test.principals, clusterName, types.RoleNode, 0)
+			require.True(t, test.expect(err))
 			// Try by calling new gRPC endpoint directly
 			_, err = client.TrustClient().GenerateHostCert(ctx, &trustpb.GenerateHostCertRequest{
 				Key:         pub,
@@ -5671,6 +5497,10 @@ func TestGenerateHostCert(t *testing.T) {
 				Role:        string(types.RoleNode),
 				Ttl:         durationpb.New(0),
 			})
+			require.True(t, test.expect(err))
+			// Finally try calling the wrapper method that should call through
+			// to the gRPC client.
+			_, err = client.GenerateHostCert(ctx, pub, "", "", test.principals, clusterName, types.RoleNode, 0)
 			require.True(t, test.expect(err))
 		})
 	}
@@ -7458,8 +7288,6 @@ func TestWatchHeadlessAuthentications_usersCanOnlyWatchThemselves(t *testing.T) 
 }
 
 // createAppServerOrSPFromAppServer returns a AppServerOrSAMLIdPServiceProvider given an AppServer.
-//
-//nolint:staticcheck // SA1019. TODO(sshah) DELETE IN 17.0
 func createAppServerOrSPFromAppServer(appServer types.AppServer) types.AppServerOrSAMLIdPServiceProvider {
 	appServerOrSP := &types.AppServerOrSAMLIdPServiceProviderV1{
 		Resource: &types.AppServerOrSAMLIdPServiceProviderV1_AppServer{
@@ -7471,8 +7299,6 @@ func createAppServerOrSPFromAppServer(appServer types.AppServer) types.AppServer
 }
 
 // createAppServerOrSPFromApp returns a AppServerOrSAMLIdPServiceProvider given a SAMLIdPServiceProvider.
-//
-//nolint:staticcheck // SA1019. TODO(sshah) DELETE IN 17.0
 func createAppServerOrSPFromSP(sp types.SAMLIdPServiceProvider) types.AppServerOrSAMLIdPServiceProvider {
 	appServerOrSP := &types.AppServerOrSAMLIdPServiceProviderV1{
 		Resource: &types.AppServerOrSAMLIdPServiceProviderV1_SAMLIdPServiceProvider{

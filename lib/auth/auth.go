@@ -30,7 +30,6 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -66,7 +65,6 @@ import (
 	"github.com/gravitational/teleport/api/constants"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/gen/proto/go/assist/v1"
-	devicepb "github.com/gravitational/teleport/api/gen/proto/go/teleport/devicetrust/v1"
 	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
 	"github.com/gravitational/teleport/api/internalutils/stream"
 	"github.com/gravitational/teleport/api/metadata"
@@ -235,13 +233,6 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 	}
 	if cfg.UserGroups == nil {
 		cfg.UserGroups, err = local.NewUserGroupService(cfg.Backend)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-	}
-
-	if cfg.CrownJewels == nil {
-		cfg.CrownJewels, err = local.NewCrownJewelsService(cfg.Backend)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -419,7 +410,6 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 		KubeWaitingContainer:      cfg.KubeWaitingContainers,
 		Notifications:             cfg.Notifications,
 		AccessMonitoringRules:     cfg.AccessMonitoringRules,
-		CrownJewels:               cfg.CrownJewels,
 	}
 
 	as := Server{
@@ -446,23 +436,7 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 		embedder:                cfg.EmbeddingClient,
 		accessMonitoringEnabled: cfg.AccessMonitoringEnabled,
 	}
-	as.inventory = inventory.NewController(&as, services,
-		inventory.WithAuthServerID(cfg.HostUUID),
-		inventory.WithOnConnect(func(s string) {
-			if g, ok := connectedResourceGauges[s]; ok {
-				g.Inc()
-			} else {
-				log.Warnf("missing connected resources gauge for keep alive %s (this is a bug)", s)
-			}
-		}),
-		inventory.WithOnDisconnect(func(s string) {
-			if g, ok := connectedResourceGauges[s]; ok {
-				g.Dec()
-			} else {
-				log.Warnf("missing connected resources gauge for keep alive %s (this is a bug)", s)
-			}
-		}),
-	)
+	as.inventory = inventory.NewController(&as, services, inventory.WithAuthServerID(cfg.HostUUID))
 	for _, o := range opts {
 		if err := o(&as); err != nil {
 			return nil, trace.Wrap(err)
@@ -597,7 +571,6 @@ type Services struct {
 	services.SecReports
 	services.KubeWaitingContainer
 	services.AccessMonitoringRules
-	services.CrownJewels
 }
 
 // SecReportsClient returns the security reports client.
@@ -646,11 +619,6 @@ func (r *Services) AccessMonitoringRuleClient() services.AccessMonitoringRules {
 
 // DiscoveryConfigClient returns the DiscoveryConfig client.
 func (r *Services) DiscoveryConfigClient() services.DiscoveryConfigs {
-	return r
-}
-
-// CrownJewelClient returns the CrownJewels client.
-func (r *Services) CrownJewelClient() services.CrownJewels {
 	return r
 }
 
@@ -800,15 +768,6 @@ var (
 // successfully authenticated. An example would be creating objects based on the user.
 type LoginHook func(context.Context, types.User) error
 
-// CreateDeviceWebTokenFunc creates a new DeviceWebToken for the logged in user.
-//
-// Used during a successful Web login, after the user was verified and the
-// WebSession created.
-//
-// May return `nil, nil` if device trust isn't supported (OSS), disabled, or if
-// the user has no suitable trusted device.
-type CreateDeviceWebTokenFunc func(context.Context, *devicepb.DeviceWebToken) (*devicepb.DeviceWebToken, error)
-
 // Server keeps the cluster together. It acts as a certificate authority (CA) for
 // a cluster and:
 //   - generates the keypair for the node it's running on
@@ -887,15 +846,15 @@ type Server struct {
 	// in a unified manner in the web UI.
 	UnifiedResourceCache *services.UnifiedResourceCache
 
-	// AccessRequestCache is a cache of access requests that specifically provides
-	// custom sorting options not available via the standard backend.
-	AccessRequestCache *services.AccessRequestCache
-
 	// UserNotificationCache is a cache of user-specific notifications.
 	UserNotificationCache *services.UserNotificationCache
 
 	// GlobalNotificationCache is a cache of global notifications.
 	GlobalNotificationCache *services.GlobalNotificationCache
+
+	// AccessRequestCache is a cache of access requests that specifically provides
+	// custom sorting options not available via the standard backend.
+	AccessRequestCache *services.AccessRequestCache
 
 	inventory *inventory.Controller
 
@@ -977,10 +936,6 @@ type Server struct {
 
 	// ulsGenerator is the user login state generator.
 	ulsGenerator *userloginstate.Generator
-
-	// createDeviceWebTokenFunc is the CreateDeviceWebToken implementation.
-	// Is nil on OSS clusters.
-	createDeviceWebTokenFunc CreateDeviceWebTokenFunc
 
 	// bcryptCostOverride overrides the bcrypt cost for operations executed
 	// directly by [Server].
@@ -1088,13 +1043,6 @@ func (a *Server) SetUnifiedResourcesCache(unifiedResourcesCache *services.Unifie
 	a.UnifiedResourceCache = unifiedResourcesCache
 }
 
-// SetAccessRequestCache sets the access request cache.
-func (a *Server) SetAccessRequestCache(accessRequestCache *services.AccessRequestCache) {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-	a.AccessRequestCache = accessRequestCache
-}
-
 // SetUserNotificationsCache sets the user notification cache.
 func (a *Server) SetUserNotificationCache(userNotificationCache *services.UserNotificationCache) {
 	a.lock.Lock()
@@ -1107,6 +1055,13 @@ func (a *Server) SetGlobalNotificationCache(globalNotificationCache *services.Gl
 	a.lock.Lock()
 	defer a.lock.Unlock()
 	a.GlobalNotificationCache = globalNotificationCache
+}
+
+// SetAccessRequestCache sets the access request cache.
+func (a *Server) SetAccessRequestCache(accessRequestCache *services.AccessRequestCache) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	a.AccessRequestCache = accessRequestCache
 }
 
 func (a *Server) SetLockWatcher(lockWatcher *services.LockWatcher) {
@@ -1128,23 +1083,6 @@ func (a *Server) SetHeadlessAuthenticationWatcher(headlessAuthenticationWatcher 
 	a.lock.Lock()
 	defer a.lock.Unlock()
 	a.headlessAuthenticationWatcher = headlessAuthenticationWatcher
-}
-
-func (a *Server) SetCreateDeviceWebTokenFunc(f CreateDeviceWebTokenFunc) {
-	a.lock.Lock()
-	a.createDeviceWebTokenFunc = f
-	a.lock.Unlock()
-}
-
-// createDeviceWebToken safely calls the underlying [CreateDeviceWebTokenFunc].
-func (a *Server) createDeviceWebToken(ctx context.Context, webToken *devicepb.DeviceWebToken) (*devicepb.DeviceWebToken, error) {
-	a.lock.RLock()
-	defer a.lock.RUnlock()
-	if a.createDeviceWebTokenFunc == nil {
-		return nil, nil
-	}
-	token, err := a.createDeviceWebTokenFunc(ctx, webToken)
-	return token, trace.Wrap(err)
 }
 
 func (a *Server) bcryptCost() int {
@@ -1234,9 +1172,8 @@ func (a *Server) runPeriodicOperations() {
 		Jitter:   retryutils.NewSeventhJitter(),
 	})
 	promTicker := interval.New(interval.Config{
-		FirstDuration: 5 * time.Second,
-		Duration:      defaults.PrometheusScrapeInterval,
-		Jitter:        retryutils.NewSeventhJitter(),
+		Duration: defaults.PrometheusScrapeInterval,
+		Jitter:   retryutils.NewSeventhJitter(),
 	})
 	missedKeepAliveCount := 0
 	defer ticker.Stop()
@@ -1649,7 +1586,7 @@ var (
 
 // refreshRemoteClusters updates connection status of all remote clusters.
 func (a *Server) refreshRemoteClusters(ctx context.Context, rnd *insecurerand.Rand) {
-	remoteClusters, err := a.Services.GetRemoteClusters(ctx)
+	remoteClusters, err := a.Services.GetRemoteClusters()
 	if err != nil {
 		log.WithError(err).Error("Failed to load remote clusters for status refresh")
 		return
@@ -1709,12 +1646,6 @@ func (a *Server) Close() error {
 		}
 	}
 
-	if a.AccessRequestCache != nil {
-		if err := a.AccessRequestCache.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
 	if a.UserNotificationCache != nil {
 		if err := a.UserNotificationCache.Close(); err != nil {
 			errs = append(errs, err)
@@ -1723,6 +1654,12 @@ func (a *Server) Close() error {
 
 	if a.GlobalNotificationCache != nil {
 		if err := a.GlobalNotificationCache.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if a.AccessRequestCache != nil {
+		if err := a.AccessRequestCache.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -2028,6 +1965,10 @@ func (r *certRequest) check() error {
 }
 
 type certRequestOption func(*certRequest)
+
+func certRequestMFAVerified(mfaID string) certRequestOption {
+	return func(r *certRequest) { r.mfaVerified = mfaID }
+}
 
 func certRequestPreviousIdentityExpires(previousIdentityExpires time.Time) certRequestOption {
 	return func(r *certRequest) { r.previousIdentityExpires = previousIdentityExpires }
@@ -2341,8 +2282,7 @@ type AugmentUserCertificateOpts struct {
 // Used by Device Trust to add device extensions to the user certificate.
 func (a *Server) AugmentContextUserCertificates(
 	ctx context.Context,
-	authCtx *authz.Context,
-	opts *AugmentUserCertificateOpts,
+	authCtx *authz.Context, opts *AugmentUserCertificateOpts,
 ) (*proto.Certs, error) {
 	switch {
 	case authCtx == nil:
@@ -2351,128 +2291,10 @@ func (a *Server) AugmentContextUserCertificates(
 		return nil, trace.BadParameter("opts required")
 	}
 
-	// Fetch user TLS certificate.
-	x509Cert, err := authz.UserCertificateFromContext(ctx)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	identity := authCtx.Identity.GetIdentity()
-
-	return a.augmentUserCertificates(ctx, augmentUserCertificatesOpts{
-		checker:          authCtx.Checker,
-		x509Cert:         x509Cert,
-		x509Identity:     &identity,
-		sshAuthorizedKey: opts.SSHAuthorizedKey,
-		deviceExtensions: opts.DeviceExtensions,
-	})
-}
-
-// AugmentWebSessionCertificatesOpts aggregates arguments for
-// [AugmentWebSessionCertificates].
-type AugmentWebSessionCertificatesOpts struct {
-	// WebSessionID is the identifier for the WebSession.
-	WebSessionID string
-	// User is the owner of the WebSession.
-	User string
-	// DeviceExtensions are the device-aware extensions to add to the certificates
-	// being augmented.
-	DeviceExtensions *DeviceExtensions
-}
-
-// AugmentWebSessionCertificates is a variant of
-// [AugmentContextUserCertificates] that operates directly in the certificates
-// stored in a WebSession.
-//
-// On success the WebSession is updated with device extension certificates.
-func (a *Server) AugmentWebSessionCertificates(ctx context.Context, opts *AugmentWebSessionCertificatesOpts) error {
-	switch {
-	case opts == nil:
-		return trace.BadParameter("opts required")
-	case opts.WebSessionID == "":
-		return trace.BadParameter("opts.WebSessionID required")
-	case opts.User == "":
-		return trace.BadParameter("opts.User required")
-	}
-
-	// Get and validate session.
-	sessions := a.WebSessions()
-	session, err := sessions.Get(ctx, types.GetWebSessionRequest{
-		User:      opts.User,
-		SessionID: opts.WebSessionID,
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	// Coerce session before doing more expensive operations.
-	sessionV2, ok := session.(*types.WebSessionV2)
-	if !ok {
-		return trace.BadParameter("unexpected WebSession type: %T", session)
-	}
-
-	// Parse X.509 certificate.
-	block, _ := pem.Decode(session.GetTLSCert())
-	if block == nil {
-		return trace.BadParameter("cannot decode session TLS certificate")
-	}
-	x509Cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	x509Identity, err := tlsca.FromSubject(x509Cert.Subject, x509Cert.NotAfter)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	// Prepare the AccessChecker for the WebSession identity.
-	clusterName, err := a.GetClusterName()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	accessInfo, err := services.AccessInfoFromLocalIdentity(*x509Identity, a)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	checker, err := services.NewAccessChecker(accessInfo, clusterName.GetClusterName(), a)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	// Augment certificates.
-	newCerts, err := a.augmentUserCertificates(ctx, augmentUserCertificatesOpts{
-		checker:          checker,
-		x509Cert:         x509Cert,
-		x509Identity:     x509Identity,
-		sshAuthorizedKey: session.GetPub(),
-		deviceExtensions: opts.DeviceExtensions,
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	// Update WebSession.
-	sessionV2.Spec.Pub = newCerts.SSH
-	sessionV2.Spec.TLSCert = newCerts.TLS
-	sessionV2.Spec.HasDeviceExtensions = true
-	return trace.Wrap(sessions.Upsert(ctx, sessionV2))
-}
-
-type augmentUserCertificatesOpts struct {
-	checker          services.AccessChecker
-	x509Cert         *x509.Certificate
-	x509Identity     *tlsca.Identity
-	sshAuthorizedKey []byte
-	deviceExtensions *DeviceExtensions
-}
-
-func (a *Server) augmentUserCertificates(
-	ctx context.Context,
-	opts augmentUserCertificatesOpts,
-) (*proto.Certs, error) {
 	// Is at least one extension present?
 	// Are the extensions valid?
-	dev := opts.deviceExtensions
+	identity := authCtx.Identity.GetIdentity()
+	dev := opts.DeviceExtensions
 	switch {
 	case dev == nil: // Only extension that currently exists.
 		return nil, trace.BadParameter("at least one opts extension must be present")
@@ -2482,27 +2304,28 @@ func (a *Server) augmentUserCertificates(
 		return nil, trace.BadParameter("opts.DeviceExtensions.AssetTag required")
 	case dev.CredentialID == "":
 		return nil, trace.BadParameter("opts.DeviceExtensions.CredentialID required")
-	}
-
-	x509Cert := opts.x509Cert
-	x509Identity := opts.x509Identity
-
-	// Sanity check: x509Cert identity matches x509Identity.
-	if x509Cert.Subject.CommonName != x509Identity.Username {
-		return nil, trace.BadParameter("identity and x509 user mismatch")
-	}
-
 	// Do not reissue if device extensions are already present.
-	// Note that the certIdentity extensions could differ from the "current"
-	// identity extensions if this was not the cert used to authenticate.
-	if x509Identity.DeviceExtensions.DeviceID != "" ||
-		x509Identity.DeviceExtensions.AssetTag != "" ||
-		x509Identity.DeviceExtensions.CredentialID != "" {
+	case identity.DeviceExtensions.DeviceID != "",
+		identity.DeviceExtensions.AssetTag != "",
+		identity.DeviceExtensions.CredentialID != "":
 		return nil, trace.BadParameter("device extensions already present")
 	}
 
+	// Fetch user TLS certificate.
+	x509Cert, err := authz.UserCertificateFromContext(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// Sanity check: x509Cert matches identity.
+	// Both the TLS certificate and the identity come from the same source, so
+	// they are unlikely to mismatch unless Teleport itself mixes it up.
+	if x509Cert.Subject.CommonName != identity.Username {
+		return nil, trace.BadParameter("identity and x509 user mismatch")
+	}
+
 	// Parse and verify SSH certificate.
-	sshAuthorizedKey := opts.sshAuthorizedKey
+	sshAuthorizedKey := opts.SSHAuthorizedKey
 	var sshCert *ssh.Certificate
 	if len(sshAuthorizedKey) > 0 {
 		var err error
@@ -2539,9 +2362,9 @@ func (a *Server) augmentUserCertificates(
 		switch {
 		case sshCert.CertType != ssh.UserCert:
 			return nil, trace.BadParameter("ssh cert type mismatch")
-		case sshCert.KeyId != x509Identity.Username:
+		case sshCert.KeyId != identity.Username:
 			return nil, trace.BadParameter("identity and SSH user mismatch")
-		case !slices.Equal(filterAndSortPrincipals(sshCert.ValidPrincipals), filterAndSortPrincipals(x509Identity.Principals)):
+		case !slices.Equal(filterAndSortPrincipals(sshCert.ValidPrincipals), filterAndSortPrincipals(identity.Principals)):
 			return nil, trace.BadParameter("identity and SSH principals mismatch")
 		case !apisshutils.KeysEqual(sshCert.Key, xPubKey):
 			return nil, trace.BadParameter("x509 and SSH public key mismatch")
@@ -2609,18 +2432,18 @@ func (a *Server) augmentUserCertificates(
 		return nil, trace.Wrap(err)
 	}
 	if err := a.verifyLocksForUserCerts(verifyLocksForUserCertsReq{
-		checker:              opts.checker,
+		checker:              authCtx.Checker,
 		defaultMode:          authPref.GetLockingMode(),
-		username:             x509Identity.Username,
-		mfaVerified:          x509Identity.MFAVerified,
-		activeAccessRequests: x509Identity.ActiveRequests,
-		deviceID:             dev.DeviceID, // Check lock against requested device.
+		username:             identity.Username,
+		mfaVerified:          identity.MFAVerified,
+		activeAccessRequests: identity.ActiveRequests,
+		deviceID:             opts.DeviceExtensions.DeviceID, // Check lock against requested device.
 	}); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	// Augment TLS certificate.
-	newIdentity := x509Identity
+	newIdentity := identity
 	newIdentity.DeviceExtensions.DeviceID = dev.DeviceID
 	newIdentity.DeviceExtensions.AssetTag = dev.AssetTag
 	newIdentity.DeviceExtensions.CredentialID = dev.CredentialID
@@ -2665,7 +2488,7 @@ func (a *Server) augmentUserCertificates(
 	}
 
 	// Issue audit event on success, same as [Server.generateCert].
-	a.emitCertCreateEvent(ctx, newIdentity, notAfter)
+	a.emitCertCreateEvent(ctx, &newIdentity, notAfter)
 
 	return &proto.Certs{
 		SSH: newAuthorizedKey,
@@ -2879,7 +2702,7 @@ func generateCert(ctx context.Context, a *Server, req certRequest, caType types.
 	}
 	if req.routeToCluster != clusterName {
 		// Authorize access to a remote cluster.
-		rc, err := a.GetRemoteCluster(ctx, req.routeToCluster)
+		rc, err := a.GetRemoteCluster(req.routeToCluster)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -3275,6 +3098,30 @@ func (a *Server) WithUserLock(ctx context.Context, username string, authenticate
 	return trace.WithField(retErr, ErrFieldKeyUserMaxedAttempts, true)
 }
 
+// PreAuthenticatedSignIn is for MFA authentication methods where the password
+// is already checked before issuing the second factor challenge
+func (a *Server) PreAuthenticatedSignIn(ctx context.Context, user string, identity tlsca.Identity) (types.WebSession, error) {
+	accessInfo, err := services.AccessInfoFromLocalIdentity(identity, a)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	sess, err := a.NewWebSession(ctx, NewWebSessionRequest{
+		User:                 user,
+		LoginIP:              identity.LoginIP,
+		Roles:                accessInfo.Roles,
+		Traits:               accessInfo.Traits,
+		AccessRequests:       identity.ActiveRequests,
+		RequestedResourceIDs: accessInfo.AllowedResourceIDs,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if err := a.upsertWebSession(ctx, sess); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return sess.WithoutSecrets(), nil
+}
+
 // CreateAuthenticateChallenge implements AuthService.CreateAuthenticateChallenge.
 func (a *Server) CreateAuthenticateChallenge(ctx context.Context, req *proto.CreateAuthenticateChallengeRequest) (*proto.MFAAuthenticateChallenge, error) {
 	var username string
@@ -3467,19 +3314,23 @@ type newRegisterChallengeRequest struct {
 func (a *Server) createRegisterChallenge(ctx context.Context, req *newRegisterChallengeRequest) (*proto.MFARegisterChallenge, error) {
 	switch req.deviceType {
 	case proto.DeviceType_DEVICE_TYPE_TOTP:
-		if req.token == nil {
-			return nil, trace.BadParameter("all TOTP registrations require a privilege token")
-		}
-
 		otpKey, otpOpts, err := a.newTOTPKey(req.username)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 
-		token := req.token
-		secrets, err := a.createTOTPUserTokenSecrets(ctx, token, otpKey)
-		if err != nil {
-			return nil, trace.Wrap(err)
+		// TODO(codingllama): Once AddMFADeviceSync is no more all requests should
+		//  have a token. If they don't, then the secret is "lost" to the server.
+		var qrCode []byte
+		var challengeID string
+		if token := req.token; token != nil {
+			secrets, err := a.createTOTPUserTokenSecrets(ctx, token, otpKey)
+			if err != nil {
+				return nil, trace.Wrap(err)
+			}
+
+			qrCode = secrets.GetQRCode()
+			challengeID = token.GetName()
 		}
 
 		return &proto.MFARegisterChallenge{
@@ -3491,8 +3342,8 @@ func (a *Server) createRegisterChallenge(ctx context.Context, req *newRegisterCh
 					Algorithm:     otpOpts.Algorithm.String(),
 					Digits:        uint32(otpOpts.Digits.Length()),
 					Account:       otpKey.AccountName(),
-					QRCode:        secrets.GetQRCode(),
-					ID:            token.GetName(),
+					QRCode:        qrCode,
+					ID:            challengeID,
 				},
 			},
 		}, nil
@@ -3683,48 +3534,17 @@ func (a *Server) deleteMFADeviceSafely(ctx context.Context, user, deviceName str
 		return nil, trace.BadParameter("unexpected second factor type: %s", sf)
 	}
 
-	// canDeleteLastPasskey figures out whether the user can safely delete their
-	// credential without locking themselves out in case if it's the last passkey.
-	// It checks whether the credential to delete is a last passkey and whether
-	// the user has other valid local credentials.
-	canDeleteLastPasskey := func() (bool, error) {
-		if !authPref.GetAllowPasswordless() || numResidentKeys > 1 || !isResidentKey(deviceToDelete) {
-			return true, nil
-		}
-
-		// Deleting the last passkey is OK if the user has a password set and an
-		// additional MFA device, otherwise they would be locked out.
-		u, err := a.Services.GetUser(ctx, user, false /* withSecrets */)
-		if err != nil {
-			return false, trace.Wrap(err)
-		}
-		if u.GetPasswordState() != types.PasswordState_PASSWORD_STATE_SET {
-			return false, nil
-		}
-
-		// Minimum number of WebAuthn devices includes the passkey that we attempt
-		// to delete, hence 2.
-		if sfToCount[constants.SecondFactorWebauthn] >= 2 {
-			return true, nil
-		}
-
-		// Whether we take TOTPs into consideration or not depends on whether it's
-		// enabled.
-		switch sf := authPref.GetSecondFactor(); sf {
-		case constants.SecondFactorOTP, constants.SecondFactorOn, constants.SecondFactorOptional:
-			if sfToCount[constants.SecondFactorOTP] >= 1 {
-				return true, nil
-			}
-		}
-
-		return false, nil
-	}
-
-	can, err := canDeleteLastPasskey()
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	if !can {
+	// Stop users from deleting their last resident key. This prevents
+	// passwordless users from locking themselves out, at the cost of not letting
+	// regular users do it either.
+	//
+	// A better logic would be to apply this only to passwordless users, but we
+	// cannot distinguish users in that manner.
+	// See https://github.com/gravitational/teleport/issues/13219#issuecomment-1148255979.
+	//
+	// TODO(codingllama): Check if the last login type used was passwordless, if
+	//  not then we could let this device be deleted.
+	if authPref.GetAllowPasswordless() && numResidentKeys == 1 && isResidentKey(deviceToDelete) {
 		return nil, trace.BadParameter("cannot delete last passwordless credential for user")
 	}
 
@@ -3807,6 +3627,10 @@ type newMFADeviceFields struct {
 	// tokenID is the ID of a reset/invite/recovery/privilege token.
 	// It is generally used to recover the TOTP secret stored in the token.
 	tokenID string
+	// totpSecret is a secret shared by client and server to generate totp codes.
+	// Field can be empty to get secret by "tokenID".
+	// DELETE IN 16. Only used by the streaming AddMFADevice RPC. (codingllama)
+	totpSecret string
 
 	// webIdentityOverride is an optional RegistrationIdentity override to be used
 	// for device registration. A common override is decorating the regular
@@ -3879,15 +3703,19 @@ func (a *Server) registerTOTPDevice(ctx context.Context, regResp *proto.MFARegis
 		return nil, trace.BadParameter("second factor TOTP not allowed by cluster")
 	}
 
-	if req.tokenID == "" {
+	var secret string
+	switch {
+	case req.tokenID != "":
+		secrets, err := a.GetUserTokenSecrets(ctx, req.tokenID)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		secret = secrets.GetOTPKey()
+	case req.totpSecret != "":
+		secret = req.totpSecret
+	default:
 		return nil, trace.BadParameter("missing TOTP secret")
 	}
-
-	secrets, err := a.GetUserTokenSecrets(ctx, req.tokenID)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	secret := secrets.GetOTPKey()
 
 	dev, err := services.NewTOTPDevice(req.newDeviceName, secret, a.clock.Now())
 	if err != nil {
@@ -4061,18 +3889,8 @@ func (a *Server) ExtendWebSession(ctx context.Context, req authclient.WebSession
 		return nil, trace.Wrap(err)
 	}
 
-	// Keep existing device extensions in the new session.
-	opts := &newWebSessionOpts{}
-	if prevSession.GetHasDeviceExtensions() {
-		var err error
-		opts.deviceExtensions, err = decodeDeviceExtensionsFromSession(prevSession)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-	}
-
 	sessionTTL := utils.ToTTL(a.clock, expiresAt)
-	sess, err := a.newWebSession(ctx, NewWebSessionRequest{
+	sess, err := a.NewWebSession(ctx, NewWebSessionRequest{
 		User:                 req.User,
 		LoginIP:              identity.LoginIP,
 		Roles:                roles,
@@ -4081,7 +3899,7 @@ func (a *Server) ExtendWebSession(ctx context.Context, req authclient.WebSession
 		AccessRequests:       accessRequests,
 		RequestedResourceIDs: allowedResourceIDs,
 		PrivateKey:           prevKey,
-	}, opts)
+	})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -4096,29 +3914,6 @@ func (a *Server) ExtendWebSession(ctx context.Context, req authclient.WebSession
 	}
 
 	return sess, nil
-}
-
-func decodeDeviceExtensionsFromSession(webSession types.WebSession) (*tlsca.DeviceExtensions, error) {
-	// Reading the extensions from the session itself means we are always taking
-	// them for a legitimate source (ie, certificates issued by Auth).
-	// We don't re-validate the certificates when decoding the extensions.
-
-	block, _ := pem.Decode(webSession.GetTLSCert())
-	if block == nil {
-		return nil, trace.BadParameter("failed to decode session TLS certificate")
-	}
-
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	certIdentity, err := tlsca.FromSubject(cert.Subject, cert.NotAfter)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return &certIdentity.DeviceExtensions, nil
 }
 
 // getWebSessionTTL returns the earliest expiration time of allowed in the access request.
@@ -6002,7 +5797,7 @@ func (a *Server) isMFARequired(ctx context.Context, checker services.AccessCheck
 		}, nil
 	}
 
-	var noMFAAccessErr error
+	var noMFAAccessErr, notFoundErr error
 	switch t := req.Target.(type) {
 	case *proto.IsMFARequiredRequest_Node:
 		if t.Node.Node == "" {
@@ -6080,6 +5875,7 @@ func (a *Server) isMFARequired(ctx context.Context, checker services.AccessCheck
 		}
 
 	case *proto.IsMFARequiredRequest_KubernetesCluster:
+		notFoundErr = trace.NotFound("kubernetes cluster %q not found", t.KubernetesCluster)
 		if t.KubernetesCluster == "" {
 			return nil, trace.BadParameter("missing KubernetesCluster field in a kubernetes-only UserCertsRequest")
 		}
@@ -6097,12 +5893,13 @@ func (a *Server) isMFARequired(ctx context.Context, checker services.AccessCheck
 			}
 		}
 		if cluster == nil {
-			return nil, trace.NotFound("kubernetes cluster %q not found", t.KubernetesCluster)
+			return nil, trace.Wrap(notFoundErr)
 		}
 
 		noMFAAccessErr = checker.CheckAccess(cluster, services.AccessState{})
 
 	case *proto.IsMFARequiredRequest_Database:
+		notFoundErr = trace.NotFound("database service %q not found", t.Database.ServiceName)
 		if t.Database.ServiceName == "" {
 			return nil, trace.BadParameter("missing ServiceName field in a database-only UserCertsRequest")
 		}
@@ -6118,7 +5915,7 @@ func (a *Server) isMFARequired(ctx context.Context, checker services.AccessCheck
 			}
 		}
 		if db == nil {
-			return nil, trace.NotFound("database service %q not found", t.Database.ServiceName)
+			return nil, trace.Wrap(notFoundErr)
 		}
 
 		autoCreate, err := checker.DatabaseAutoUserMode(db)
@@ -6153,26 +5950,6 @@ func (a *Server) isMFARequired(ctx context.Context, checker services.AccessCheck
 		noMFAAccessErr = checker.CheckAccess(desktops[0],
 			services.AccessState{},
 			services.NewWindowsLoginMatcher(t.WindowsDesktop.GetLogin()))
-
-	case *proto.IsMFARequiredRequest_App:
-		if t.App.Name == "" {
-			return nil, trace.BadParameter("missing Name field in an app-only UserCertsRequest")
-		}
-
-		servers, err := a.GetApplicationServers(ctx, apidefaults.Namespace)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-
-		i := slices.IndexFunc(servers, func(server types.AppServer) bool {
-			return server.GetApp().GetName() == t.App.Name
-		})
-		if i == -1 {
-			return nil, trace.NotFound("application service %q not found", t.App.Name)
-		}
-
-		app := servers[i].GetApp()
-		noMFAAccessErr = checker.CheckAccess(app, services.AccessState{})
 
 	default:
 		return nil, trace.BadParameter("unknown Target %T", req.Target)

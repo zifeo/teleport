@@ -25,8 +25,6 @@ import (
 )
 
 // AppServerOrSAMLIdPServiceProvider describes methods shared between an AppServer and a SAMLIdpServiceProvider resource.
-//
-// DEPRECATED: Use AppServer and SAMLIdPServiceProvider types individually.
 type AppServerOrSAMLIdPServiceProvider interface {
 	ResourceWithLabels
 	GetAppServer() *AppServerV3

@@ -22,6 +22,7 @@ import Dialog from 'design/Dialog';
 import Flex from 'design/Flex';
 import Image from 'design/Image';
 import Indicator from 'design/Indicator';
+import Link from 'design/Link';
 import { RadioGroup } from 'design/RadioGroup';
 import { StepComponentProps, StepSlider } from 'design/StepSlider';
 import Text from 'design/Text';
@@ -122,7 +123,7 @@ export type AddAuthDeviceWizardStepProps = StepComponentProps &
   CreateDeviceStepProps &
   SaveKeyStepProps;
 
-interface ReauthenticateStepProps {
+interface ReauthenticateStepProps extends StepComponentProps {
   auth2faType: Auth2faType;
   devices: MfaDevice[];
   onAuthenticated(privilegeToken: string): void;
@@ -138,7 +139,7 @@ export function ReauthenticateStep({
   devices,
   onClose,
   onAuthenticated: onAuthenticatedProp,
-}: AddAuthDeviceWizardStepProps) {
+}: ReauthenticateStepProps) {
   const onAuthenticated = (privilegeToken: string) => {
     onAuthenticatedProp(privilegeToken);
     next();
@@ -293,7 +294,7 @@ export function createReauthOptions(
   );
 }
 
-interface CreateDeviceStepProps {
+interface CreateDeviceStepProps extends StepComponentProps {
   usage: DeviceUsage;
   auth2faType: Auth2faType;
   privilegeToken: string;
@@ -316,7 +317,7 @@ export function CreateDeviceStep({
   onNewMfaDeviceTypeChange,
   onClose,
   onDeviceCreated,
-}: AddAuthDeviceWizardStepProps) {
+}: CreateDeviceStepProps) {
   const createPasskeyAttempt = useAttempt();
   const onCreate = () => {
     if (usage === 'passwordless' || newMfaDeviceType === 'webauthn') {
@@ -459,12 +460,18 @@ function QrCodeBox({ privilegeToken }: { privilegeToken: string }) {
       </Flex>
       <Text typography="body1" textAlign="center" mt={2}>
         Scan the QR Code with any authenticator app.
+        <br />
+        We recommend{' '}
+        <Link href="https://authy.com/download/" target="_blank">
+          Authy
+        </Link>
+        .
       </Text>
     </Flex>
   );
 }
 
-interface SaveKeyStepProps {
+interface SaveKeyStepProps extends StepComponentProps {
   privilegeToken: string;
   credential: Credential;
   usage: DeviceUsage;
@@ -482,7 +489,7 @@ export function SaveDeviceStep({
   usage,
   newMfaDeviceType,
   onSuccess,
-}: AddAuthDeviceWizardStepProps) {
+}: SaveKeyStepProps) {
   const ctx = useTeleport();
   const saveAttempt = useAttempt();
   const [deviceName, setDeviceName] = useState('');

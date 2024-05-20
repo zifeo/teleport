@@ -1170,6 +1170,52 @@ func (s *ServicesTestSuite) GithubConnectorCRUD(t *testing.T) {
 	require.NotEqual(t, updated.GetDisplay(), upserted.GetDisplay())
 }
 
+func (s *ServicesTestSuite) RemoteClustersCRUD(t *testing.T) {
+	ctx := context.Background()
+	clusterName := "example.com"
+	out, err := s.PresenceS.GetRemoteClusters()
+	require.NoError(t, err)
+	require.Empty(t, out)
+
+	rc, err := types.NewRemoteCluster(clusterName)
+	require.NoError(t, err)
+
+	rc.SetConnectionStatus(teleport.RemoteClusterStatusOffline)
+
+	err = s.PresenceS.CreateRemoteCluster(rc)
+	require.NoError(t, err)
+
+	err = s.PresenceS.CreateRemoteCluster(rc)
+	require.True(t, trace.IsAlreadyExists(err))
+
+	out, err = s.PresenceS.GetRemoteClusters()
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Empty(t, cmp.Diff(out[0], rc, cmpopts.IgnoreFields(types.Metadata{}, "ID", "Revision")))
+
+	err = s.PresenceS.DeleteAllRemoteClusters()
+	require.NoError(t, err)
+
+	out, err = s.PresenceS.GetRemoteClusters()
+	require.NoError(t, err)
+	require.Empty(t, out)
+
+	// test delete individual connection
+	err = s.PresenceS.CreateRemoteCluster(rc)
+	require.NoError(t, err)
+
+	out, err = s.PresenceS.GetRemoteClusters()
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Empty(t, cmp.Diff(out[0], rc, cmpopts.IgnoreFields(types.Metadata{}, "ID", "Revision")))
+
+	err = s.PresenceS.DeleteRemoteCluster(ctx, clusterName)
+	require.NoError(t, err)
+
+	err = s.PresenceS.DeleteRemoteCluster(ctx, clusterName)
+	require.True(t, trace.IsNotFound(err))
+}
+
 // AuthPreference tests authentication preference service
 func (s *ServicesTestSuite) AuthPreference(t *testing.T) {
 	ctx := context.Background()
@@ -1194,6 +1240,11 @@ func (s *ServicesTestSuite) AuthPreference(t *testing.T) {
 	gotAP.SetRevision("123")
 	_, err = s.ConfigS.UpdateAuthPreference(ctx, gotAP)
 	require.True(t, trace.IsCompareFailed(err))
+
+	created.SetSecondFactor(constants.SecondFactorOff)
+	updated, err := s.ConfigS.UpdateAuthPreference(ctx, created)
+	require.NoError(t, err)
+	require.Equal(t, constants.SecondFactorOff, updated.GetSecondFactor())
 
 	// Validate that upserting overwrites the value regardless of the revision.
 	upserted, err := s.ConfigS.UpsertAuthPreference(ctx, gotAP)
@@ -1863,10 +1914,9 @@ func (s *ServicesTestSuite) Events(t *testing.T) {
 				rc, err := types.NewRemoteCluster("example.com")
 				rc.SetConnectionStatus(teleport.RemoteClusterStatusOffline)
 				require.NoError(t, err)
-				_, err = s.PresenceS.CreateRemoteCluster(ctx, rc)
-				require.NoError(t, err)
+				require.NoError(t, s.PresenceS.CreateRemoteCluster(rc))
 
-				out, err := s.PresenceS.GetRemoteClusters(ctx)
+				out, err := s.PresenceS.GetRemoteClusters()
 				require.NoError(t, err)
 
 				err = s.PresenceS.DeleteRemoteCluster(ctx, rc.GetName())

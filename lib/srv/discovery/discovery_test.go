@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"regexp"
 	"slices"
 	"sync"
@@ -79,17 +78,11 @@ import (
 	"github.com/gravitational/teleport/lib/cloud/gcp"
 	"github.com/gravitational/teleport/lib/cloud/mocks"
 	libevents "github.com/gravitational/teleport/lib/events"
-	"github.com/gravitational/teleport/lib/modules"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/discovery/common"
 	"github.com/gravitational/teleport/lib/srv/server"
 	usagereporter "github.com/gravitational/teleport/lib/usagereporter/teleport"
 )
-
-func TestMain(m *testing.M) {
-	modules.SetInsecureTestMode(true)
-	os.Exit(m.Run())
-}
 
 type mockSSMClient struct {
 	ssmiface.SSMAPI
@@ -2539,10 +2532,6 @@ func (m *mockGCPClient) StreamInstances(_ context.Context, _, _ string) stream.S
 
 func (m *mockGCPClient) GetInstance(_ context.Context, _ *gcp.InstanceRequest) (*gcp.Instance, error) {
 	return nil, trace.NotFound("disabled for test")
-}
-
-func (m *mockGCPClient) GetInstanceTags(_ context.Context, _ *gcp.InstanceRequest) (map[string]string, error) {
-	return nil, nil
 }
 
 func (m *mockGCPClient) AddSSHKey(_ context.Context, _ *gcp.SSHKeyRequest) error {

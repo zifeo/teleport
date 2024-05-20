@@ -28,10 +28,7 @@ import (
 	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/client/proto"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
-	accessmonitoringrulesv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/accessmonitoringrules/v1"
-	crownjewelv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/crownjewel/v1"
 	kubewaitingcontainerpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/kubewaitingcontainer/v1"
-	notificationsv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/notifications/v1"
 	userspb "github.com/gravitational/teleport/api/gen/proto/go/teleport/users/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/accesslist"
@@ -184,11 +181,6 @@ func (c *genericCollection[T, R, _]) getReader(cacheOK bool) R {
 
 var _ collectionReader[any] = (*genericCollection[types.Resource, any, executor[types.Resource, any]])(nil)
 
-type crownjewelsGetter interface {
-	ListCrownJewels(ctx context.Context, pageSize int64, nextToken string) ([]*crownjewelv1.CrownJewel, string, error)
-	GetCrownJewel(ctx context.Context, name string) (*crownjewelv1.CrownJewel, error)
-}
-
 // cacheCollections is a registry of resource collections used by Cache.
 type cacheCollections struct {
 	// byKind is a map of registered collections by resource Kind/SubKind
@@ -216,7 +208,6 @@ type cacheCollections struct {
 	discoveryConfigs         collectionReader[services.DiscoveryConfigsGetter]
 	installers               collectionReader[installerGetter]
 	integrations             collectionReader[services.IntegrationsGetter]
-	crownJewels              collectionReader[crownjewelsGetter]
 	kubeClusters             collectionReader[kubernetesClusterGetter]
 	kubeWaitingContainers    collectionReader[kubernetesWaitingContainerGetter]
 	kubeServers              collectionReader[kubeServerGetter]
@@ -243,9 +234,6 @@ type cacheCollections struct {
 	webTokens                collectionReader[webTokenGetter]
 	windowsDesktops          collectionReader[windowsDesktopsGetter]
 	windowsDesktopServices   collectionReader[windowsDesktopServiceGetter]
-	userNotifications        collectionReader[notificationGetter]
-	globalNotifications      collectionReader[notificationGetter]
-	accessMonitoringRules    collectionReader[accessMonitoringRuleGetter]
 }
 
 // setupCollections returns a registry of collections.
@@ -546,15 +534,6 @@ func setupCollections(c *Cache, watches []types.WatchKind) (*cacheCollections, e
 				watch: watch,
 			}
 			collections.byKind[resourceKind] = collections.kubeClusters
-		case types.KindCrownJewel:
-			if c.CrownJewels == nil {
-				return nil, trace.BadParameter("missing parameter crownjewels")
-			}
-			collections.crownJewels = &genericCollection[*crownjewelv1.CrownJewel, crownjewelsGetter, crownJewelsExecutor]{
-				cache: c,
-				watch: watch,
-			}
-			collections.byKind[resourceKind] = collections.crownJewels
 		case types.KindNetworkRestrictions:
 			if c.Restrictions == nil {
 				return nil, trace.BadParameter("missing parameter Restrictions")
@@ -696,30 +675,6 @@ func setupCollections(c *Cache, watches []types.WatchKind) (*cacheCollections, e
 				watch: watch,
 			}
 			collections.byKind[resourceKind] = collections.kubeWaitingContainers
-		case types.KindNotification:
-			if c.Notifications == nil {
-				return nil, trace.BadParameter("missing parameter Notifications")
-			}
-			collections.userNotifications = &genericCollection[*notificationsv1.Notification, notificationGetter, userNotificationExecutor]{
-				cache: c,
-				watch: watch,
-			}
-			collections.byKind[resourceKind] = collections.userNotifications
-		case types.KindGlobalNotification:
-			if c.Notifications == nil {
-				return nil, trace.BadParameter("missing parameter Notifications")
-			}
-			collections.globalNotifications = &genericCollection[*notificationsv1.GlobalNotification, notificationGetter, globalNotificationExecutor]{
-				cache: c,
-				watch: watch,
-			}
-			collections.byKind[resourceKind] = collections.globalNotifications
-		case types.KindAccessMonitoringRule:
-			if c.AccessMonitoringRules == nil {
-				return nil, trace.BadParameter("missing parameter AccessMonitoringRule")
-			}
-			collections.accessMonitoringRules = &genericCollection[*accessmonitoringrulesv1.AccessMonitoringRule, accessMonitoringRuleGetter, accessMonitoringRulesExecutor]{cache: c, watch: watch}
-			collections.byKind[resourceKind] = collections.accessMonitoringRules
 		default:
 			return nil, trace.BadParameter("resource %q is not supported", watch.Kind)
 		}
@@ -832,7 +787,7 @@ var _ executor[types.TunnelConnection, tunnelConnectionGetter] = tunnelConnectio
 type remoteClusterExecutor struct{}
 
 func (remoteClusterExecutor) getAll(ctx context.Context, cache *Cache, loadSecrets bool) ([]types.RemoteCluster, error) {
-	return cache.Presence.GetRemoteClusters(ctx)
+	return cache.Presence.GetRemoteClusters()
 }
 
 func (remoteClusterExecutor) upsert(ctx context.Context, cache *Cache, resource types.RemoteCluster) error {
@@ -843,12 +798,11 @@ func (remoteClusterExecutor) upsert(ctx context.Context, cache *Cache, resource 
 			return trace.Wrap(err)
 		}
 	}
-	_, err = cache.presenceCache.CreateRemoteCluster(ctx, resource)
-	return trace.Wrap(err)
+	return trace.Wrap(cache.presenceCache.CreateRemoteCluster(resource))
 }
 
 func (remoteClusterExecutor) deleteAll(ctx context.Context, cache *Cache) error {
-	return cache.presenceCache.DeleteAllRemoteClusters(ctx)
+	return cache.presenceCache.DeleteAllRemoteClusters()
 }
 
 func (remoteClusterExecutor) delete(ctx context.Context, cache *Cache, resource types.Resource) error {
@@ -865,9 +819,8 @@ func (remoteClusterExecutor) getReader(cache *Cache, cacheOK bool) remoteCluster
 }
 
 type remoteClusterGetter interface {
-	GetRemoteClusters(ctx context.Context) ([]types.RemoteCluster, error)
-	GetRemoteCluster(ctx context.Context, clusterName string) (types.RemoteCluster, error)
-	ListRemoteClusters(ctx context.Context, pageSize int, pageToken string) ([]types.RemoteCluster, string, error)
+	GetRemoteClusters(opts ...services.MarshalOption) ([]types.RemoteCluster, error)
+	GetRemoteCluster(clusterName string) (types.RemoteCluster, error)
 }
 
 var _ executor[types.RemoteCluster, remoteClusterGetter] = remoteClusterExecutor{}
@@ -1258,7 +1211,7 @@ func (userExecutor) getReader(cache *Cache, cacheOK bool) userGetter {
 type userGetter interface {
 	GetUser(ctx context.Context, user string, withSecrets bool) (types.User, error)
 	GetUsers(ctx context.Context, withSecrets bool) ([]types.User, error)
-	ListUsers(ctx context.Context, req *userspb.ListUsersRequest) (*userspb.ListUsersResponse, error)
+	ListUsersExt(ctx context.Context, req *userspb.ListUsersRequest) (*userspb.ListUsersResponse, error)
 }
 
 var _ executor[types.User, userGetter] = userExecutor{}
@@ -1839,7 +1792,7 @@ func (clusterAuditConfigExecutor) getReader(cache *Cache, cacheOK bool) clusterA
 }
 
 type clusterAuditConfigGetter interface {
-	GetClusterAuditConfig(context.Context) (types.ClusterAuditConfig, error)
+	GetClusterAuditConfig(context.Context, ...services.MarshalOption) (types.ClusterAuditConfig, error)
 }
 
 var _ executor[types.ClusterAuditConfig, clusterAuditConfigGetter] = clusterAuditConfigExecutor{}
@@ -2246,51 +2199,6 @@ type kubernetesWaitingContainerGetter interface {
 }
 
 var _ executor[*kubewaitingcontainerpb.KubernetesWaitingContainer, kubernetesWaitingContainerGetter] = kubeWaitingContainerExecutor{}
-
-type crownJewelsExecutor struct{}
-
-func (crownJewelsExecutor) getAll(ctx context.Context, cache *Cache, loadSecrets bool) ([]*crownjewelv1.CrownJewel, error) {
-	var resources []*crownjewelv1.CrownJewel
-	var nextToken string
-	for {
-		var page []*crownjewelv1.CrownJewel
-		var err error
-		page, nextToken, err = cache.CrownJewels.ListCrownJewels(ctx, 0 /* page size */, nextToken)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		resources = append(resources, page...)
-
-		if nextToken == "" {
-			break
-		}
-	}
-	return resources, nil
-}
-
-func (crownJewelsExecutor) upsert(ctx context.Context, cache *Cache, resource *crownjewelv1.CrownJewel) error {
-	_, err := cache.crownJewelsCache.UpsertCrownJewel(ctx, resource)
-	return trace.Wrap(err)
-}
-
-func (crownJewelsExecutor) deleteAll(ctx context.Context, cache *Cache) error {
-	return cache.crownJewelsCache.DeleteAllCrownJewels(ctx)
-}
-
-func (crownJewelsExecutor) delete(ctx context.Context, cache *Cache, resource types.Resource) error {
-	return cache.crownJewelsCache.DeleteCrownJewel(ctx, resource.GetName())
-}
-
-func (crownJewelsExecutor) isSingleton() bool { return false }
-
-func (crownJewelsExecutor) getReader(cache *Cache, cacheOK bool) crownjewelsGetter {
-	if cacheOK {
-		return cache.crownJewelsCache
-	}
-	return cache.Config.CrownJewels
-}
-
-var _ executor[*crownjewelv1.CrownJewel, crownjewelsGetter] = crownJewelsExecutor{}
 
 //nolint:revive // Because we want this to be IdP.
 type samlIdPServiceProvidersExecutor struct{}
@@ -2991,183 +2899,4 @@ func (accessListReviewExecutor) getReader(cache *Cache, cacheOK bool) accessList
 
 type accessListReviewsGetter interface {
 	ListAccessListReviews(ctx context.Context, accessList string, pageSize int, pageToken string) (reviews []*accesslist.Review, nextToken string, err error)
-}
-
-type notificationGetter interface {
-	ListUserNotifications(ctx context.Context, pageSize int, startKey string) ([]*notificationsv1.Notification, string, error)
-	ListGlobalNotifications(ctx context.Context, pageSize int, startKey string) ([]*notificationsv1.GlobalNotification, string, error)
-}
-
-type userNotificationExecutor struct{}
-
-func (userNotificationExecutor) getAll(ctx context.Context, cache *Cache, loadSecrets bool) ([]*notificationsv1.Notification, error) {
-	var notifications []*notificationsv1.Notification
-	var startKey string
-	for {
-		notifs, nextKey, err := cache.notificationsCache.ListUserNotifications(ctx, 0, startKey)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		notifications = append(notifications, notifs...)
-
-		if nextKey == "" {
-			break
-		}
-		startKey = nextKey
-	}
-
-	return notifications, nil
-}
-
-func (userNotificationExecutor) upsert(ctx context.Context, cache *Cache, notification *notificationsv1.Notification) error {
-	_, err := cache.notificationsCache.UpsertUserNotification(ctx, notification)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	return nil
-}
-
-func (userNotificationExecutor) deleteAll(ctx context.Context, cache *Cache) error {
-	return cache.notificationsCache.DeleteAllUserNotifications(ctx)
-}
-
-func (userNotificationExecutor) delete(ctx context.Context, cache *Cache, resource types.Resource) error {
-	r, ok := resource.(types.Resource153Unwrapper)
-	if !ok {
-		return trace.BadParameter("unknown resource type, expected types.Resource153Unwrapper, got %T", resource)
-	}
-
-	notification, ok := r.Unwrap().(*notificationsv1.Notification)
-	if !ok {
-		return trace.BadParameter("unknown Notification type, expected *notificationsv1.Notification, got %T", resource)
-	}
-
-	username := notification.GetSpec().GetUsername()
-	notificationId := notification.GetMetadata().GetName()
-
-	err := cache.notificationsCache.DeleteUserNotification(ctx, username, notificationId)
-	return trace.Wrap(err)
-}
-
-func (userNotificationExecutor) isSingleton() bool { return false }
-
-func (userNotificationExecutor) getReader(cache *Cache, cacheOK bool) notificationGetter {
-	if cacheOK {
-		return cache.notificationsCache
-	}
-	return cache.Config.Notifications
-}
-
-var _ executor[*notificationsv1.Notification, notificationGetter] = userNotificationExecutor{}
-
-type globalNotificationExecutor struct{}
-
-func (globalNotificationExecutor) getAll(ctx context.Context, cache *Cache, loadSecrets bool) ([]*notificationsv1.GlobalNotification, error) {
-	var notifications []*notificationsv1.GlobalNotification
-	var startKey string
-	for {
-		notifs, nextKey, err := cache.notificationsCache.ListGlobalNotifications(ctx, 0, startKey)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-
-		notifications = append(notifications, notifs...)
-
-		if nextKey == "" {
-			break
-		}
-		startKey = nextKey
-	}
-
-	return notifications, nil
-}
-
-func (globalNotificationExecutor) upsert(ctx context.Context, cache *Cache, notification *notificationsv1.GlobalNotification) error {
-	if _, err := cache.notificationsCache.UpsertGlobalNotification(ctx, notification); err != nil {
-		return trace.Wrap(err)
-	}
-
-	return nil
-}
-
-func (globalNotificationExecutor) deleteAll(ctx context.Context, cache *Cache) error {
-	return cache.notificationsCache.DeleteAllGlobalNotifications(ctx)
-}
-
-func (globalNotificationExecutor) delete(ctx context.Context, cache *Cache, resource types.Resource) error {
-
-	r, ok := resource.(types.Resource153Unwrapper)
-	if !ok {
-		return trace.BadParameter("unknown resource type, expected types.Resource153Unwrapper, got %T", resource)
-	}
-
-	globalNotification, ok := r.Unwrap().(*notificationsv1.GlobalNotification)
-	if !ok {
-		return trace.BadParameter("unknown Notification type, expected *notificationsv1.GlobalNotification, got %T", resource)
-	}
-
-	notificationId := globalNotification.GetMetadata().GetName()
-
-	err := cache.notificationsCache.DeleteGlobalNotification(ctx, notificationId)
-	return trace.Wrap(err)
-}
-
-func (globalNotificationExecutor) isSingleton() bool { return false }
-
-func (globalNotificationExecutor) getReader(cache *Cache, cacheOK bool) notificationGetter {
-	if cacheOK {
-		return cache.notificationsCache
-	}
-	return cache.Config.Notifications
-}
-
-var _ executor[*notificationsv1.GlobalNotification, notificationGetter] = globalNotificationExecutor{}
-
-type accessMonitoringRulesExecutor struct{}
-
-func (accessMonitoringRulesExecutor) getAll(ctx context.Context, cache *Cache, loadSecrets bool) ([]*accessmonitoringrulesv1.AccessMonitoringRule, error) {
-	var resources []*accessmonitoringrulesv1.AccessMonitoringRule
-	var nextToken string
-	for {
-		var page []*accessmonitoringrulesv1.AccessMonitoringRule
-		var err error
-		page, nextToken, err = cache.AccessMonitoringRules.ListAccessMonitoringRules(ctx, 0 /* page size */, nextToken)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		resources = append(resources, page...)
-
-		if nextToken == "" {
-			break
-		}
-	}
-	return resources, nil
-}
-
-func (accessMonitoringRulesExecutor) upsert(ctx context.Context, cache *Cache, resource *accessmonitoringrulesv1.AccessMonitoringRule) error {
-	_, err := cache.accessMontoringRuleCache.UpsertAccessMonitoringRule(ctx, resource)
-	return trace.Wrap(err)
-}
-
-func (accessMonitoringRulesExecutor) deleteAll(ctx context.Context, cache *Cache) error {
-	return cache.accessMontoringRuleCache.DeleteAllAccessMonitoringRules(ctx)
-}
-
-func (accessMonitoringRulesExecutor) delete(ctx context.Context, cache *Cache, resource types.Resource) error {
-	return cache.accessMontoringRuleCache.DeleteAccessMonitoringRule(ctx, resource.GetName())
-}
-
-func (accessMonitoringRulesExecutor) isSingleton() bool { return false }
-
-func (accessMonitoringRulesExecutor) getReader(cache *Cache, cacheOK bool) accessMonitoringRuleGetter {
-	if cacheOK {
-		return cache.accessMontoringRuleCache
-	}
-	return cache.Config.AccessMonitoringRules
-}
-
-type accessMonitoringRuleGetter interface {
-	GetAccessMonitoringRule(ctx context.Context, name string) (*accessmonitoringrulesv1.AccessMonitoringRule, error)
-	ListAccessMonitoringRules(ctx context.Context, limit int, startKey string) ([]*accessmonitoringrulesv1.AccessMonitoringRule, string, error)
 }

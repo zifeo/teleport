@@ -80,10 +80,6 @@ type FileConfig struct {
 	// that defines the metrics service configuration
 	Metrics Metrics `yaml:"metrics_service,omitempty"`
 
-	// Debug is the "debug_service" section that defines the configuration for
-	// the Debug service.
-	Debug DebugService `yaml:"debug_service,omitempty"`
-
 	// WindowsDesktop is the "windows_desktop_service" that defines the
 	// configuration for Windows Desktop Access.
 	WindowsDesktop WindowsDesktopService `yaml:"windows_desktop_service,omitempty"`
@@ -470,7 +466,6 @@ func (conf *FileConfig) CheckAndSetDefaults() error {
 	conf.SSH.defaultEnabled = true
 	conf.Kube.defaultEnabled = false
 	conf.Okta.defaultEnabled = false
-	conf.Debug.defaultEnabled = true
 	if conf.Version == "" {
 		conf.Version = defaults.TeleportConfigVersionV1
 	}
@@ -562,8 +557,7 @@ func (l *Log) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	type logYAML Log
 	log := (*logYAML)(l)
 	if err := unmarshal(log); err != nil {
-		var typeError *yaml.TypeError
-		if !errors.As(err, &typeError) {
+		if _, ok := err.(*yaml.TypeError); !ok {
 			return err
 		}
 
@@ -1180,11 +1174,11 @@ func getCertificatePEM(certOrPath string) (string, error) {
 	data, err := os.ReadFile(certOrPath)
 	if err != nil {
 		// Don't use trace in order to keep a clean error message.
-		return "", fmt.Errorf("%q is not a valid x509 certificate (%w) and can't be read as a file (%w)", certOrPath, parseErr, err)
+		return "", fmt.Errorf("%q is not a valid x509 certificate (%v) and can't be read as a file (%v)", certOrPath, parseErr, err)
 	}
 	if _, err := tlsutils.ParseCertificatePEM(data); err != nil {
 		// Don't use trace in order to keep a clean error message.
-		return "", fmt.Errorf("file %q contains an invalid x509 certificate: %w", certOrPath, err)
+		return "", fmt.Errorf("file %q contains an invalid x509 certificate: %v", certOrPath, err)
 	}
 
 	return string(data), nil // OK, valid PEM file
@@ -1502,7 +1496,6 @@ type Discovery struct {
 	DiscoveryGroup string `yaml:"discovery_group,omitempty"`
 	// PollInterval is the cadence at which the discovery server will run each of its
 	// discovery cycles.
-	// Default: [github.com/gravitational/teleport/lib/srv/.DefaultDiscoveryPollInterval]
 	PollInterval time.Duration `yaml:"poll_interval,omitempty"`
 }
 
@@ -2147,10 +2140,6 @@ type Proxy struct {
 type UIConfig struct {
 	// ScrollbackLines is the max number of lines the UI terminal can display in its history
 	ScrollbackLines int `yaml:"scrollback_lines,omitempty"`
-	// ShowResources determines which resources are shown in the web UI. Default if unset is "requestable"
-	// which means resources the user has access to and resources they can request will be shown in the
-	// resources UI. If set to `accessible_only`, only resources the user already has access to will be shown.
-	ShowResources constants.ShowResources `yaml:"show_resources,omitempty"`
 }
 
 // ACME configures ACME protocol - automatic X.509 certificates
@@ -2324,12 +2313,6 @@ type Metrics struct {
 // MTLSEnabled returns whether mtls is enabled or not in the metrics service config.
 func (m *Metrics) MTLSEnabled() bool {
 	return len(m.KeyPairs) > 0 && len(m.CACerts) > 0
-}
-
-// DebugService is a `debug_service` section of the config file.
-type DebugService struct {
-	// Service is a generic service configuration section
-	Service `yaml:",inline"`
 }
 
 // WindowsDesktopService contains configuration for windows_desktop_service.

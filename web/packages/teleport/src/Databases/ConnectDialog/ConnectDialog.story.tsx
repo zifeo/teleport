@@ -68,17 +68,6 @@ export const ConnectDynamodb = () => (
   />
 );
 
-export const ConnectSpanner = () => (
-  <ConnectDialog
-    username="gavin"
-    dbName="spanner1"
-    dbProtocol="spanner"
-    clusterId="im-a-cluster"
-    onClose={() => null}
-    authType="local"
-  />
-);
-
 export const ConnectWithRequestId = () => {
   return (
     <ConnectDialog

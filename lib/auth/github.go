@@ -52,13 +52,13 @@ import (
 // ErrGithubNoTeams results from a github user not belonging to any teams.
 var ErrGithubNoTeams = trace.BadParameter("user does not belong to any teams configured in connector; the configuration may have typos.")
 
-// GithubConverter is a thin wrapper around the [authclient.ClientI] interface that
+// GithubConverter is a thin wrapper around the ClientI interface that
 // ensures GitHub auth connectors use the registered implementation.
 type GithubConverter struct {
 	authclient.ClientI
 }
 
-// WithGithubConnectorConversions takes a [authclient.ClientI]  and returns one that
+// WithGithubConnectorConversions takes a ClientI and returns one that
 // ensures returned or passed [types.GithubConnector] interfaces
 // use the registered implementation for the following methods:
 //
@@ -272,8 +272,7 @@ func checkGithubOrgSSOSupport(ctx context.Context, conn types.GithubConnector, u
 	}
 
 	// Check each organization only once
-	// TODO: this can be removed as of Teleport 12, but we should create cluster
-	// alerts for anyone using the old teams_to_logins field to avoid breaking anyone
+	// DELETE IN 12 (zmb3)
 	for _, mapping := range conn.GetTeamsToLogins() {
 		addOrg(mapping.Organization)
 	}

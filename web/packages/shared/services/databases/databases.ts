@@ -29,8 +29,7 @@ export type DbType =
   | 'keyspace'
   | 'cassandra'
   | 'dynamodb'
-  | 'opensearch'
-  | 'spanner';
+  | 'opensearch';
 
 export type DbProtocol =
   | 'postgres'
@@ -46,8 +45,7 @@ export type DbProtocol =
   | 'opensearch'
   | 'dynamodb'
   | 'clickhouse'
-  | 'clickhouse-http'
-  | 'spanner';
+  | 'clickhouse-http';
 
 const formatProtocol = (input: DbProtocol) => {
   switch (input) {
@@ -69,8 +67,6 @@ const formatProtocol = (input: DbProtocol) => {
       return 'Cassandra';
     case 'elasticsearch':
       return 'Elasticsearch';
-    case 'spanner':
-      return 'Spanner';
     default:
       return input;
   }
@@ -120,9 +116,6 @@ export const formatDatabaseInfo = (type: DbType, protocol: DbProtocol) => {
       return output;
     case 'azure':
       output.title = `Azure ${formatProtocol(protocol)}`;
-      return output;
-    case 'spanner':
-      output.title = 'Cloud Spanner';
       return output;
     default:
       output.title = `${type} ${formatProtocol(protocol)}`;

@@ -29,9 +29,7 @@ import (
 
 	"github.com/gravitational/teleport"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
-	headerv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/header/v1"
 	kubewaitingcontainerpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/kubewaitingcontainer/v1"
-	notificationsv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/notifications/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/kubewaitingcontainer"
 	"github.com/gravitational/teleport/lib/backend"
@@ -158,8 +156,6 @@ func (e *EventsService) NewWatcher(ctx context.Context, watch types.Watch) (type
 			parser = newInstallerParser()
 		case types.KindKubernetesCluster:
 			parser = newKubeClusterParser()
-		case types.KindCrownJewel:
-			parser = newCrownJewelParser()
 		case types.KindPlugin:
 			parser = newPluginParser(kind.LoadSecrets)
 		case types.KindSAMLIdPServiceProvider:
@@ -203,8 +199,6 @@ func (e *EventsService) NewWatcher(ctx context.Context, watch types.Watch) (type
 			parser = newUserNotificationParser()
 		case types.KindGlobalNotification:
 			parser = newGlobalNotificationParser()
-		case types.KindAccessMonitoringRule:
-			parser = newAccessMonitoringRuleParser()
 		default:
 			if watch.AllowPartialSuccess {
 				continue
@@ -1225,35 +1219,6 @@ func (p *kubeClusterParser) parse(event backend.Event) (types.Resource, error) {
 	}
 }
 
-func newCrownJewelParser() *crownJewelParser {
-	return &crownJewelParser{
-		baseParser: newBaseParser(backend.Key(crownJewelsKey)),
-	}
-}
-
-type crownJewelParser struct {
-	baseParser
-}
-
-func (p *crownJewelParser) parse(event backend.Event) (types.Resource, error) {
-	switch event.Type {
-	case types.OpDelete:
-		return resourceHeader(event, types.KindCrownJewel, types.V1, 0)
-	case types.OpPut:
-		r, err := services.UnmarshalCrownJewel(event.Item.Value,
-			services.WithResourceID(event.Item.ID),
-			services.WithExpires(event.Item.Expires),
-			services.WithRevision(event.Item.Revision),
-		)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		return types.Resource153ToLegacy(r), nil
-	default:
-		return nil, trace.BadParameter("event %v is not supported", event.Type)
-	}
-}
-
 func newAppParser() *appParser {
 	return &appParser{
 		baseParser: newBaseParser(backend.Key(appPrefix)),
@@ -1993,35 +1958,6 @@ func (p *kubeWaitingContainerParser) parse(event backend.Event) (types.Resource,
 	}
 }
 
-func newAccessMonitoringRuleParser() *AccessMonitoringRuleParser {
-	return &AccessMonitoringRuleParser{
-		baseParser: newBaseParser(backend.ExactKey(accessMonitoringRulesPrefix)),
-	}
-}
-
-type AccessMonitoringRuleParser struct {
-	baseParser
-}
-
-func (p *AccessMonitoringRuleParser) parse(event backend.Event) (types.Resource, error) {
-	switch event.Type {
-	case types.OpDelete:
-		return resourceHeader(event, types.KindAccessMonitoringRule, types.V1, 0)
-	case types.OpPut:
-		r, err := services.UnmarshalAccessMonitoringRule(event.Item.Value,
-			services.WithResourceID(event.Item.ID),
-			services.WithExpires(event.Item.Expires),
-			services.WithRevision(event.Item.Revision),
-		)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		return types.Resource153ToLegacy(r), nil
-	default:
-		return nil, trace.BadParameter("event %v is not supported", event.Type)
-	}
-}
-
 func newUserNotificationParser() *userNotificationParser {
 	return &userNotificationParser{
 		baseParser: newBaseParser(backend.Key(notificationsUserSpecificPrefix)),
@@ -2035,27 +1971,7 @@ type userNotificationParser struct {
 func (p *userNotificationParser) parse(event backend.Event) (types.Resource, error) {
 	switch event.Type {
 	case types.OpDelete:
-		// Remove the first separator so none of the separated parts will be
-		// empty strings
-		key := string(event.Item.Key)
-		key = strings.TrimPrefix(key, string(backend.Separator))
-		parts := strings.Split(key, string(backend.Separator))
-		if len(parts) != 4 {
-			return nil, trace.BadParameter("malformed key for %s event: %s", types.KindNotification, event.Item.Key)
-		}
-
-		notification := &notificationsv1.Notification{
-			Kind:    types.KindNotification,
-			Version: types.V1,
-			Spec: &notificationsv1.NotificationSpec{
-				Username: parts[2],
-			},
-			Metadata: &headerv1.Metadata{
-				Name: parts[3],
-			},
-		}
-
-		return types.Resource153ToLegacy(notification), nil
+		return resourceHeader(event, types.KindNotification, types.V1, 0)
 	case types.OpPut:
 		notification, err := services.UnmarshalNotification(
 			event.Item.Value,
@@ -2084,30 +2000,7 @@ type globalNotificationParser struct {
 func (p *globalNotificationParser) parse(event backend.Event) (types.Resource, error) {
 	switch event.Type {
 	case types.OpDelete:
-		// Remove the first separator so none of the separated parts will be
-		// empty strings
-		key := string(event.Item.Key)
-		key = strings.TrimPrefix(key, string(backend.Separator))
-		// notifications/global/<uuid>
-		parts := strings.Split(key, string(backend.Separator))
-		if len(parts) != 3 {
-			return nil, trace.BadParameter("malformed key for %s event: %s", types.KindGlobalNotification, event.Item.Key)
-		}
-
-		globalNotification := &notificationsv1.GlobalNotification{
-			Kind:    types.KindGlobalNotification,
-			Version: types.V1,
-			Spec: &notificationsv1.GlobalNotificationSpec{
-				Notification: &notificationsv1.Notification{
-					Spec: &notificationsv1.NotificationSpec{},
-				},
-			},
-			Metadata: &headerv1.Metadata{
-				Name: parts[2],
-			},
-		}
-
-		return types.Resource153ToLegacy(globalNotification), nil
+		return resourceHeader(event, types.KindGlobalNotification, types.V1, 0)
 	case types.OpPut:
 		globalNotification, err := services.UnmarshalGlobalNotification(
 			event.Item.Value,

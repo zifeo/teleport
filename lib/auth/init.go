@@ -24,7 +24,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -210,9 +209,6 @@ type InitConfig struct {
 
 	// UserGroups is a service that manages user groups.
 	UserGroups services.UserGroups
-
-	// CrownJewels is a service that manages CrownJewels.
-	CrownJewels services.CrownJewels
 
 	// Integrations is a service that manages Integrations.
 	Integrations services.Integrations
@@ -499,6 +495,12 @@ func initCluster(ctx context.Context, cfg InitConfig, asrv *Server) error {
 	if err := migration.Apply(ctx, cfg.Backend); err != nil {
 		return trace.Wrap(err, "applying migrations")
 	}
+	span.AddEvent("migrating db_client_authority")
+	err = migrateDBClientAuthority(ctx, asrv.Services, cfg.ClusterName.GetClusterName())
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	span.AddEvent("completed migration db_client_authority")
 
 	// generate certificate authorities if they don't exist
 	if err := initializeAuthorities(ctx, asrv, &cfg); err != nil {
@@ -720,9 +722,6 @@ func initializeAuthPreference(ctx context.Context, asrv *Server, newAuthPref typ
 		}
 
 		if !shouldReplace {
-			if os.Getenv(teleport.EnvVarAllowNoSecondFactor) != "true" {
-				return trace.Wrap(modules.ValidateResource(storedAuthPref))
-			}
 			return nil
 		}
 
@@ -1201,7 +1200,7 @@ func migrateRemoteClusters(ctx context.Context, asrv *Server) error {
 			continue
 		}
 		// remote cluster already exists
-		_, err = asrv.Services.GetRemoteCluster(ctx, certAuthority.GetName())
+		_, err = asrv.Services.GetRemoteCluster(certAuthority.GetName())
 		if err == nil {
 			log.Debugf("Migrations: remote cluster already exists for cert authority %q.", certAuthority.GetName())
 			continue
@@ -1222,7 +1221,7 @@ func migrateRemoteClusters(ctx context.Context, asrv *Server) error {
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		_, err = asrv.CreateRemoteCluster(ctx, remoteCluster)
+		err = asrv.CreateRemoteCluster(remoteCluster)
 		if err != nil {
 			if !trace.IsAlreadyExists(err) {
 				return trace.Wrap(err)
@@ -1293,4 +1292,15 @@ func applyResources(ctx context.Context, service *Services, resources []types.Re
 		}
 	}
 	return nil
+}
+
+// migrateDBClientAuthority copies Database CA as Database Client CA.
+// Does nothing if the Database Client CA already exists.
+//
+// TODO(gavin): DELETE IN 16.0.0
+func migrateDBClientAuthority(ctx context.Context, trustSvc services.Trust, cluster string) error {
+	migrationStart(ctx, "db_client_authority")
+	defer migrationEnd(ctx, "db_client_authority")
+	err := migration.MigrateDBClientAuthority(ctx, trustSvc, cluster)
+	return trace.Wrap(err)
 }

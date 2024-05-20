@@ -17,25 +17,20 @@ limitations under the License.
 package types
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gravitational/trace"
+	"github.com/sirupsen/logrus"
 
-	"github.com/gravitational/teleport/api/types/compare"
 	"github.com/gravitational/teleport/api/utils"
 	atlasutils "github.com/gravitational/teleport/api/utils/atlas"
 	awsutils "github.com/gravitational/teleport/api/utils/aws"
 	azureutils "github.com/gravitational/teleport/api/utils/azure"
-	gcputils "github.com/gravitational/teleport/api/utils/gcp"
 )
-
-var _ compare.IsEqual[Database] = (*DatabaseV3)(nil)
 
 // Database represents a single database proxied by a database server.
 type Database interface {
@@ -430,11 +425,6 @@ func (d *DatabaseV3) SetAWSAssumeRole(roleARN string) {
 	d.Spec.AWS.AssumeRoleARN = roleARN
 }
 
-// IsEmpty returns true if GCP metadata is empty.
-func (g GCPCloudSQL) IsEmpty() bool {
-	return protoKnownFieldsEqual(&g, &GCPCloudSQL{})
-}
-
 // GetGCP returns GCP information for Cloud SQL databases.
 func (d *DatabaseV3) GetGCP() GCPCloudSQL {
 	return d.Spec.GCP
@@ -513,11 +503,6 @@ func (d *DatabaseV3) IsOpenSearch() bool {
 	return d.GetType() == DatabaseTypeOpenSearch
 }
 
-// IsSpanner returns true if this is a GCloud Spanner database.
-func (d *DatabaseV3) IsSpanner() bool {
-	return d.GetType() == DatabaseTypeSpanner
-}
-
 // IsAWSHosted returns true if database is hosted by AWS.
 func (d *DatabaseV3) IsAWSHosted() bool {
 	_, ok := d.getAWSType()
@@ -527,7 +512,7 @@ func (d *DatabaseV3) IsAWSHosted() bool {
 // IsCloudHosted returns true if database is hosted in the cloud (AWS, Azure or
 // Cloud SQL).
 func (d *DatabaseV3) IsCloudHosted() bool {
-	return d.IsAWSHosted() || d.IsGCPHosted() || d.IsAzure()
+	return d.IsAWSHosted() || d.IsCloudSQL() || d.IsAzure()
 }
 
 // GetCloud gets the cloud this database is running on, or an empty string if it
@@ -536,31 +521,13 @@ func (d *DatabaseV3) GetCloud() string {
 	switch {
 	case d.IsAWSHosted():
 		return CloudAWS
-	case d.IsGCPHosted():
+	case d.IsCloudSQL():
 		return CloudGCP
 	case d.IsAzure():
 		return CloudAzure
 	default:
 		return ""
 	}
-}
-
-// IsGCPHosted returns true if the database is hosted by GCP.
-func (d *DatabaseV3) IsGCPHosted() bool {
-	_, ok := d.getGCPType()
-	return ok
-}
-
-// getAWSType returns the gcp hosted database type.
-func (d *DatabaseV3) getGCPType() (string, bool) {
-	if d.Spec.Protocol == DatabaseTypeSpanner {
-		return DatabaseTypeSpanner, true
-	}
-	gcp := d.GetGCP()
-	if !gcp.IsEmpty() {
-		return DatabaseTypeCloudSQL, true
-	}
-	return "", false
 }
 
 // getAWSType returns the database type.
@@ -607,10 +574,9 @@ func (d *DatabaseV3) GetType() string {
 		return awsType
 	}
 
-	if gcpType, ok := d.getGCPType(); ok {
-		return gcpType
+	if d.GetGCP().ProjectID != "" {
+		return DatabaseTypeCloudSQL
 	}
-
 	if d.GetAzure().Name != "" {
 		return DatabaseTypeAzure
 	}
@@ -703,9 +669,6 @@ func (d *DatabaseV3) CheckAndSetDefaults() error {
 				return trace.BadParameter("DynamoDB database %q URI is empty and cannot be derived without a configured AWS region",
 					d.GetName())
 			}
-		case DatabaseTypeSpanner:
-			// All Spanner requests go to the same spanner google API endpoint.
-			d.Spec.URI = gcputils.SpannerEndpoint
 		default:
 			return trace.BadParameter("database %q URI is empty", d.GetName())
 		}
@@ -718,15 +681,6 @@ func (d *DatabaseV3) CheckAndSetDefaults() error {
 	// In case of RDS, Aurora or Redshift, AWS information such as region or
 	// cluster ID can be extracted from the endpoint if not provided.
 	switch {
-	case gcputils.IsSpannerEndpoint(d.Spec.URI) || d.IsSpanner():
-		if d.Spec.GCP.ProjectID == "" {
-			return trace.BadParameter("GCP Spanner database %q missing GCP project ID",
-				d.GetName())
-		}
-		if d.Spec.GCP.InstanceID == "" {
-			return trace.BadParameter("GCP Spanner database %q missing GCP instance ID",
-				d.GetName())
-		}
 	case d.IsDynamoDB():
 		if err := d.handleDynamoDBConfig(); err != nil {
 			return trace.Wrap(err)
@@ -738,7 +692,7 @@ func (d *DatabaseV3) CheckAndSetDefaults() error {
 	case awsutils.IsRDSEndpoint(d.Spec.URI):
 		details, err := awsutils.ParseRDSEndpoint(d.Spec.URI)
 		if err != nil {
-			slog.WarnContext(context.Background(), "Failed to parse RDS endpoint.", "uri", d.Spec.URI, "error", err)
+			logrus.WithError(err).Warnf("Failed to parse RDS endpoint %v.", d.Spec.URI)
 			break
 		}
 		if d.Spec.AWS.RDS.InstanceID == "" {
@@ -774,7 +728,7 @@ func (d *DatabaseV3) CheckAndSetDefaults() error {
 	case awsutils.IsRedshiftServerlessEndpoint(d.Spec.URI):
 		details, err := awsutils.ParseRedshiftServerlessEndpoint(d.Spec.URI)
 		if err != nil {
-			slog.WarnContext(context.Background(), "Failed to parse Redshift Serverless endpoint.", "uri", d.Spec.URI, "error", err)
+			logrus.WithError(err).Warnf("Failed to parse Redshift Serverless endpoint %v.", d.Spec.URI)
 			break
 		}
 		if d.Spec.AWS.RedshiftServerless.WorkgroupName == "" {
@@ -792,7 +746,7 @@ func (d *DatabaseV3) CheckAndSetDefaults() error {
 	case awsutils.IsElastiCacheEndpoint(d.Spec.URI):
 		endpointInfo, err := awsutils.ParseElastiCacheEndpoint(d.Spec.URI)
 		if err != nil {
-			slog.WarnContext(context.Background(), "Failed to parse ElastiCache endpoint", "uri", d.Spec.URI, "error", err)
+			logrus.WithError(err).Warnf("Failed to parse %v as ElastiCache endpoint", d.Spec.URI)
 			break
 		}
 		if d.Spec.AWS.ElastiCache.ReplicationGroupID == "" {
@@ -806,7 +760,7 @@ func (d *DatabaseV3) CheckAndSetDefaults() error {
 	case awsutils.IsMemoryDBEndpoint(d.Spec.URI):
 		endpointInfo, err := awsutils.ParseMemoryDBEndpoint(d.Spec.URI)
 		if err != nil {
-			slog.WarnContext(context.Background(), "Failed to parse MemoryDB endpoint", "uri", d.Spec.URI, "error", err)
+			logrus.WithError(err).Warnf("Failed to parse %v as MemoryDB endpoint", d.Spec.URI)
 			break
 		}
 		if d.Spec.AWS.MemoryDB.ClusterName == "" {
@@ -930,14 +884,6 @@ func (d *DatabaseV3) CheckAndSetDefaults() error {
 	}
 
 	return nil
-}
-
-// IsEqual determines if two database resources are equivalent to one another.
-func (d *DatabaseV3) IsEqual(i Database) bool {
-	if other, ok := i.(*DatabaseV3); ok {
-		return deriveTeleportEqualDatabaseV3(d, other)
-	}
-	return false
 }
 
 // handleDynamoDBConfig handles DynamoDB configuration checking.
@@ -1121,8 +1067,6 @@ const (
 	DatabaseTypeRedshiftServerless = "redshift-serverless"
 	// DatabaseTypeCloudSQL is GCP-hosted Cloud SQL database.
 	DatabaseTypeCloudSQL = "gcp"
-	// DatabaseTypeSpanner is a GCP Spanner instance.
-	DatabaseTypeSpanner = "spanner"
 	// DatabaseTypeAzure is Azure-hosted database.
 	DatabaseTypeAzure = "azure"
 	// DatabaseTypeElastiCache is AWS-hosted ElastiCache database.

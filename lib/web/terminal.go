@@ -108,28 +108,6 @@ type UserAuthClient interface {
 	MaintainSessionPresence(ctx context.Context) (authproto.AuthService_MaintainSessionPresenceClient, error)
 }
 
-// WSConn is a gorilla/websocket minimal interface used by our web implementation.
-// This interface exists to override the default websocket.Conn implementation,
-// currently used by noopCloserWS to prevent WS being closed by wrapping stream.
-type WSConn interface {
-	Close() error
-
-	LocalAddr() net.Addr
-	RemoteAddr() net.Addr
-
-	WriteControl(messageType int, data []byte, deadline time.Time) error
-	WriteMessage(messageType int, data []byte) error
-	ReadMessage() (messageType int, p []byte, err error)
-	SetReadLimit(limit int64)
-	SetReadDeadline(t time.Time) error
-	SetWriteDeadline(t time.Time) error
-
-	PongHandler() func(appData string) error
-	SetPongHandler(h func(appData string) error)
-	CloseHandler() func(code int, text string) error
-	SetCloseHandler(h func(code int, text string) error)
-}
-
 // NewTerminal creates a web-based terminal based on WebSockets and returns a
 // new TerminalHandler.
 func NewTerminal(ctx context.Context, cfg TerminalHandlerConfig) (*TerminalHandler, error) {
@@ -487,7 +465,7 @@ func (t *TerminalHandler) handler(ws *websocket.Conn, r *http.Request) {
 	})
 
 	// Start sending ping frames through websocket to client.
-	go startWSPingLoop(ctx, ws, t.keepAliveInterval, t.log, t.Close)
+	go startPingLoop(ctx, ws, t.keepAliveInterval, t.log, t.Close)
 
 	// Pump raw terminal in/out and audit events into the websocket.
 	go t.streamEvents(ctx, tc)
@@ -801,13 +779,7 @@ func monitorSessionLatency(ctx context.Context, clock clockwork.Clock, stream *W
 	return nil
 }
 
-// sessionEndEvent is an event sent when a session ends.
-type sessionEndEvent struct {
-	// NodeID is the ID of the server where the session was created.
-	NodeID string `json:"node_id"`
-}
-
-// streamTerminal opens an SSH connection to the remote host and streams
+// streamTerminal opens a SSH connection to the remote host and streams
 // events back to the web client.
 func (t *TerminalHandler) streamTerminal(ctx context.Context, tc *client.TeleportClient) {
 	ctx, span := t.tracer.Start(ctx, "terminal/streamTerminal")
@@ -955,23 +927,6 @@ func (t *sshBaseHandler) connectToNodeWithMFABase(ctx context.Context, ws WSConn
 	nc.ProxyPublicAddr = t.proxyPublicAddr
 
 	return nc, nil
-}
-
-// sendError sends an error message to the client using the provided websocket.
-func (t *sshBaseHandler) sendError(errMsg string, err error, ws WSConn) {
-	envelope := &Envelope{
-		Version: defaults.WebsocketVersion,
-		Type:    defaults.WebsocketError,
-		Payload: fmt.Sprintf("%s: %s", errMsg, err.Error()),
-	}
-
-	envelopeBytes, err := proto.Marshal(envelope)
-	if err != nil {
-		t.log.WithError(err).Error("failed to marshal error message")
-	}
-	if err := ws.WriteMessage(websocket.BinaryMessage, envelopeBytes); err != nil {
-		t.log.WithError(err).Error("failed to send error message")
-	}
 }
 
 // streamEvents receives events over the SSH connection and forwards them to

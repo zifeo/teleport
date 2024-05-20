@@ -42,7 +42,7 @@ per-session MFA with FIPS builds, provide the following in your `teleport.yaml`:
 teleport:
   auth_service:
     local_auth: false
-    second_factor: on
+    second_factor: optional
     webauthn:
       rp_id: teleport.example.com
 ```

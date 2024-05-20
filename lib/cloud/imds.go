@@ -28,7 +28,6 @@ import (
 	"github.com/gravitational/teleport/lib/cloud/imds"
 	"github.com/gravitational/teleport/lib/cloud/imds/aws"
 	"github.com/gravitational/teleport/lib/cloud/imds/azure"
-	"github.com/gravitational/teleport/lib/cloud/imds/gcp"
 )
 
 const (
@@ -44,7 +43,6 @@ type imConstructor func(ctx context.Context) (imds.Client, error)
 var providers = map[types.InstanceMetadataType]imConstructor{
 	types.InstanceMetadataTypeEC2:   initEC2,
 	types.InstanceMetadataTypeAzure: initAzure,
-	types.InstanceMetadataTypeGCP:   initGCP,
 }
 
 func initEC2(ctx context.Context) (imds.Client, error) {
@@ -54,11 +52,6 @@ func initEC2(ctx context.Context) (imds.Client, error) {
 
 func initAzure(ctx context.Context) (imds.Client, error) {
 	return azure.NewInstanceMetadataClient(), nil
-}
-
-func initGCP(ctx context.Context) (imds.Client, error) {
-	im, err := gcp.NewInstanceMetadataClient(ctx)
-	return im, trace.Wrap(err)
 }
 
 // DiscoverInstanceMetadata checks which cloud instance type Teleport is
@@ -71,9 +64,10 @@ func DiscoverInstanceMetadata(ctx context.Context) (imds.Client, error) {
 	clients := make([]imds.Client, 0, len(providers))
 	for _, constructor := range providers {
 		im, err := constructor(ctx)
-		if err == nil {
-			clients = append(clients, im)
+		if err != nil {
+			return nil, trace.Wrap(err)
 		}
+		clients = append(clients, im)
 	}
 
 	for _, client := range clients {

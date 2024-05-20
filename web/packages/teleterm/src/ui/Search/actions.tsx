@@ -70,7 +70,6 @@ export type SearchAction = SimpleAction | ParametrizedAction;
 
 export function mapToAction(
   ctx: IAppContext,
-  launchVnet: () => Promise<[void, Error]>,
   searchContext: SearchContext,
   result: SearchResult
 ): SearchAction {
@@ -137,7 +136,6 @@ export function mapToAction(
           perform: parameter =>
             connectToApp(
               ctx,
-              launchVnet,
               result.resource,
               {
                 origin: 'search_bar',
@@ -150,9 +148,14 @@ export function mapToAction(
         type: 'simple-action',
         searchResult: result,
         perform: () =>
-          connectToApp(ctx, launchVnet, result.resource, {
-            origin: 'search_bar',
-          }),
+          connectToApp(
+            ctx,
+            result.resource,
+            {
+              origin: 'search_bar',
+            },
+            { launchInBrowserIfWebApp: true }
+          ),
       };
     }
     case 'database': {

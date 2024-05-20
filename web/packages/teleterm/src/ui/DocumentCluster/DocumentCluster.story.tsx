@@ -43,7 +43,6 @@ import { ConnectMyComputerContextProvider } from 'teleterm/ui/ConnectMyComputer'
 import * as docTypes from 'teleterm/ui/services/workspacesService/documentsService/types';
 import * as tsh from 'teleterm/services/tshd/types';
 import { makeDocumentCluster } from 'teleterm/ui/services/workspacesService/documentsService/testHelpers';
-import { VnetContextProvider } from 'teleterm/ui/Vnet';
 
 import DocumentCluster from './DocumentCluster';
 import { ResourcesContextProvider } from './resourcesContext';
@@ -346,17 +345,15 @@ function renderState({
 
   return (
     <AppContextProvider value={appContext}>
-      <VnetContextProvider>
-        <MockWorkspaceContextProvider>
-          <ResourcesContextProvider>
-            <ConnectMyComputerContextProvider rootClusterUri={rootClusterUri}>
-              <Wrapper>
-                <DocumentCluster visible={true} doc={doc} />
-              </Wrapper>
-            </ConnectMyComputerContextProvider>
-          </ResourcesContextProvider>
-        </MockWorkspaceContextProvider>
-      </VnetContextProvider>
+      <MockWorkspaceContextProvider>
+        <ResourcesContextProvider>
+          <ConnectMyComputerContextProvider rootClusterUri={rootClusterUri}>
+            <Wrapper>
+              <DocumentCluster visible={true} doc={doc} />
+            </Wrapper>
+          </ConnectMyComputerContextProvider>
+        </ResourcesContextProvider>
+      </MockWorkspaceContextProvider>
     </AppContextProvider>
   );
 }

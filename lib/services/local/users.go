@@ -45,6 +45,7 @@ import (
 	userspb "github.com/gravitational/teleport/api/gen/proto/go/teleport/users/v1"
 	"github.com/gravitational/teleport/api/internalutils/stream"
 	"github.com/gravitational/teleport/api/types"
+	wanpb "github.com/gravitational/teleport/api/types/webauthn"
 	"github.com/gravitational/teleport/api/utils/keys"
 	wantypes "github.com/gravitational/teleport/lib/auth/webauthntypes"
 	"github.com/gravitational/teleport/lib/backend"
@@ -96,7 +97,26 @@ func (s *IdentityService) DeleteAllUsers(ctx context.Context) error {
 }
 
 // ListUsers returns a page of users.
-func (s *IdentityService) ListUsers(ctx context.Context, req *userspb.ListUsersRequest) (*userspb.ListUsersResponse, error) {
+func (s *IdentityService) ListUsers(ctx context.Context, pageSize int, pageToken string, withSecrets bool) ([]types.User, string, error) {
+	resp, err := s.ListUsersExt(ctx, &userspb.ListUsersRequest{
+		PageSize:    int32(pageSize),
+		PageToken:   pageToken,
+		WithSecrets: withSecrets,
+	})
+	if err != nil {
+		return nil, "", trace.Wrap(err)
+	}
+
+	out := make([]types.User, 0, len(resp.Users))
+	for _, u := range resp.Users {
+		out = append(out, u)
+	}
+
+	return out, resp.NextPageToken, nil
+}
+
+// ListUsersExt is equivalent to ListUsers except that it supports additional parameters.
+func (s *IdentityService) ListUsersExt(ctx context.Context, req *userspb.ListUsersRequest) (*userspb.ListUsersResponse, error) {
 	rangeStart := backend.Key(webPrefix, usersPrefix, req.PageToken)
 	rangeEnd := backend.RangeEnd(backend.ExactKey(webPrefix, usersPrefix))
 	pageSize := req.PageSize
@@ -900,7 +920,7 @@ func (s *IdentityService) UpsertWebauthnLocalAuth(ctx context.Context, user stri
 	if err != nil {
 		return trace.Wrap(err, "marshal webauthn local auth")
 	}
-	userJSON, err := json.Marshal(&webauthnUser{
+	userJSON, err := json.Marshal(&wanpb.User{
 		TeleportUser: user,
 	})
 	if err != nil {
@@ -957,17 +977,11 @@ func (s *IdentityService) GetTeleportUserByWebauthnID(ctx context.Context, webID
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
-	user := &webauthnUser{}
+	user := &wanpb.User{}
 	if err := json.Unmarshal(item.Value, user); err != nil {
 		return "", trace.Wrap(err)
 	}
 	return user.TeleportUser, nil
-}
-
-// webauthnUser represents a WebAuthn user stored under [webauthnUserKey].
-// Looked up during passwordless logins.
-type webauthnUser struct {
-	TeleportUser string `json:"teleport_user"`
 }
 
 func webauthnLocalAuthKey(user string) []byte {

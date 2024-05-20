@@ -49,8 +49,7 @@ func TestRemoteClusterStatus(t *testing.T) {
 
 	rc, err := types.NewRemoteCluster("rc")
 	require.NoError(t, err)
-	rc, err = a.CreateRemoteCluster(ctx, rc)
-	require.NoError(t, err)
+	require.NoError(t, a.CreateRemoteCluster(rc))
 
 	// This scenario deals with only one remote cluster, so it never hits the limit on status updates.
 	// TestRefreshRemoteClusters focuses on verifying the update limit logic.
@@ -59,9 +58,9 @@ func TestRemoteClusterStatus(t *testing.T) {
 	wantRC := rc
 	// Initially, no tunnels exist and status should be "offline".
 	wantRC.SetConnectionStatus(teleport.RemoteClusterStatusOffline)
-	gotRC, err := a.GetRemoteCluster(ctx, rc.GetName())
+	gotRC, err := a.GetRemoteCluster(rc.GetName())
 	require.NoError(t, err)
-	require.Empty(t, cmp.Diff(wantRC, gotRC, cmpopts.IgnoreFields(types.Metadata{}, "ID", "Revision")))
+	require.Empty(t, cmp.Diff(rc, gotRC, cmpopts.IgnoreFields(types.Metadata{}, "ID", "Revision")))
 
 	// Create several tunnel connections.
 	lastHeartbeat := a.clock.Now().UTC()
@@ -90,7 +89,7 @@ func TestRemoteClusterStatus(t *testing.T) {
 	// the latest tunnel heartbeat.
 	wantRC.SetConnectionStatus(teleport.RemoteClusterStatusOnline)
 	wantRC.SetLastHeartbeat(tc2.GetLastHeartbeat())
-	gotRC, err = a.GetRemoteCluster(ctx, rc.GetName())
+	gotRC, err = a.GetRemoteCluster(rc.GetName())
 	require.NoError(t, err)
 	require.Empty(t, cmp.Diff(rc, gotRC, cmpopts.IgnoreFields(types.Metadata{}, "ID", "Revision")))
 
@@ -103,7 +102,7 @@ func TestRemoteClusterStatus(t *testing.T) {
 	// The last_heartbeat should remain the same, since tc1 has an older
 	// heartbeat.
 	wantRC.SetConnectionStatus(teleport.RemoteClusterStatusOnline)
-	gotRC, err = a.GetRemoteCluster(ctx, rc.GetName())
+	gotRC, err = a.GetRemoteCluster(rc.GetName())
 	require.NoError(t, err)
 	require.Empty(t, cmp.Diff(rc, gotRC, cmpopts.IgnoreFields(types.Metadata{}, "ID", "Revision")))
 
@@ -115,7 +114,7 @@ func TestRemoteClusterStatus(t *testing.T) {
 	// The status should switch to "offline".
 	// The last_heartbeat should remain the same.
 	wantRC.SetConnectionStatus(teleport.RemoteClusterStatusOffline)
-	gotRC, err = a.GetRemoteCluster(ctx, rc.GetName())
+	gotRC, err = a.GetRemoteCluster(rc.GetName())
 	require.NoError(t, err)
 	require.Empty(t, cmp.Diff(rc, gotRC, cmpopts.IgnoreFields(types.Metadata{}, "ID", "Revision")))
 }
@@ -170,8 +169,7 @@ func TestRefreshRemoteClusters(t *testing.T) {
 				rc, err := types.NewRemoteCluster(fmt.Sprintf("rc-%03d", i))
 				rc.SetConnectionStatus(teleport.RemoteClusterStatusOffline)
 				require.NoError(t, err)
-				rc, err = a.CreateRemoteCluster(ctx, rc)
-				require.NoError(t, err)
+				require.NoError(t, a.CreateRemoteCluster(rc))
 				allClusters[rc.GetName()] = rc
 
 				if i < tt.clustersNeedUpdate {
@@ -189,7 +187,7 @@ func TestRefreshRemoteClusters(t *testing.T) {
 
 			a.refreshRemoteClusters(ctx, rnd)
 
-			clusters, err := a.GetRemoteClusters(ctx)
+			clusters, err := a.GetRemoteClusters()
 			require.NoError(t, err)
 
 			var updated int
@@ -333,7 +331,7 @@ func TestValidateTrustedCluster(t *testing.T) {
 			require.True(t, services.CertAuthoritiesEquivalent(localCA, returnedCA))
 		}
 
-		rcs, err := a.GetRemoteClusters(ctx)
+		rcs, err := a.GetRemoteClusters()
 		require.NoError(t, err)
 		require.Len(t, rcs, 1)
 		require.Equal(t, leafClusterCA.GetName(), rcs[0].GetName())
@@ -375,10 +373,26 @@ func TestValidateTrustedCluster(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		require.Len(t, resp.CAs, 4)
+		require.Len(t, resp.CAs, 3)
 		require.ElementsMatch(t,
-			[]types.CertAuthType{types.HostCA, types.UserCA, types.DatabaseCA, types.OpenSSHCA},
-			[]types.CertAuthType{resp.CAs[0].GetType(), resp.CAs[1].GetType(), resp.CAs[2].GetType(), resp.CAs[3].GetType()},
+			[]types.CertAuthType{types.HostCA, types.UserCA, types.DatabaseCA},
+			[]types.CertAuthType{resp.CAs[0].GetType(), resp.CAs[1].GetType(), resp.CAs[2].GetType()},
+		)
+	})
+
+	t.Run("OpenSSH CA not returned for pre v12", func(t *testing.T) {
+		leafClusterCA := types.CertAuthority(suite.NewTestCA(types.HostCA, "leafcluster"))
+		resp, err := a.validateTrustedCluster(ctx, &authclient.ValidateTrustedClusterRequest{
+			Token:           validToken,
+			CAs:             []types.CertAuthority{leafClusterCA},
+			TeleportVersion: "11.0.0",
+		})
+		require.NoError(t, err)
+
+		require.Len(t, resp.CAs, 3)
+		require.ElementsMatch(t,
+			[]types.CertAuthType{types.HostCA, types.UserCA, types.DatabaseCA},
+			[]types.CertAuthType{resp.CAs[0].GetType(), resp.CAs[1].GetType(), resp.CAs[2].GetType()},
 		)
 	})
 

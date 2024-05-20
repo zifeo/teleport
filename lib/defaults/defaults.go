@@ -100,6 +100,9 @@ const (
 	// By default SSH server (and SSH proxy) will bind to this IP
 	BindIP = "0.0.0.0"
 
+	// By default all users use /bin/bash
+	DefaultShell = "/bin/bash"
+
 	// GRPCMaxConcurrentStreams is the max GRPC streams that can be active at a time.  Once the limit is reached new
 	// RPC calls will queue until capacity is available.
 	GRPCMaxConcurrentStreams = 1000
@@ -475,8 +478,6 @@ const (
 	ProtocolClickHouse = "clickhouse"
 	// ProtocolClickHouseHTTP is the ClickHouse database HTTP protocol.
 	ProtocolClickHouseHTTP = "clickhouse-http"
-	// ProtocolSpanner is the GCP Spanner database protocol.
-	ProtocolSpanner = "spanner"
 )
 
 // DatabaseProtocols is a list of all supported database protocols.
@@ -495,7 +496,6 @@ var DatabaseProtocols = []string{
 	ProtocolDynamoDB,
 	ProtocolClickHouse,
 	ProtocolClickHouseHTTP,
-	ProtocolSpanner,
 }
 
 // ReadableDatabaseProtocol returns a more human-readable string of the
@@ -530,8 +530,6 @@ func ReadableDatabaseProtocol(p string) string {
 		return "Clickhouse"
 	case ProtocolClickHouseHTTP:
 		return "Clickhouse (HTTP)"
-	case ProtocolSpanner:
-		return "GCloud Spanner"
 	default:
 		// Unknown protocol. Return original string.
 		return p

@@ -64,12 +64,8 @@ func newDBCLICommandWithExecer(cluster *clusters.Cluster, gateway gateway.Gatewa
 		dbcmd.WithExecer(execer),
 	}
 
-	switch gateway.Protocol() {
-	case defaults.ProtocolDynamoDB, defaults.ProtocolSpanner:
-		// DynamoDB doesn't support non-print-format use.
-		// Spanner does, but it's not supported in Teleterm yet.
-		// TODO(gavin): get the database GCP metadata to enable spanner-cli in
-		// Teleterm.
+	// DynamoDB doesn't support non-print-format use.
+	if gateway.Protocol() == defaults.ProtocolDynamoDB {
 		opts = append(opts, dbcmd.WithPrintFormat())
 	}
 

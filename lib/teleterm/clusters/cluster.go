@@ -79,7 +79,7 @@ type ClusterWithDetails struct {
 
 // Connected indicates if connection to the cluster can be established
 func (c *Cluster) Connected() bool {
-	return c.status.Name != "" && !c.status.IsExpired(c.clock.Now())
+	return c.status.Name != "" && !c.status.IsExpired(c.clock)
 }
 
 // GetWithDetails makes requests to the auth server to return details of the current
@@ -207,14 +207,14 @@ func convertToAPIResourceAccess(access services.ResourceAccess) *api.ResourceAcc
 func (c *Cluster) GetRoles(ctx context.Context) ([]*types.Role, error) {
 	var roles []*types.Role
 	err := AddMetadataToRetryableError(ctx, func() error {
-		clusterClient, err := c.clusterClient.ConnectToCluster(ctx)
+		proxyClient, err := c.clusterClient.ConnectToProxy(ctx)
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		defer clusterClient.Close()
+		defer proxyClient.Close()
 
 		for _, name := range c.status.Roles {
-			role, err := clusterClient.AuthClient.GetRole(ctx, name)
+			role, err := proxyClient.GetRole(ctx, name)
 			if err != nil {
 				return trace.Wrap(err)
 			}

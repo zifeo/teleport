@@ -230,12 +230,6 @@ const (
 	// This is indicates that the database agent http transport failed to round trip the request.
 	DynamoDBRequestFailureCode = "TDY01E"
 
-	// SpannerRPCCode is the db.session.spanner.rpc event code.
-	SpannerRPCCode = "TSPN001I"
-	// SpannerRPCDeniedCode is the warning event code for a Spanner client RPC
-	// that is denied.
-	SpannerRPCDeniedCode = "TSPN001W"
-
 	// DatabaseCreateCode is the db.create event code.
 	DatabaseCreateCode = "TDB03I"
 	// DatabaseUpdateCode is the db.update event code.
@@ -364,7 +358,7 @@ const (
 	// SessionNetworkCode is a session network code.
 	SessionNetworkCode = "T4002I"
 
-	// AccessRequestCreateCode is the access request creation code.
+	// AccessRequestCreateCode is the the access request creation code.
 	AccessRequestCreateCode = "T5000I"
 	// AccessRequestUpdateCode is the access request state update code.
 	AccessRequestUpdateCode = "T5001I"
@@ -474,10 +468,6 @@ const (
 	DeviceAuthenticateCode = "TV006I"
 	// DeviceUpdateCode is the device update code.
 	DeviceUpdateCode = "TV007I"
-	// DeviceWebTokenCreateCode is the device web token creation code.
-	DeviceWebTokenCreateCode = "TV008I"
-	// DeviceAuthenticateConfirmCode is the device authentication confirm code.
-	DeviceAuthenticateConfirmCode = "TV009I"
 
 	// LoginRuleCreateCode is the login rule create code.
 	LoginRuleCreateCode = "TLR00I"
@@ -537,12 +527,6 @@ const (
 
 	// OktaAccessListSyncSuccessCode is the Okta access list sync failure code.
 	OktaAccessListSyncFailureCode = "TOK006E"
-
-	// OktaUserSyncSuccessCode is the Okta user sync success code.
-	OktaUserSyncSuccessCode = "TOK007I"
-
-	// OktaUserSyncSuccessCode is the Okta user sync failure code.
-	OktaUserSyncFailureCode = "TOK007E"
 
 	// AccessListCreateSuccessCode is the access list create success code.
 	AccessListCreateSuccessCode = "TAL001I"
@@ -614,9 +598,6 @@ const (
 	ClusterNetworkingConfigUpdateCode = "TCNET002I"
 	// SessionRecordingConfigUpdateCode is the session recording config updated event code.
 	SessionRecordingConfigUpdateCode = "TCREC003I"
-
-	// AccessGraphAccessPathChangedCode is the access graph access path changed event code.
-	AccessGraphAccessPathChangedCode = "TAG001I"
 
 	// UnknownCode is used when an event of unknown type is encountered.
 	UnknownCode = apievents.UnknownCode

@@ -56,8 +56,6 @@ type App struct {
 	UserGroups []UserGroupAndDescription `json:"userGroups,omitempty"`
 	// SAMLApp if true, indicates that the app is a SAML Application (SAML IdP Service Provider)
 	SAMLApp bool `json:"samlApp,omitempty"`
-	// RequireRequest indicates if a returned resource is only accessible after an access request
-	RequiresRequest bool `json:"requiresRequest,omitempty"`
 }
 
 // UserGroupAndDescription is a user group name and its description.
@@ -87,8 +85,6 @@ type MakeAppsConfig struct {
 	UserGroupLookup map[string]types.UserGroup
 	// Logger is a logger used for debugging while making an app
 	Logger logrus.FieldLogger
-	// RequireRequest indicates if a returned resource is only accessible after an access request
-	RequiresRequest bool
 }
 
 // MakeApp creates an application object for the WebUI.
@@ -122,19 +118,18 @@ func MakeApp(app types.Application, c MakeAppsConfig) App {
 	}
 
 	resultApp := App{
-		Kind:            types.KindApp,
-		Name:            app.GetName(),
-		Description:     description,
-		URI:             app.GetURI(),
-		PublicAddr:      app.GetPublicAddr(),
-		Labels:          labels,
-		ClusterID:       c.AppClusterName,
-		FQDN:            fqdn,
-		AWSConsole:      app.IsAWSConsole(),
-		FriendlyName:    types.FriendlyName(app),
-		UserGroups:      userGroupAndDescriptions,
-		SAMLApp:         false,
-		RequiresRequest: c.RequiresRequest,
+		Kind:         types.KindApp,
+		Name:         app.GetName(),
+		Description:  description,
+		URI:          app.GetURI(),
+		PublicAddr:   app.GetPublicAddr(),
+		Labels:       labels,
+		ClusterID:    c.AppClusterName,
+		FQDN:         fqdn,
+		AWSConsole:   app.IsAWSConsole(),
+		FriendlyName: types.FriendlyName(app),
+		UserGroups:   userGroupAndDescriptions,
+		SAMLApp:      false,
 	}
 
 	if app.IsAWSConsole() {
@@ -146,20 +141,19 @@ func MakeApp(app types.Application, c MakeAppsConfig) App {
 	return resultApp
 }
 
-// MakeAppTypeFromSAMLApp creates App type from SAMLIdPServiceProvider type for the WebUI.
+// MakeSAMLApp creates a SAMLIdPServiceProvider object for the WebUI.
 // Keep in sync with lib/teleterm/apiserver/handler/handler_apps.go.
-func MakeAppTypeFromSAMLApp(app types.SAMLIdPServiceProvider, c MakeAppsConfig) App {
+func MakeSAMLApp(app types.SAMLIdPServiceProvider, c MakeAppsConfig) App {
 	labels := makeLabels(app.GetAllLabels())
 	resultApp := App{
-		Kind:            types.KindApp,
-		Name:            app.GetName(),
-		Description:     "SAML Application",
-		PublicAddr:      "",
-		Labels:          labels,
-		ClusterID:       c.AppClusterName,
-		FriendlyName:    types.FriendlyName(app),
-		SAMLApp:         true,
-		RequiresRequest: c.RequiresRequest,
+		Kind:         types.KindApp,
+		Name:         app.GetName(),
+		Description:  "SAML Application",
+		PublicAddr:   "",
+		Labels:       labels,
+		ClusterID:    c.AppClusterName,
+		FriendlyName: types.FriendlyName(app),
+		SAMLApp:      true,
 	}
 
 	return resultApp

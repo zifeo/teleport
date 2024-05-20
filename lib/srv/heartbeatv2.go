@@ -20,14 +20,10 @@ package srv
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/coreos/go-semver/semver"
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/gravitational/teleport/api/client/proto"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
@@ -42,12 +38,12 @@ import (
 	"github.com/gravitational/teleport/lib/utils/interval"
 )
 
-// HeartbeatV2Config configures the HeartbeatV2.
-type HeartbeatV2Config[T any] struct {
+// SSHServerHeartbeatConfig configures the HeartbeatV2 for an ssh server.
+type SSHServerHeartbeatConfig struct {
 	// InventoryHandle is used to send heartbeats.
 	InventoryHandle inventory.DownstreamHandle
-	// GetResource gets the latest item to heartbeat.
-	GetResource func() T
+	// GetServer gets the latest server spec.
+	GetServer func() *types.ServerV2
 
 	// -- below values are all optional
 
@@ -64,19 +60,17 @@ type HeartbeatV2Config[T any] struct {
 	PollInterval time.Duration
 }
 
-func (c *HeartbeatV2Config[T]) Check() error {
+func (c *SSHServerHeartbeatConfig) Check() error {
 	if c.InventoryHandle == nil {
-		return trace.BadParameter("missing required parameter InventoryHandle for heartbeat")
+		return trace.BadParameter("missing required parameter InventoryHandle for ssh heartbeat")
 	}
-	if c.GetResource == nil {
-		return trace.BadParameter("missing required parameter GetResource for heartbeat")
+	if c.GetServer == nil {
+		return trace.BadParameter("missing required parameter GetServer for ssh heartbeat")
 	}
 	return nil
 }
 
-// NewSSHServerHeartbeat creates a [HeartbeatV2] that can be used to update
-// the presence of [types.ServerV2].
-func NewSSHServerHeartbeat(cfg HeartbeatV2Config[*types.ServerV2]) (*HeartbeatV2, error) {
+func NewSSHServerHeartbeat(cfg SSHServerHeartbeatConfig) (*HeartbeatV2, error) {
 	if err := cfg.Check(); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -86,7 +80,7 @@ func NewSSHServerHeartbeat(cfg HeartbeatV2Config[*types.ServerV2]) (*HeartbeatV2
 		announcer:   cfg.Announcer,
 	}
 	inner.getServer = func(ctx context.Context) *types.ServerV2 {
-		server := cfg.GetResource()
+		server := cfg.GetServer()
 
 		doneCtx, cancel := context.WithCancel(ctx)
 		cancel() // not a typo
@@ -97,25 +91,6 @@ func NewSSHServerHeartbeat(cfg HeartbeatV2Config[*types.ServerV2]) (*HeartbeatV2
 		}
 
 		return server
-	}
-
-	return newHeartbeatV2(cfg.InventoryHandle, inner, heartbeatV2Config{
-		onHeartbeatInner: cfg.OnHeartbeat,
-		announceInterval: cfg.AnnounceInterval,
-		pollInterval:     cfg.PollInterval,
-	}), nil
-}
-
-// NewAppServerHeartbeat creates a [HeartbeatV2] that can be used to update
-// the presence of [types.AppServerV3].
-func NewAppServerHeartbeat(cfg HeartbeatV2Config[*types.AppServerV3]) (*HeartbeatV2, error) {
-	if err := cfg.Check(); err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	inner := &appServerHeartbeatV2{
-		getServer: func(ctx context.Context) *types.AppServerV3 { return cfg.GetResource() },
-		announcer: cfg.Announcer,
 	}
 
 	return newHeartbeatV2(cfg.InventoryHandle, inner, heartbeatV2Config{
@@ -521,75 +496,6 @@ func (h *sshServerHeartbeatV2) Announce(ctx context.Context, sender inventory.Do
 		log.Warnf("Failed to perform inventory heartbeat for ssh server: %v", err)
 		return false
 	}
-	h.prev = server
-	return true
-}
-
-// appServerHeartbeatV2 is the heartbeatV2 implementation for app servers.
-type appServerHeartbeatV2 struct {
-	getServer func(ctx context.Context) *types.AppServerV3
-	announcer authclient.Announcer
-	prev      *types.AppServerV3
-}
-
-func (h *appServerHeartbeatV2) Poll(ctx context.Context) (changed bool) {
-	if h.prev == nil {
-		return true
-	}
-	return services.CompareServers(h.getServer(ctx), h.prev) == services.Different
-}
-
-func (h *appServerHeartbeatV2) SupportsFallback() bool {
-	return h.announcer != nil
-}
-
-func (h *appServerHeartbeatV2) FallbackAnnounce(ctx context.Context) (ok bool) {
-	if h.announcer == nil {
-		return false
-	}
-	server := h.getServer(ctx)
-	_, err := h.announcer.UpsertApplicationServer(ctx, server)
-	if err != nil {
-		if !errors.Is(err, context.Canceled) && status.Code(err) != codes.Canceled {
-			log.Warnf("Failed to perform fallback heartbeat for app server: %v", err)
-		}
-		return false
-	}
-	h.prev = server
-	return true
-}
-
-var (
-	minAppVersion15 = semver.New("15.3.4")
-	minAppVersion14 = semver.New("14.3.19")
-	minAppVersion13 = semver.New("13.4.25")
-)
-
-func (h *appServerHeartbeatV2) Announce(ctx context.Context, sender inventory.DownstreamSender) (ok bool) {
-	authVersion, err := semver.NewVersion(sender.Hello().Version)
-	if err != nil {
-		return false
-	}
-
-	// AppServer heartbeats via inventory control stream were not introduced in a major version,
-	// so there is a chance that the Auth server is unable to process the request via the inventory
-	// control stream. If the Auth server is detected to be running an incompatible version, then use
-	// the fallback mechanism.
-	// TODO(tross) DELETE IN 16.0.0
-	if (authVersion.Major == 15 && authVersion.LessThan(*minAppVersion15)) ||
-		(authVersion.Major == 14 && authVersion.LessThan(*minAppVersion14)) ||
-		(authVersion.Major == 13 && authVersion.LessThan(*minAppVersion13)) {
-		return h.FallbackAnnounce(ctx)
-	}
-
-	server := h.getServer(ctx)
-	if err := sender.Send(ctx, proto.InventoryHeartbeat{AppServer: h.getServer(ctx)}); err != nil {
-		if !errors.Is(err, context.Canceled) && status.Code(err) != codes.Canceled {
-			log.Warnf("Failed to perform inventory heartbeat for app server: %v", err)
-		}
-		return false
-	}
-
 	h.prev = server
 	return true
 }

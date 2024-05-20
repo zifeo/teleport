@@ -143,7 +143,6 @@ import (
 	alpncommon "github.com/gravitational/teleport/lib/srv/alpnproxy/common"
 	"github.com/gravitational/teleport/lib/srv/app"
 	"github.com/gravitational/teleport/lib/srv/db"
-	"github.com/gravitational/teleport/lib/srv/debug"
 	"github.com/gravitational/teleport/lib/srv/desktop"
 	"github.com/gravitational/teleport/lib/srv/ingress"
 	"github.com/gravitational/teleport/lib/srv/regular"
@@ -733,7 +732,7 @@ func Run(ctx context.Context, cfg servicecfg.Config, newTeleport NewProcess) err
 		if err != nil {
 			// This error means that was a clean shutdown
 			// and no reload is necessary.
-			if errors.Is(err, ErrTeleportExited) {
+			if err == ErrTeleportExited {
 				return nil
 			}
 			return trace.Wrap(err)
@@ -746,7 +745,7 @@ func waitAndReload(ctx context.Context, sigC <-chan os.Signal, cfg servicecfg.Co
 	if err == nil {
 		return nil, ErrTeleportExited
 	}
-	if !errors.Is(err, ErrTeleportReloading) {
+	if err != ErrTeleportReloading {
 		return nil, trace.Wrap(err)
 	}
 	cfg.Logger.InfoContext(ctx, "Started in-process service reload.")
@@ -801,7 +800,7 @@ func waitAndReload(ctx context.Context, sigC <-chan os.Signal, cfg servicecfg.Co
 	timeoutCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 	srv.Shutdown(services.ProcessReloadContext(timeoutCtx))
-	if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+	if timeoutCtx.Err() == context.DeadlineExceeded {
 		// The new service can start initiating connections to the old service
 		// keeping it from shutting down gracefully, or some external
 		// connections can keep hanging the old auth service and prevent
@@ -815,7 +814,7 @@ func waitAndReload(ctx context.Context, sigC <-chan os.Signal, cfg servicecfg.Co
 		timeoutCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 		defer cancel()
 		srv.WaitWithContext(timeoutCtx)
-		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+		if timeoutCtx.Err() == context.DeadlineExceeded {
 			return nil, trace.BadParameter("the old service has failed to exit.")
 		}
 	} else {
@@ -1109,14 +1108,6 @@ func NewTeleport(cfg *servicecfg.Config) (*TeleportProcess, error) {
 		if err := process.initTracingService(); err != nil {
 			return nil, trace.Wrap(err)
 		}
-	}
-
-	if cfg.DebugService.Enabled {
-		if err := process.initDebugService(); err != nil {
-			return nil, trace.Wrap(err)
-		}
-	} else {
-		warnOnErr(process.ExitContext(), process.closeImportedDescriptors(teleport.ComponentDebug), process.logger)
 	}
 
 	// Create a process wide key generator that will be shared. This is so the
@@ -1986,19 +1977,10 @@ func (process *TeleportProcess) initAuthService() error {
 
 	authServer.SetUnifiedResourcesCache(unifiedResourcesCache)
 
-	accessRequestCache, err := services.NewAccessRequestCache(services.AccessRequestCacheConfig{
-		Events: authServer.Services,
-		Getter: authServer.Services,
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	authServer.SetAccessRequestCache(accessRequestCache)
-
 	userNotificationCache, err := services.NewUserNotificationCache(services.NotificationCacheConfig{
 		Events: authServer.Services,
-		Getter: authServer.Cache,
+		// TODO(rudream): Use getter from cache instead of real backend.
+		Getter: authServer.Services,
 	})
 	if err != nil {
 		return trace.Wrap(err)
@@ -2008,13 +1990,24 @@ func (process *TeleportProcess) initAuthService() error {
 
 	globalNotificationCache, err := services.NewGlobalNotificationCache(services.NotificationCacheConfig{
 		Events: authServer.Services,
-		Getter: authServer.Cache,
+		// TODO(rudream): Use getter from cache instead of real backend.
+		Getter: authServer.Services,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	authServer.SetGlobalNotificationCache(globalNotificationCache)
+
+	accessRequestCache, err := services.NewAccessRequestCache(services.AccessRequestCacheConfig{
+		Events: authServer.Services,
+		Getter: authServer.Services,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	authServer.SetAccessRequestCache(accessRequestCache)
 
 	if embedderClient != nil {
 		logger.DebugContext(process.ExitContext(), "Starting embedding watcher")
@@ -2520,16 +2513,12 @@ func (process *TeleportProcess) newLocalCacheForWindowsDesktop(clt authclient.Cl
 	return authclient.NewWindowsDesktopWrapper(clt, cache), nil
 }
 
-// accessPointWrapper is a wrapper around [authclient.ClientI]  that reduces the surface area of the
+// accessPointWrapper is a wrapper around auth.ClientI that reduces the surface area of the
 // auth.ClientI.DiscoveryConfigClient interface to services.DiscoveryConfigs.
-// Cache doesn't implement the full [authclient.ClientI]  interface, so we need to wrap [authclient.ClientI]
+// Cache doesn't implement the full auth.ClientI interface, so we need to wrap auth.ClientI to
 // to make it compatible with the services.DiscoveryConfigs interface.
 type accessPointWrapper struct {
 	authclient.ClientI
-}
-
-func (a accessPointWrapper) CrownJewelClient() services.CrownJewels {
-	return a.ClientI.CrownJewelServiceClient()
 }
 
 func (a accessPointWrapper) DiscoveryConfigClient() services.DiscoveryConfigs {
@@ -2772,6 +2761,7 @@ func (process *TeleportProcess) initSSH() error {
 			process.proxyPublicAddr(),
 			conn.Client,
 			regular.SetLimiter(limiter),
+			regular.SetShell(cfg.SSH.Shell),
 			regular.SetEmitter(&events.StreamerAndEmitter{Emitter: asyncEmitter, Streamer: conn.Client}),
 			regular.SetLabels(cfg.SSH.Labels, cfg.SSH.CmdLabels, process.cloudLabels),
 			regular.SetNamespace(namespace),
@@ -2795,6 +2785,7 @@ func (process *TeleportProcess) initSSH() error {
 			regular.SetInventoryControlHandle(process.inventoryHandle),
 			regular.SetTracerProvider(process.TracingProvider),
 			regular.SetSessionController(sessionController),
+			regular.SetCAGetter(authClient.GetCertAuthority),
 			regular.SetPublicAddrs(cfg.SSH.PublicAddrs),
 		)
 		if err != nil {
@@ -3333,47 +3324,6 @@ func (process *TeleportProcess) initDiagnosticService() error {
 
 	process.OnExit("diagnostic.shutdown", func(payload interface{}) {
 		warnOnErr(process.ExitContext(), muxListener.Close(), logger)
-		if payload == nil {
-			logger.InfoContext(process.ExitContext(), "Shutting down immediately.")
-			warnOnErr(process.ExitContext(), server.Close(), logger)
-		} else {
-			logger.InfoContext(process.ExitContext(), "Shutting down gracefully.")
-			ctx := payloadContext(payload)
-			warnOnErr(process.ExitContext(), server.Shutdown(ctx), logger)
-		}
-		logger.InfoContext(process.ExitContext(), "Exited.")
-	})
-
-	return nil
-}
-
-// initDebugService starts debug service serving endpoints used for
-// troubleshooting the instance.
-func (process *TeleportProcess) initDebugService() error {
-	logger := process.logger.With(teleport.ComponentKey, teleport.Component(teleport.ComponentDebug, process.id))
-
-	listener, err := process.importOrCreateListener(ListenerDebug, filepath.Join(process.Config.DataDir, teleport.DebugServiceSocketName))
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	server := &http.Server{
-		Handler:           debug.NewServeMux(logger, process.Config),
-		ReadTimeout:       apidefaults.DefaultIOTimeout,
-		ReadHeaderTimeout: defaults.ReadHeadersTimeout,
-		WriteTimeout:      apidefaults.DefaultIOTimeout,
-		IdleTimeout:       apidefaults.DefaultIdleTimeout,
-	}
-
-	process.RegisterFunc("debug.service", func() error {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.WarnContext(process.ExitContext(), "Debug server exited with error.", "error", err)
-		}
-		return nil
-	})
-	warnOnErr(process.ExitContext(), process.closeImportedDescriptors(teleport.ComponentDebug), logger)
-
-	process.OnExit("debug.shutdown", func(payload interface{}) {
 		if payload == nil {
 			logger.InfoContext(process.ExitContext(), "Shutting down immediately.")
 			warnOnErr(process.ExitContext(), server.Close(), logger)
@@ -4513,6 +4463,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		regular.SetOnHeartbeat(process.OnHeartbeat(teleport.ComponentProxy)),
 		regular.SetEmitter(streamEmitter),
 		regular.SetLockWatcher(lockWatcher),
+		regular.SetNodeWatcher(nodeWatcher),
 		// Allow Node-wide file copying checks to succeed so they can be
 		// accurately checked later when an SCP/SFTP request hits the
 		// destination Node.
@@ -4770,7 +4721,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 			}
 
 			err := kubeServer.Serve(listeners.kube, mopts...)
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err != nil && err != http.ErrServerClosed {
 				logger.WarnContext(process.ExitContext(), "Kube TLS server exited with error.", "error", err)
 			}
 			return nil
@@ -4852,9 +4803,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 					alpncommon.ProtocolRedisDB,
 					alpncommon.ProtocolSnowflake,
 					alpncommon.ProtocolSQLServer,
-					alpncommon.ProtocolCassandra,
-					alpncommon.ProtocolSpanner,
-				),
+					alpncommon.ProtocolCassandra),
 			})
 		}
 
@@ -5707,7 +5656,6 @@ func (process *TeleportProcess) initApps() {
 			OnHeartbeat:          process.OnHeartbeat(teleport.ComponentApp),
 			ConnectedProxyGetter: proxyGetter,
 			ConnectionsHandler:   connectionsHandler,
-			InventoryHandle:      process.inventoryHandle,
 		})
 		if err != nil {
 			return trace.Wrap(err)
@@ -5774,7 +5722,7 @@ func (process *TeleportProcess) initApps() {
 		})
 
 		// Block and wait while the server and agent pool are running.
-		if err := appServer.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+		if err := appServer.Wait(); err != nil {
 			return trace.Wrap(err)
 		}
 		agentPool.Wait()
@@ -5890,6 +5838,8 @@ func (process *TeleportProcess) Shutdown(ctx context.Context) {
 // Close broadcasts close signals and exits immediately
 func (process *TeleportProcess) Close() error {
 	process.BroadcastEvent(Event{Name: TeleportExitEvent})
+
+	process.Config.Keygen.Close()
 
 	var errors []error
 

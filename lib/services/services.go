@@ -48,7 +48,6 @@ type Services interface {
 	UserGroups
 	Integrations
 	KubeWaitingContainer
-	Notifications
 
 	OktaClient() Okta
 	AccessListClient() AccessLists
@@ -56,7 +55,6 @@ type Services interface {
 	UserLoginStateClient() UserLoginStates
 	DiscoveryConfigClient() DiscoveryConfigs
 	SecReportsClient() *secreport.Client
-	CrownJewelClient() CrownJewels
 }
 
 // RotationGetter returns the rotation state.

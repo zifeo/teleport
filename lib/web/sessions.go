@@ -52,7 +52,6 @@ import (
 	"github.com/gravitational/teleport/lib/auth/authclient"
 	"github.com/gravitational/teleport/lib/authz"
 	"github.com/gravitational/teleport/lib/client"
-	"github.com/gravitational/teleport/lib/modules"
 	"github.com/gravitational/teleport/lib/multiplexer"
 	"github.com/gravitational/teleport/lib/reversetunnelclient"
 	"github.com/gravitational/teleport/lib/services"
@@ -218,7 +217,7 @@ func (c *SessionContext) GetClientConnection() *grpc.ClientConn {
 	return c.cfg.RootClient.GetConnection()
 }
 
-// GetUserClient will return an [authclient.ClientI]  with the role of the user at
+// GetUserClient will return an auth.ClientI with the role of the user at
 // the requested site. If the site is local a client with the users local role
 // is returned. If the site is remote a client with the users remote role is
 // returned.
@@ -233,11 +232,11 @@ func (c *SessionContext) GetUserClient(ctx context.Context, site reversetunnelcl
 	return clt, trace.Wrap(err)
 }
 
-// remoteClient returns an [authclient.ClientI]  with the role of the user at
+// remoteClient returns an auth.ClientI with the role of the user at
 // the requested [site]. All remote clients are lazily created
 // when they are first requested and then cached. Subsequent requests
 // will return the previously created client to prevent having more than
-// a single [authclient.ClientI]  per site for a user.
+// a single auth.ClientI per site for a user.
 //
 // A [singleflight.Group] is leveraged to prevent duplicate requests for remote
 // clients at the same time to race.
@@ -537,11 +536,6 @@ func (c *SessionContext) GetSessionID() string {
 	return c.cfg.Session.GetName()
 }
 
-// GetRootClusterName returns the root cluster name.
-func (c *SessionContext) GetRootClusterName() string {
-	return c.cfg.RootClusterName
-}
-
 // Close cleans up resources associated with this context and removes it
 // from the user context
 func (c *SessionContext) Close() error {
@@ -628,10 +622,6 @@ type sessionCacheOptions struct {
 	sessionLingeringThreshold time.Duration
 	// proxySigner is used to sign PROXY header and securely propagate client's real IP
 	proxySigner multiplexer.PROXYHeaderSigner
-	// See [sessionCache.sessionWatcherStartImmediately]. Used for testing.
-	sessionWatcherStartImmediately bool
-	// See [sessionCache.sessionWatcherEventProcessedChannel]. Used for testing.
-	sessionWatcherEventProcessedChannel chan struct{}
 }
 
 // newSessionCache creates a [sessionCache] from the provided [config] and
@@ -648,27 +638,22 @@ func newSessionCache(ctx context.Context, config sessionCacheOptions) (*sessionC
 	}
 
 	cache := &sessionCache{
-		clusterName:                         clusterName.GetClusterName(),
-		proxyClient:                         config.proxyClient,
-		accessPoint:                         config.accessPoint,
-		sessions:                            make(map[string]*SessionContext),
-		resources:                           make(map[string]*sessionResources),
-		authServers:                         config.servers,
-		closer:                              utils.NewCloseBroadcaster(),
-		cipherSuites:                        config.cipherSuites,
-		log:                                 newPackageLogger(),
-		clock:                               config.clock,
-		sessionLingeringThreshold:           config.sessionLingeringThreshold,
-		proxySigner:                         config.proxySigner,
-		sessionWatcherStartImmediately:      config.sessionWatcherStartImmediately,
-		sessionWatcherEventProcessedChannel: config.sessionWatcherEventProcessedChannel,
+		clusterName:               clusterName.GetClusterName(),
+		proxyClient:               config.proxyClient,
+		accessPoint:               config.accessPoint,
+		sessions:                  make(map[string]*SessionContext),
+		resources:                 make(map[string]*sessionResources),
+		authServers:               config.servers,
+		closer:                    utils.NewCloseBroadcaster(),
+		cipherSuites:              config.cipherSuites,
+		log:                       newPackageLogger(),
+		clock:                     config.clock,
+		sessionLingeringThreshold: config.sessionLingeringThreshold,
+		proxySigner:               config.proxySigner,
 	}
 
 	// periodically close expired and unused sessions
 	go cache.expireSessions(ctx)
-
-	// Watch for session updates.
-	go cache.watchWebSessions(ctx)
 
 	return cache, nil
 }
@@ -707,17 +692,6 @@ type sessionCache struct {
 
 	// proxySigner is used to sign PROXY header and securely propagate client's real IP
 	proxySigner multiplexer.PROXYHeaderSigner
-
-	// sessionWatcherStartImmediately removes the First component of the linear
-	// backoff used to start the WebSession watcher.
-	// Used for testing.
-	sessionWatcherStartImmediately bool
-
-	// sessionWatcherEventProcessedChannel is used to signal that the
-	// sessionWatcher processed an event.
-	// May be nil.
-	// Used for testing.
-	sessionWatcherEventProcessedChannel chan struct{}
 }
 
 // Close closes all allocated resources and stops goroutines
@@ -758,141 +732,6 @@ func (s *sessionCache) clearExpiredSessions(ctx context.Context) {
 		s.removeSessionContextLocked(c.cfg.Session.GetUser(), c.cfg.Session.GetName())
 		s.log.WithField("ctx", c.String()).Debug("Context expired.")
 	}
-}
-
-// watchWebSessions runs the WebSession watcher loop.
-// It only stops when ctx is done.
-func (s *sessionCache) watchWebSessions(ctx context.Context) {
-	// Watcher not necessary for OSS.
-	if modules.GetModules().BuildType() != modules.BuildEnterprise {
-		return
-	}
-
-	linear := utils.NewDefaultLinear()
-	if s.sessionWatcherStartImmediately {
-		linear.First = 0
-	}
-
-	s.log.Debug("sessionCache: Starting WebSession watcher")
-	for {
-		select {
-		// Stop when the context tells us to.
-		case <-ctx.Done():
-			s.log.Debug("sessionCache: Stopping WebSession watcher")
-			return
-
-		case <-linear.After():
-			linear.Inc()
-		}
-
-		if err := s.watchWebSessionsOnce(ctx, linear.Reset); err != nil && !errors.Is(err, context.Canceled) {
-			const msg = "" +
-				"sessionCache: WebSession watcher aborted, re-connecting. " +
-				"This may have an impact in device trust web sessions."
-			s.log.WithError(err).Warn(msg)
-		}
-	}
-}
-
-// watchWebSessionsOnce creates a watcher for WebSessions and watches for its
-// events.
-//
-// Any session updated with device extensions is evicted from the cache. That is
-// so the new certificates are forcefully loaded by the Proxy.
-//
-// Sessions updated for other reasons (no device extensions present) or cached
-// sessions that already have device extensions are ignored. This avoids
-// disconnecting clients during periodic bearer token refresh by the Web UI.
-func (s *sessionCache) watchWebSessionsOnce(ctx context.Context, reset func()) error {
-	watcher, err := s.proxyClient.NewWatcher(ctx, types.Watch{
-		Name: teleport.ComponentWebProxy + ".sessionCache." + types.KindWebSession,
-		Kinds: []types.WatchKind{
-			{
-				Kind: types.KindWebSession,
-				// Watch only for KindWebSession.
-				// SubKinds include KindAppSession, KindSAMLIdPSession, etc.
-				SubKind: types.KindWebSession,
-			},
-		},
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer watcher.Close()
-
-	// notifyProcessed is a feedback mechanism for tests.
-	notifyProcessed := func() {
-		if s.sessionWatcherEventProcessedChannel != nil {
-			s.sessionWatcherEventProcessedChannel <- struct{}{}
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-
-		case <-watcher.Done():
-			return errors.New("watcher closed")
-
-		case event := <-watcher.Events():
-			reset() // Reset linear backoff attempts.
-
-			s.log.
-				WithField("event", event).
-				Trace("sessionCache: Received watcher event")
-
-			if event.Type != types.OpPut {
-				continue // We only care about OpPut at the moment.
-			}
-
-			session, ok := event.Resource.(types.WebSession)
-			if !ok {
-				s.log.
-					WithField("resource_type", fmt.Sprintf("%T", event.Resource)).
-					Warn("sessionCache: Received unexpected resource type")
-				continue
-			}
-			if !session.GetHasDeviceExtensions() {
-				s.log.
-					WithField("session_id", session.GetName()).
-					Debug("sessionCache: Updated session doesn't have device extensions, skipping")
-				notifyProcessed()
-				continue
-			}
-
-			// Release existing and non-device-aware session.
-			if err := s.releaseResourcesIfNoDeviceExtensions(session.GetUser(), session.GetName()); err != nil {
-				s.log.
-					WithError(err).
-					WithField("session_id", session.GetName()).
-					Debug("sessionCache: Failed to release updated session")
-			}
-
-			notifyProcessed()
-		}
-	}
-}
-
-func (s *sessionCache) releaseResourcesIfNoDeviceExtensions(user, sessionID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id := sessionKey(user, sessionID)
-	switch sessionCtx, ok := s.sessions[id]; {
-	case !ok:
-		return nil // Session not found
-	case sessionCtx.cfg.Session.GetHasDeviceExtensions():
-		s.log.
-			WithField("session_id", sessionID).
-			Debug("sessionCache: Session already has device extensions, skipping")
-		return nil
-	}
-
-	s.log.
-		WithField("session_id", sessionID).
-		Debug("sessionCache: Releasing session resources due to device extensions upgrade")
-	return s.releaseResourcesLocked(user, sessionID)
 }
 
 // AuthWithOTP authenticates the specified user with the given password and OTP token.

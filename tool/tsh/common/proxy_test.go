@@ -596,6 +596,8 @@ func TestProxySSHJumpHost(t *testing.T) {
 					testserver.WithAuthConfig(
 						func(cfg *servicecfg.AuthConfig) {
 							cfg.NetworkingConfig.SetProxyListenerMode(rootListenerMode)
+							// Disable session recording to prevent writing to disk after the test concludes.
+							cfg.SessionRecordingConfig.SetMode(types.RecordOff)
 							// Load all CAs on login so that leaf CA is trusted by clients.
 							cfg.LoadAllCAs = true
 						},
@@ -610,6 +612,8 @@ func TestProxySSHJumpHost(t *testing.T) {
 					testserver.WithAuthConfig(
 						func(cfg *servicecfg.AuthConfig) {
 							cfg.NetworkingConfig.SetProxyListenerMode(leafListenerMode)
+							// Disable session recording to prevent writing to disk after the test concludes.
+							cfg.SessionRecordingConfig.SetMode(types.RecordOff)
 						},
 					),
 				}
@@ -627,7 +631,11 @@ func TestProxySSHJumpHost(t *testing.T) {
 					"--insecure",
 					"login",
 					"--proxy", rootProxyAddr.String(),
-				}, setHomePath(tshHome), setMockSSOLogin(rootServer.GetAuthServer(), accessUser, connector.GetName()))
+				}, setHomePath(tshHome), func(cf *CLIConf) error {
+					cf.MockSSOLogin = mockSSOLogin(rootServer.GetAuthServer(), accessUser)
+					cf.AuthConnector = connector.GetName()
+					return nil
+				})
 				require.NoError(t, err)
 
 				// Connect through the leaf proxy jumphost.
@@ -1253,7 +1261,7 @@ Use one of the following commands to connect to the database or to the address a
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			templateArgs := map[string]any{}
-			tpl := chooseProxyCommandTemplate(templateArgs, tt.commands, &databaseInfo{})
+			tpl := chooseProxyCommandTemplate(templateArgs, tt.commands, "")
 			require.Equal(t, tt.wantTemplate, tpl)
 			require.Equal(t, tt.wantTemplateArgs, templateArgs)
 

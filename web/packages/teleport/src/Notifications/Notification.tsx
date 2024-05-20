@@ -24,7 +24,6 @@ import * as Icons from 'design/Icon';
 
 import Text from 'design/Text';
 import { ButtonSecondary } from 'design/Button';
-
 import { MenuIcon, MenuItem } from 'shared/components/MenuAction';
 import { IGNORE_CLICK_CLASSNAME } from 'shared/hooks/useRefClickOutside/useRefClickOutside';
 import Dialog, {
@@ -35,66 +34,29 @@ import Dialog, {
 } from 'design/Dialog';
 import { Theme } from 'design/theme/themes/types';
 
-import { useAsync } from 'shared/hooks/useAsync';
-
-import {
-  Notification as NotificationType,
-  NotificationState,
-} from 'teleport/services/notifications';
-
-import useStickyClusterId from 'teleport/useStickyClusterId';
+import { Notification as NotificationType } from 'teleport/services/notifications';
 
 import { useTeleport } from '..';
 
 import { NotificationContent } from './notificationContentFactory';
 
-import { View } from './Notifications';
-
 export function Notification({
   notification,
-  view = 'All',
 }: {
   notification: NotificationType;
-  view?: View;
 }) {
   const ctx = useTeleport();
-  const { clusterId } = useStickyClusterId();
-  const [clicked, setClicked] = useState(notification.clicked);
 
   const content = ctx.notificationContentFactory(notification);
 
-  const [markAsClickedAttempt, markAsClicked] = useAsync(() =>
-    ctx.notificationService
-      .upsertNotificationState(clusterId, {
-        notificationId: notification.id,
-        notificationState: NotificationState.CLICKED,
-      })
-      .then(res => {
-        setClicked(true);
-        return res;
-      })
-  );
+  // If the notification is unsupported, it should not be shown.
+  if (!content) {
+    return null;
+  }
 
-  const [hideNotificationAttempt, hideNotification] = useAsync(() => {
-    return ctx.notificationService.upsertNotificationState(clusterId, {
-      notificationId: notification.id,
-      notificationState: NotificationState.DISMISSED,
-    });
-  });
   // Whether to show the text content dialog. This is only ever used for user-created notifications which only contain informational text
   // and don't redirect to any page.
   const [showTextContentDialog, setShowTextContentDialog] = useState(false);
-
-  // If the notification is unsupported or hidden, or if the view is "Unread" and the notification has been read,
-  // it should not be shown.
-  if (
-    !content ||
-    hideNotificationAttempt.status === 'success' ||
-    hideNotificationAttempt.status === 'processing' ||
-    (view === 'Unread' && clicked)
-  ) {
-    return null;
-  }
 
   let AccentIcon;
   switch (content.type) {
@@ -115,6 +77,14 @@ export function Notification({
 
   const formattedDate = formatDate(notification.createdDate);
 
+  function onMarkAsClicked() {
+    // TODO rudream - add mark as clicked functionality
+  }
+
+  function onHideNotification() {
+    // TODO rudream - add hide notification functionality
+  }
+
   function onNotificationClick(e: React.MouseEvent<HTMLElement>) {
     // Prevents this from being triggered when the user is just clicking away from
     // an open "mark as read/hide this notification" menu popover.
@@ -127,17 +97,10 @@ export function Notification({
     }
   }
 
-  const isClicked =
-    clicked ||
-    markAsClickedAttempt.status === 'processing' ||
-    (markAsClickedAttempt.status === 'success' &&
-      markAsClickedAttempt.data.notificationState ===
-        NotificationState.CLICKED);
-
   return (
     <>
       <Container
-        clicked={isClicked}
+        clicked={notification.clicked}
         onClick={onNotificationClick}
         className="notification"
       >
@@ -157,25 +120,10 @@ export function Notification({
                 css={`
                   text-transform: none;
                 `}
-                onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
-                  event.stopPropagation();
-                  content.quickAction.onClick();
-                }}
+                onClick={content.quickAction.onClick}
               >
                 {content.quickAction.buttonText}
               </ButtonSecondary>
-            )}
-            {hideNotificationAttempt.status === 'error' && (
-              <Text typography="subtitle3" color="error.main">
-                Failed to hide notification:{' '}
-                {hideNotificationAttempt.statusText}
-              </Text>
-            )}
-            {markAsClickedAttempt.status === 'error' && (
-              <Text typography="subtitle3" color="error.main">
-                Failed to mark notification as read:{' '}
-                {markAsClickedAttempt.statusText}
-              </Text>
             )}
           </ContentBody>
           <SideContent>
@@ -188,16 +136,14 @@ export function Notification({
               }}
               buttonIconProps={{ style: { borderRadius: '4px' } }}
             >
-              {!isClicked && (
-                <MenuItem
-                  onClick={markAsClicked}
-                  className={IGNORE_CLICK_CLASSNAME}
-                >
-                  Mark as read
-                </MenuItem>
-              )}
               <MenuItem
-                onClick={hideNotification}
+                onClick={onMarkAsClicked}
+                className={IGNORE_CLICK_CLASSNAME}
+              >
+                Mark as read
+              </MenuItem>
+              <MenuItem
+                onClick={onHideNotification}
                 className={IGNORE_CLICK_CLASSNAME}
               >
                 Hide this notification

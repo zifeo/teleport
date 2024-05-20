@@ -59,11 +59,6 @@ import (
 	"github.com/gravitational/teleport/lib/utils/spreadwork"
 )
 
-const (
-	// DefaultDiscoveryPollInterval is the default interval that Discovery Services fetches resources.
-	DefaultDiscoveryPollInterval = 5 * time.Minute
-)
-
 var errNoInstances = errors.New("all fetched nodes already enrolled")
 
 // Matchers contains all matchers used by discovery service
@@ -140,18 +135,17 @@ type Config struct {
 	ClusterName string
 	// PollInterval is the cadence at which the discovery server will run each of its
 	// discovery cycles.
-	// Default: [github.com/gravitational/teleport/lib/srv.DefaultDiscoveryPollInterval]
 	PollInterval time.Duration
+
+	// ClusterFeatures returns flags for supported/unsupported features.
+	// Used as a function because cluster features might change on Auth restarts.
+	ClusterFeatures func() proto.Features
 
 	// ServerCredentials are the credentials used to identify the discovery service
 	// to the Access Graph service.
 	ServerCredentials *tls.Config
 	// AccessGraphConfig is the configuration for the Access Graph client
 	AccessGraphConfig AccessGraphConfig
-
-	// ClusterFeatures returns flags for supported/unsupported features.
-	// Used as a function because cluster features might change on Auth restarts.
-	ClusterFeatures func() proto.Features
 
 	// TriggerFetchC is a list of channels that must be notified when a off-band poll must be performed.
 	// This is used to start a polling iteration when a new DiscoveryConfig change is received.
@@ -231,7 +225,7 @@ kubernetes matchers are present.`)
 	}
 
 	if c.PollInterval == 0 {
-		c.PollInterval = DefaultDiscoveryPollInterval
+		c.PollInterval = 5 * time.Minute
 	}
 
 	c.TriggerFetchC = make([]chan struct{}, 0)
@@ -318,17 +312,17 @@ type Server struct {
 	muDynamicServerGCPFetchers sync.RWMutex
 	staticServerGCPFetchers    []server.Fetcher
 
-	// dynamicTAGSyncFetchers holds the current TAG Fetchers for the Dynamic Matchers (those coming from DiscoveryConfig resource).
-	// The key is the DiscoveryConfig name.
-	dynamicTAGSyncFetchers   map[string][]aws_sync.AWSSync
-	muDynamicTAGSyncFetchers sync.RWMutex
-	staticTAGSyncFetchers    []aws_sync.AWSSync
-
 	// dynamicKubeFetchers holds the current kube fetchers that use integration as a source of credentials,
 	// for the Dynamic Matchers (those coming from DiscoveryConfig resource).
 	// The key is the DiscoveryConfig name.
 	dynamicKubeFetchers   map[string][]common.Fetcher
 	muDynamicKubeFetchers sync.RWMutex
+
+	// dynamicTAGSyncFetchers holds the current TAG Fetchers for the Dynamic Matchers (those coming from DiscoveryConfig resource).
+	// The key is the DiscoveryConfig name.
+	dynamicTAGSyncFetchers   map[string][]aws_sync.AWSSync
+	muDynamicTAGSyncFetchers sync.RWMutex
+	staticTAGSyncFetchers    []aws_sync.AWSSync
 
 	dynamicDiscoveryConfig map[string]*discoveryconfig.DiscoveryConfig
 
@@ -466,14 +460,9 @@ func (s *Server) initAWSWatchers(matchers []types.AWSMatcher) error {
 	s.caRotationCh = make(chan []types.Server)
 
 	if s.ec2Installer == nil {
-		ec2installer, err := server.NewSSMInstaller(server.SSMInstallerConfig{
+		s.ec2Installer = server.NewSSMInstaller(server.SSMInstallerConfig{
 			Emitter: s.Emitter,
 		})
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		s.ec2Installer = ec2installer
 	}
 
 	lr, err := newLabelReconciler(&labelReconcilerConfig{
@@ -1422,7 +1411,7 @@ func (s *Server) startDynamicWatcherUpdater() {
 				oldDiscoveryConfig := s.dynamicDiscoveryConfig[dc.GetName()]
 				// If the DiscoveryConfig spec didn't change, then there's no need to update the matchers.
 				// we can skip this event.
-				if oldDiscoveryConfig.IsEqual(dc) {
+				if oldDiscoveryConfig.Equal(dc) {
 					continue
 				}
 
@@ -1494,13 +1483,13 @@ func (s *Server) deleteDynamicFetchers(name string) {
 	delete(s.dynamicServerGCPFetchers, name)
 	s.muDynamicServerGCPFetchers.Unlock()
 
-	s.muDynamicTAGSyncFetchers.Lock()
-	delete(s.dynamicTAGSyncFetchers, name)
-	s.muDynamicTAGSyncFetchers.Unlock()
-
 	s.muDynamicKubeFetchers.Lock()
 	delete(s.dynamicKubeFetchers, name)
 	s.muDynamicKubeFetchers.Unlock()
+
+	s.muDynamicTAGSyncFetchers.Lock()
+	delete(s.dynamicTAGSyncFetchers, name)
+	s.muDynamicTAGSyncFetchers.Unlock()
 }
 
 // upsertDynamicMatchers upserts the internal set of dynamic matchers given a particular discovery config.
@@ -1624,7 +1613,7 @@ func (s *Server) Stop() {
 // Wait will block while the server is running.
 func (s *Server) Wait() error {
 	<-s.ctx.Done()
-	if err := s.ctx.Err(); err != nil && !errors.Is(err, context.Canceled) {
+	if err := s.ctx.Err(); err != nil && err != context.Canceled {
 		return trace.Wrap(err)
 	}
 	return nil

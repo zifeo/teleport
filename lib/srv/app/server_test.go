@@ -46,7 +46,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
@@ -59,10 +58,8 @@ import (
 	"github.com/gravitational/teleport/lib/authz"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/httplib/reverseproxy"
-	"github.com/gravitational/teleport/lib/inventory"
 	libjwt "github.com/gravitational/teleport/lib/jwt"
 	"github.com/gravitational/teleport/lib/labels"
-	"github.com/gravitational/teleport/lib/modules"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/srv/app/common"
@@ -73,7 +70,6 @@ import (
 func TestMain(m *testing.M) {
 	utils.InitLoggerForTests()
 	native.PrecomputeTestKeys(m)
-	modules.SetInsecureTestMode(true)
 	os.Exit(m.Run())
 }
 
@@ -368,13 +364,6 @@ func SetUpSuiteWithConfig(t *testing.T, config suiteConfig) *Suite {
 	})
 	require.NoError(t, err)
 
-	inventoryHandle := inventory.NewDownstreamHandle(s.authClient.InventoryControlStream, proto.UpstreamInventoryHello{
-		ServerID: s.hostUUID,
-		Version:  teleport.Version,
-		Services: []types.SystemRole{types.RoleApp},
-		Hostname: "test",
-	})
-
 	s.appServer, err = New(s.closeContext, &Config{
 		Clock:              s.clock,
 		AccessPoint:        s.authClient,
@@ -388,18 +377,13 @@ func SetUpSuiteWithConfig(t *testing.T, config suiteConfig) *Suite {
 		OnReconcile:        config.OnReconcile,
 		CloudLabels:        config.CloudImporter,
 		ConnectionsHandler: connectionsHandler,
-		InventoryHandle:    inventoryHandle,
 	})
 	require.NoError(t, err)
 
 	err = s.appServer.Start(s.closeContext)
 	require.NoError(t, err)
-
-	for _, app := range apps {
-		_, err := s.authServer.AuthServer.UpsertApplicationServer(s.closeContext, s.appServer.getServerInfo(app))
-		require.NoError(t, err)
-	}
-
+	err = s.appServer.ForceHeartbeat()
+	require.NoError(t, err)
 	t.Cleanup(func() {
 		s.appServer.Close()
 
@@ -530,16 +514,14 @@ func TestShutdown(t *testing.T) {
 			})
 
 			// Validate heartbeat is present after start.
-			_, err = s.authServer.AuthServer.UpsertApplicationServer(ctx, s.appServer.getServerInfo(app0))
-			require.NoError(t, err)
-
+			s.appServer.ForceHeartbeat()
 			appServers, err := s.authClient.GetApplicationServers(ctx, defaults.Namespace)
 			require.NoError(t, err)
 			require.Len(t, appServers, 1)
-			require.Empty(t, cmp.Diff(appServers[0].GetApp(), app0, cmpopts.IgnoreFields(types.Metadata{}, "Revision", "Expires")))
+			require.Equal(t, appServers[0].GetApp(), app0)
 
 			// Shutdown should not return error.
-			shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			shutdownCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 			t.Cleanup(cancel)
 			if test.hasForkedChild {
 				shutdownCtx = services.ProcessForkedContext(shutdownCtx)
@@ -551,7 +533,7 @@ func TestShutdown(t *testing.T) {
 			appServersAfterShutdown, err := s.authClient.GetApplicationServers(ctx, defaults.Namespace)
 			require.NoError(t, err)
 			if test.wantAppServersAfterShutdown {
-				require.Empty(t, cmp.Diff(appServersAfterShutdown[0].GetApp(), app0, cmpopts.IgnoreFields(types.Metadata{}, "Revision")))
+				require.Equal(t, appServers, appServersAfterShutdown)
 			} else {
 				require.Empty(t, appServersAfterShutdown)
 			}

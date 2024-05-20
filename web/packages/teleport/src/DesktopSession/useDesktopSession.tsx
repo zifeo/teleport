@@ -21,7 +21,6 @@ import { useParams } from 'react-router';
 
 import useAttempt from 'shared/hooks/useAttemptNext';
 
-import { ButtonState } from 'teleport/lib/tdp';
 import useWebAuthn from 'teleport/lib/useWebAuthn';
 import desktopService from 'teleport/services/desktops';
 import userService from 'teleport/services/user';
@@ -186,15 +185,6 @@ export default function useDesktopSession() {
     }
   };
 
-  const onCtrlAltDel = () => {
-    if (!tdpClient) {
-      return;
-    }
-    tdpClient.sendKeyboardInput('ControlLeft', ButtonState.DOWN);
-    tdpClient.sendKeyboardInput('AltLeft', ButtonState.DOWN);
-    tdpClient.sendKeyboardInput('Delete', ButtonState.DOWN);
-  };
-
   return {
     hostname,
     username,
@@ -210,7 +200,6 @@ export default function useDesktopSession() {
     showAnotherSessionActiveDialog,
     setShowAnotherSessionActiveDialog,
     onShareDirectory,
-    onCtrlAltDel,
     warnings,
     onRemoveWarning,
     ...clientCanvasProps,

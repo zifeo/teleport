@@ -42,13 +42,11 @@ import (
 	apiclient "github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/client/proto"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
-	crownjewelv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/crownjewel/v1"
 	dbobjectv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/dbobject/v1"
 	dbobjectimportrulev1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/dbobjectimportrule/v1"
 	devicepb "github.com/gravitational/teleport/api/gen/proto/go/teleport/devicetrust/v1"
 	loginrulepb "github.com/gravitational/teleport/api/gen/proto/go/teleport/loginrule/v1"
 	machineidv1pb "github.com/gravitational/teleport/api/gen/proto/go/teleport/machineid/v1"
-	"github.com/gravitational/teleport/api/gen/proto/go/teleport/vnet/v1"
 	"github.com/gravitational/teleport/api/internalutils/stream"
 	"github.com/gravitational/teleport/api/mfa"
 	"github.com/gravitational/teleport/api/types"
@@ -157,9 +155,6 @@ func (rc *ResourceCommand) Initialize(app *kingpin.Application, config *servicec
 		types.KindBot:                      rc.createBot,
 		types.KindDatabaseObjectImportRule: rc.createDatabaseObjectImportRule,
 		types.KindDatabaseObject:           rc.createDatabaseObject,
-		types.KindAccessMonitoringRule:     rc.createAccessMonitoringRule,
-		types.KindCrownJewel:               rc.createCrownJewel,
-		types.KindVnetConfig:               rc.createVnetConfig,
 	}
 	rc.UpdateHandlers = map[ResourceKind]ResourceCreateHandler{
 		types.KindUser:                    rc.updateUser,
@@ -170,9 +165,6 @@ func (rc *ResourceCommand) Initialize(app *kingpin.Application, config *servicec
 		types.KindClusterNetworkingConfig: rc.updateClusterNetworkingConfig,
 		types.KindClusterAuthPreference:   rc.updateAuthPreference,
 		types.KindSessionRecordingConfig:  rc.updateSessionRecordingConfig,
-		types.KindAccessMonitoringRule:    rc.updateAccessMonitoringRule,
-		types.KindCrownJewel:              rc.updateCrownJewel,
-		types.KindVnetConfig:              rc.updateVnetConfig,
 	}
 	rc.config = config
 
@@ -933,40 +925,6 @@ func (rc *ResourceCommand) createKubeCluster(ctx context.Context, client *authcl
 	return nil
 }
 
-func (rc *ResourceCommand) createCrownJewel(ctx context.Context, client *authclient.Client, raw services.UnknownResource) error {
-	crownJewel, err := services.UnmarshalCrownJewel(raw.Raw)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	c := client.CrownJewelsClient()
-	if rc.force {
-		if _, err := c.UpsertCrownJewel(ctx, crownJewel); err != nil {
-			return trace.Wrap(err)
-		}
-		fmt.Printf("crown jewel %q has been updated\n", crownJewel.GetMetadata().GetName())
-	} else {
-		if _, err := c.CreateCrownJewel(ctx, crownJewel); err != nil {
-			return trace.Wrap(err)
-		}
-		fmt.Printf("crown jewel %q has been created\n", crownJewel.GetMetadata().GetName())
-	}
-
-	return nil
-}
-
-func (rc *ResourceCommand) updateCrownJewel(ctx context.Context, client *authclient.Client, resource services.UnknownResource) error {
-	in, err := services.UnmarshalCrownJewel(resource.Raw)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if _, err := client.CrownJewelsClient().UpdateCrownJewel(ctx, in); err != nil {
-		return trace.Wrap(err)
-	}
-	fmt.Printf("crown jewel %q has been updated\n", in.GetMetadata().GetName())
-	return nil
-}
-
 func (rc *ResourceCommand) createDatabase(ctx context.Context, client *authclient.Client, raw services.UnknownResource) error {
 	database, err := services.UnmarshalDatabase(raw.Raw)
 	if err != nil {
@@ -1577,11 +1535,6 @@ func (rc *ResourceCommand) Delete(ctx context.Context, client *authclient.Client
 			return trace.Wrap(err)
 		}
 		fmt.Printf("%s %q has been deleted\n", resDesc, name)
-	case types.KindCrownJewel:
-		if err := client.CrownJewelsClient().DeleteCrownJewel(ctx, rc.ref.Name); err != nil {
-			return trace.Wrap(err)
-		}
-		fmt.Printf("crown_jewel %q has been deleted\n", rc.ref.Name)
 	case types.KindWindowsDesktopService:
 		if err = client.DeleteWindowsDesktopService(ctx, rc.ref.Name); err != nil {
 			return trace.Wrap(err)
@@ -1776,11 +1729,6 @@ func (rc *ResourceCommand) Delete(ctx context.Context, client *authclient.Client
 			return trace.Wrap(err)
 		}
 		fmt.Printf("Object %q has been deleted\n", rc.ref.Name)
-	case types.KindAccessMonitoringRule:
-		if err := client.AccessMonitoringRuleClient().DeleteAccessMonitoringRule(ctx, rc.ref.Name); err != nil {
-			return trace.Wrap(err)
-		}
-		fmt.Printf("Access monitoring rule %q has been deleted\n", rc.ref.Name)
 	default:
 		return trace.BadParameter("deleting resources of type %q is not supported", rc.ref.Kind)
 	}
@@ -1863,7 +1811,7 @@ func (rc *ResourceCommand) UpdateFields(ctx context.Context, clt *authclient.Cli
 
 	switch rc.ref.Kind {
 	case types.KindRemoteCluster:
-		cluster, err := clt.GetRemoteCluster(ctx, rc.ref.Name)
+		cluster, err := clt.GetRemoteCluster(rc.ref.Name)
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -1875,7 +1823,7 @@ func (rc *ResourceCommand) UpdateFields(ctx context.Context, clt *authclient.Cli
 		if !expiry.IsZero() {
 			cluster.SetExpiry(expiry)
 		}
-		if _, err = clt.UpdateRemoteCluster(ctx, cluster); err != nil {
+		if err = clt.UpdateRemoteCluster(ctx, cluster); err != nil {
 			return trace.Wrap(err)
 		}
 		fmt.Printf("cluster %v has been updated\n", rc.ref.Name)
@@ -2114,13 +2062,13 @@ func (rc *ResourceCommand) getCollection(ctx context.Context, client *authclient
 		return &trustedClusterCollection{trustedClusters: []types.TrustedCluster{trustedCluster}}, nil
 	case types.KindRemoteCluster:
 		if rc.ref.Name == "" {
-			remoteClusters, err := client.GetRemoteClusters(ctx)
+			remoteClusters, err := client.GetRemoteClusters()
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
 			return &remoteClusterCollection{remoteClusters: remoteClusters}, nil
 		}
-		remoteCluster, err := client.GetRemoteCluster(ctx, rc.ref.Name)
+		remoteCluster, err := client.GetRemoteCluster(rc.ref.Name)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -2284,24 +2232,6 @@ func (rc *ResourceCommand) getCollection(ctx context.Context, client *authclient
 			return nil, trace.NotFound("kubernetes cluster %q not found", rc.ref.Name)
 		}
 		return &kubeClusterCollection{clusters: clusters}, nil
-	case types.KindCrownJewel:
-		cjClient := client.CrownJewelsClient()
-		var rules []*crownjewelv1.CrownJewel
-		nextToken := ""
-		for {
-			resp, token, err := cjClient.ListCrownJewels(ctx, 0 /* default size */, nextToken)
-			if err != nil {
-				return nil, trace.Wrap(err)
-			}
-
-			rules = append(rules, resp...)
-
-			if token == "" {
-				break
-			}
-			nextToken = token
-		}
-		return &crownJewelCollection{items: rules}, nil
 	case types.KindWindowsDesktopService:
 		services, err := client.GetWindowsDesktopServices(ctx)
 		if err != nil {
@@ -2781,12 +2711,6 @@ func (rc *ResourceCommand) getCollection(ctx context.Context, client *authclient
 		}
 		accessLists, err := client.AccessListClient().GetAccessLists(ctx)
 		return &accessListCollection{accessLists: accessLists}, trace.Wrap(err)
-	case types.KindVnetConfig:
-		vnetConfig, err := client.VnetConfigServiceClient().GetVnetConfig(ctx, &vnet.GetVnetConfigRequest{})
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		return &vnetConfigCollection{vnetConfig: vnetConfig}, nil
 	}
 	return nil, trace.BadParameter("getting %q is not supported", rc.ref.String())
 }
@@ -3009,70 +2933,5 @@ func (rc *ResourceCommand) createSecurityReport(ctx context.Context, client *aut
 	if err = client.SecReportsClient().UpsertSecurityReport(ctx, in); err != nil {
 		return trace.Wrap(err)
 	}
-	return nil
-}
-
-func (rc *ResourceCommand) createAccessMonitoringRule(ctx context.Context, client *authclient.Client, raw services.UnknownResource) error {
-	in, err := services.UnmarshalAccessMonitoringRule(raw.Raw)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	if rc.IsForced() {
-		if _, err = client.AccessMonitoringRuleClient().UpsertAccessMonitoringRule(ctx, in); err != nil {
-			return trace.Wrap(err)
-		}
-		fmt.Printf("access monitoring rule %q has been created\n", in.GetMetadata().GetName())
-		return nil
-	}
-
-	if _, err = client.AccessMonitoringRuleClient().CreateAccessMonitoringRule(ctx, in); err != nil {
-		return trace.Wrap(err)
-	}
-
-	fmt.Printf("access monitoring rule %q has been created\n", in.GetMetadata().GetName())
-	return nil
-}
-
-func (rc *ResourceCommand) updateAccessMonitoringRule(ctx context.Context, client *authclient.Client, raw services.UnknownResource) error {
-	in, err := services.UnmarshalAccessMonitoringRule(raw.Raw)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if _, err := client.AccessMonitoringRuleClient().UpdateAccessMonitoringRule(ctx, in); err != nil {
-		return trace.Wrap(err)
-	}
-	fmt.Printf("access monitoring rule %q has been updated\n", in.GetMetadata().GetName())
-	return nil
-}
-
-func (rc *ResourceCommand) createVnetConfig(ctx context.Context, client *authclient.Client, raw services.UnknownResource) error {
-	vnetConfig, err := services.UnmarshalProtoResource[*vnet.VnetConfig](raw.Raw)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	if rc.IsForced() {
-		_, err = client.VnetConfigServiceClient().UpsertVnetConfig(ctx, &vnet.UpsertVnetConfigRequest{VnetConfig: vnetConfig})
-	} else {
-		_, err = client.VnetConfigServiceClient().CreateVnetConfig(ctx, &vnet.CreateVnetConfigRequest{VnetConfig: vnetConfig})
-	}
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	fmt.Println("vnet_config has been created")
-	return nil
-}
-
-func (rc *ResourceCommand) updateVnetConfig(ctx context.Context, client *authclient.Client, raw services.UnknownResource) error {
-	vnetConfig, err := services.UnmarshalProtoResource[*vnet.VnetConfig](raw.Raw)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if _, err := client.VnetConfigServiceClient().UpdateVnetConfig(ctx, &vnet.UpdateVnetConfigRequest{VnetConfig: vnetConfig}); err != nil {
-		return trace.Wrap(err)
-	}
-	fmt.Println("vnet_config has been updated")
 	return nil
 }

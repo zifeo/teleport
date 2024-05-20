@@ -26,7 +26,6 @@ import {
   UnifiedResources as SharedUnifiedResources,
   useUnifiedResourcesFetch,
   UnifiedResourcesPinning,
-  BulkAction,
 } from 'shared/components/UnifiedResources';
 import { ClusterDropdown } from 'shared/components/ClusterDropdown/ClusterDropdown';
 
@@ -48,7 +47,6 @@ import { SearchResource } from 'teleport/Discover/SelectResource';
 import { encodeUrlQueryParams } from 'teleport/components/hooks/useUrlFiltering';
 import Empty, { EmptyStateInfo } from 'teleport/components/Empty';
 import { FeatureFlags } from 'teleport/types';
-import { UnifiedResource } from 'teleport/services/agents';
 
 import { ResourceActionButton } from './ResourceActionButton';
 import SearchPanel from './SearchPanel';
@@ -57,13 +55,11 @@ export function UnifiedResources() {
   const { clusterId, isLeafCluster } = useStickyClusterId();
 
   return (
-    <FeatureBox px={4}>
-      <ClusterResources
-        key={clusterId} // when the current cluster changes, remount the component
-        clusterId={clusterId}
-        isLeafCluster={isLeafCluster}
-      />
-    </FeatureBox>
+    <ClusterResources
+      key={clusterId} // when the current cluster changes, remount the component
+      clusterId={clusterId}
+      isLeafCluster={isLeafCluster}
+    />
   );
 }
 
@@ -92,21 +88,12 @@ const getAvailableKindsWithAccess = (flags: FeatureFlags): FilterKind[] => {
   ];
 };
 
-export function ClusterResources({
+function ClusterResources({
   clusterId,
   isLeafCluster,
-  getActionButton,
-  includeRequestable,
-  showCheckout = false,
-  bulkActions = [],
 }: {
   clusterId: string;
   isLeafCluster: boolean;
-  getActionButton?: (resource: UnifiedResource) => JSX.Element;
-  includeRequestable?: boolean;
-  showCheckout?: boolean;
-  /** A list of actions that can be performed on the selected items. */
-  bulkActions?: BulkAction[];
 }) {
   const teleCtx = useTeleport();
   const flags = teleCtx.getFeatureFlags();
@@ -161,7 +148,6 @@ export function ClusterResources({
             searchAsRoles: '',
             limit: paginationParams.limit,
             startKey: paginationParams.startKey,
-            includeRequestable,
           },
           signal
         );
@@ -180,7 +166,6 @@ export function ClusterResources({
         params.search,
         params.sort,
         teleCtx.resourceService,
-        includeRequestable,
       ]
     ),
   });
@@ -206,10 +191,9 @@ export function ClusterResources({
   }
 
   return (
-    <>
+    <FeatureBox px={4}>
       {loadClusterError && <Danger>{loadClusterError}</Danger>}
       <SharedUnifiedResources
-        bulkActions={bulkActions}
         params={params}
         fetchResources={fetch}
         resourcesFetchAttempt={attempt}
@@ -236,9 +220,7 @@ export function ClusterResources({
         resources={resources.map(resource => ({
           resource,
           ui: {
-            ActionButton: getActionButton?.(resource) || (
-              <ResourceActionButton resource={resource} />
-            ),
+            ActionButton: <ResourceActionButton resource={resource} />,
           },
         }))}
         setParams={newParams => {
@@ -267,14 +249,12 @@ export function ClusterResources({
             >
               <FeatureHeaderTitle>Resources</FeatureHeaderTitle>
               <Flex alignItems="center">
-                {!showCheckout && (
-                  <AgentButtonAdd
-                    agent={SearchResource.UNIFIED_RESOURCE}
-                    beginsWithVowel={false}
-                    isLeafCluster={isLeafCluster}
-                    canCreate={canCreate}
-                  />
-                )}
+                <AgentButtonAdd
+                  agent={SearchResource.UNIFIED_RESOURCE}
+                  beginsWithVowel={false}
+                  isLeafCluster={isLeafCluster}
+                  canCreate={canCreate}
+                />
               </Flex>
             </FeatureHeader>
             <Flex alignItems="center" justifyContent="space-between">
@@ -288,11 +268,11 @@ export function ClusterResources({
           </>
         }
       />
-    </>
+    </FeatureBox>
   );
 }
 
-export const emptyStateInfo: EmptyStateInfo = {
+const emptyStateInfo: EmptyStateInfo = {
   title: 'Add your first resource to Teleport',
   byline:
     'Connect SSH servers, Kubernetes clusters, Windows Desktops, Databases, Web apps and more from our integrations catalog.',

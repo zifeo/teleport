@@ -245,15 +245,6 @@ type CommandLineFlags struct {
 	// IntegrationConfSAMLIdPGCPWorkforceArguments contains the arguments of
 	// `teleport integration configure samlidp gcp-workforce` command
 	IntegrationConfSAMLIdPGCPWorkforceArguments samlidpconfig.GCPWorkforceAPIParams
-
-	// LogLevel is the new application's log level.
-	LogLevel string
-
-	// Profiles comma-separated list of pprof profiles to be collected.
-	Profiles string
-
-	// ProfileSeconds defines the time the pprof will be collected.
-	ProfileSeconds int
 }
 
 // IntegrationConfAccessGraphAWSSync contains the arguments of
@@ -441,9 +432,6 @@ func ApplyFileConfig(fc *FileConfig, cfg *servicecfg.Config) error {
 	}
 	if fc.WindowsDesktop.Disabled() {
 		cfg.WindowsDesktop.Enabled = false
-	}
-	if fc.Debug.Enabled() {
-		cfg.DebugService.Enabled = true
 	}
 
 	if fc.AccessGraph.Enabled {
@@ -769,23 +757,23 @@ func applyLogConfig(loggerConfig Log, cfg *servicecfg.Config) error {
 		w = logFile
 	}
 
-	level := new(slog.LevelVar)
+	var level slog.Level
 	switch strings.ToLower(loggerConfig.Severity) {
 	case "", "info":
 		logger.SetLevel(log.InfoLevel)
-		level.Set(slog.LevelInfo)
+		level = slog.LevelInfo
 	case "err", "error":
 		logger.SetLevel(log.ErrorLevel)
-		level.Set(slog.LevelError)
+		level = slog.LevelError
 	case teleport.DebugLevel:
 		logger.SetLevel(log.DebugLevel)
-		level.Set(slog.LevelDebug)
+		level = slog.LevelDebug
 	case "warn", "warning":
 		logger.SetLevel(log.WarnLevel)
-		level.Set(slog.LevelWarn)
+		level = slog.LevelWarn
 	case "trace":
 		logger.SetLevel(log.TraceLevel)
-		level.Set(logutils.TraceLevel)
+		level = logutils.TraceLevel
 	default:
 		return trace.BadParameter("unsupported logger severity: %q", loggerConfig.Severity)
 	}
@@ -806,7 +794,7 @@ func applyLogConfig(loggerConfig Log, cfg *servicecfg.Config) error {
 	case "":
 		fallthrough // not set. defaults to 'text'
 	case "text":
-		enableColors := utils.IsTerminal(os.Stderr)
+		enableColors := trace.IsTerminal(os.Stderr)
 		formatter := &logutils.TextFormatter{
 			ExtraFields:  configuredFields,
 			EnableColors: enableColors,
@@ -860,7 +848,6 @@ func applyLogConfig(loggerConfig Log, cfg *servicecfg.Config) error {
 
 	cfg.Log = logger
 	cfg.Logger = slogLogger
-	cfg.LoggerLevel = level
 	return nil
 }
 
@@ -1210,12 +1197,6 @@ func applyProxyConfig(fc *FileConfig, cfg *servicecfg.Config) error {
 
 	if fc.Proxy.UI != nil {
 		cfg.Proxy.UI = webclient.UIConfig(*fc.Proxy.UI)
-		switch cfg.Proxy.UI.ShowResources {
-		case constants.ShowResourcesaccessibleOnly,
-			constants.ShowResourcesRequestable:
-		default:
-			return trace.BadParameter("show resources %q not supported", cfg.Proxy.UI.ShowResources)
-		}
 	}
 
 	if fc.Proxy.Assist != nil && fc.Proxy.Assist.OpenAI != nil {
@@ -2337,7 +2318,8 @@ func Configure(clf *CommandLineFlags, cfg *servicecfg.Config, legacyAppFlags boo
 		// log level right away. Otherwise allow the command line flag to override
 		// logger severity in file configuration.
 		if fileConf == nil {
-			cfg.SetLogLevel(slog.LevelDebug)
+			log.SetLevel(log.DebugLevel)
+			cfg.Log.SetLevel(log.DebugLevel)
 		} else {
 			if strings.ToLower(fileConf.Logger.Severity) != "trace" {
 				fileConf.Logger.Severity = teleport.DebugLevel
@@ -2653,7 +2635,8 @@ func ConfigureOpenSSH(clf *CommandLineFlags, cfg *servicecfg.Config) error {
 
 	// Apply command line --debug flag to override logger severity.
 	if clf.Debug {
-		cfg.SetLogLevel(slog.LevelDebug)
+		log.SetLevel(log.DebugLevel)
+		cfg.Log.SetLevel(log.DebugLevel)
 		cfg.Debug = clf.Debug
 	}
 

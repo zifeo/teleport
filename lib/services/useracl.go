@@ -108,8 +108,6 @@ type UserACL struct {
 	Bots ResourceAccess `json:"bots"`
 	// AccessMonitoringRule defines access to manage access monitoring rule resources.
 	AccessMonitoringRule ResourceAccess `json:"accessMonitoringRule"`
-	// CrownJewel defines access to manage CrownJewel resources.
-	CrownJewel ResourceAccess `json:"crownJewel"`
 }
 
 func hasAccess(roleSet RoleSet, ctx *Context, kind string, verbs ...string) bool {
@@ -198,7 +196,6 @@ func NewUserACL(user types.User, userRoles RoleSet, features proto.Features, des
 	accessListAccess := newAccess(userRoles, ctx, types.KindAccessList)
 	externalAuditStorage := newAccess(userRoles, ctx, types.KindExternalAuditStorage)
 	bots := newAccess(userRoles, ctx, types.KindBot)
-	crownJewelAccess := newAccess(userRoles, ctx, types.KindCrownJewel)
 
 	var auditQuery ResourceAccess
 	var securityReports ResourceAccess
@@ -246,6 +243,5 @@ func NewUserACL(user types.User, userRoles RoleSet, features proto.Features, des
 		AccessGraph:             accessGraphAccess,
 		Bots:                    bots,
 		AccessMonitoringRule:    accessMonitoringRules,
-		CrownJewel:              crownJewelAccess,
 	}
 }

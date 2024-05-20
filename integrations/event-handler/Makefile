@@ -30,8 +30,7 @@ IDENTITY_FILE=example/keys/identity
 DOCKER_VERSION = $(subst +,_,$(VERSION))
 DOCKER_NAME=teleport-plugin-event-handler
 DOCKER_PRIVATE_REGISTRY = 146628656107.dkr.ecr.us-west-2.amazonaws.com
-DOCKER_IMAGE_BASE = $(DOCKER_PRIVATE_REGISTRY)/gravitational
-DOCKER_IMAGE = $(DOCKER_IMAGE_BASE)/$(DOCKER_NAME):$(DOCKER_VERSION)
+DOCKER_IMAGE = $(DOCKER_PRIVATE_REGISTRY)/gravitational/$(DOCKER_NAME):$(DOCKER_VERSION)
 DOCKER_ECR_PUBLIC_REGISTRY = public.ecr.aws/gravitational
 DOCKER_IMAGE_ECR_PUBLIC = $(DOCKER_ECR_PUBLIC_REGISTRY)/$(DOCKER_NAME):$(DOCKER_VERSION)
 DOCKER_BUILD_ARGS = --build-arg GO_VERSION=${GO_VERSION} --build-arg GITREF=$(GITREF) --build-arg VERSION=$(VERSION) --build-arg VERSION=$(VERSION) --load --platform="$(OS)/$(ARCH)" --build-arg BUILDBOX=$(BUILDBOX)
@@ -58,7 +57,7 @@ release: build
 	tar -czf $(RELEASE).tar.gz $(RELEASE_NAME)
 	rm -rf $(RELEASE_NAME)/
 	@echo "---> Created $(RELEASE).tar.gz."
-  
+
 
 .PHONY: clean
 clean:
@@ -95,7 +94,7 @@ configure: build
 
 .PHONY: fluentd
 fluentd:
-	docker run -p 8888:8888 -v $(LOCALDIR)tmp:/keys -v $(LOCALDIR)tmp/fluent.conf:/fluentd/etc/fluent.conf fluent/fluentd:edge 
+	docker run -p 8888:8888 -v $(LOCALDIR)tmp:/keys -v $(LOCALDIR)tmp/fluent.conf:/fluentd/etc/fluent.conf fluent/fluentd:edge
 
 .PHONY: example
 example: build

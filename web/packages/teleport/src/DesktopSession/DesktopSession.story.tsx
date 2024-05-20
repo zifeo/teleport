@@ -63,7 +63,6 @@ const props: State = {
   },
   setDirectorySharingState: () => {},
   onShareDirectory: () => {},
-  onCtrlAltDel: () => {},
   clientOnPngFrame: () => {},
   clientOnBitmapFrame: () => {},
   clientOnClientScreenSpec: () => {},

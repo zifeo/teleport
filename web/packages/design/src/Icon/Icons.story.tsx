@@ -57,8 +57,6 @@ export const Icons = () => (
     <IconBox IconCmpt={Icon.BellRinging} text="BellRinging" />
     <IconBox IconCmpt={Icon.BookOpenText} text="BookOpenText" />
     <IconBox IconCmpt={Icon.Bots} text="Bots" />
-    <IconBox IconCmpt={Icon.Broadcast} text="Broadcast" />
-    <IconBox IconCmpt={Icon.BroadcastSlash} text="BroadcastSlash" />
     <IconBox IconCmpt={Icon.Bubble} text="Bubble" />
     <IconBox IconCmpt={Icon.CCAmex} text="CCAmex" />
     <IconBox IconCmpt={Icon.CCDiscover} text="CCDiscover" />
@@ -130,7 +128,6 @@ export const Icons = () => (
     <IconBox IconCmpt={Icon.Integrations} text="Integrations" />
     <IconBox IconCmpt={Icon.Invoices} text="Invoices" />
     <IconBox IconCmpt={Icon.Key} text="Key" />
-    <IconBox IconCmpt={Icon.Keyboard} text="Keyboard" />
     <IconBox IconCmpt={Icon.Keypair} text="Keypair" />
     <IconBox IconCmpt={Icon.Kubernetes} text="Kubernetes" />
     <IconBox IconCmpt={Icon.Label} text="Label" />

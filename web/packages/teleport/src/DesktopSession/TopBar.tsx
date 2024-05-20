@@ -36,7 +36,6 @@ export default function TopBar(props: Props) {
     canShareDirectory,
     isSharingDirectory,
     onShareDirectory,
-    onCtrlAltDel,
     warnings,
     onRemoveWarning,
   } = props;
@@ -92,7 +91,6 @@ export default function TopBar(props: Props) {
           onDisconnect={onDisconnect}
           showShareDirectory={canShareDirectory && !isSharingDirectory}
           onShareDirectory={onShareDirectory}
-          onCtrlAltDel={onCtrlAltDel}
         />
       </Flex>
     </TopNav>
@@ -121,7 +119,6 @@ type Props = {
   isSharingDirectory: boolean;
   onDisconnect: VoidFunction;
   onShareDirectory: VoidFunction;
-  onCtrlAltDel: VoidFunction;
   warnings: NotificationItem[];
   onRemoveWarning(id: string): void;
 };

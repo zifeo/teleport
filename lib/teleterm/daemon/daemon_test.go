@@ -20,7 +20,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -621,7 +620,7 @@ func newMockTSHDEventsServiceServer(t *testing.T) (service *mockTSHDEventsServic
 		// before grpcServer.Serve is called and grpcServer.Serve will return
 		// grpc.ErrServerStopped.
 		err := <-serveErr
-		if !errors.Is(err, grpc.ErrServerStopped) {
+		if err != grpc.ErrServerStopped {
 			assert.NoError(t, err)
 		}
 	})
@@ -744,6 +743,6 @@ type fakeClientCache struct {
 	ClientCache
 }
 
-func (f fakeClientCache) Get(ctx context.Context, clusterURI uri.ResourceURI) (*client.ClusterClient, error) {
-	return &client.ClusterClient{}, nil
+func (f fakeClientCache) Get(ctx context.Context, clusterURI uri.ResourceURI) (*client.ProxyClient, error) {
+	return &client.ProxyClient{}, nil
 }
