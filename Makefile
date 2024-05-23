@@ -70,8 +70,9 @@ RELEASE = teleport-$(GITTAG)-$(OS)-$(ARCH)-fips-bin
 endif
 
 # PAM support will only be built into Teleport if headers exist at build time.
+# Look in $(C_INCLUDE_PATH) if specified, otherwise in the system /usr/include
 PAM_MESSAGE := without-PAM-support
-ifneq ("$(wildcard ${SYSROOT}/include/security/pam_appl.h)","")
+ifneq ("$(wildcard $(addsuffix /security/pam_appl.h,$(or $(subst :, ,$(C_INCLUDE_PATH)),/usr/include))","")
 PAM_TAG := pam
 PAM_MESSAGE := with-PAM-support
 else
