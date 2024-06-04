@@ -22,7 +22,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -30,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sirupsen/logrus"
 
 	"github.com/gravitational/teleport/api/utils/retryutils"
 )
@@ -63,10 +63,10 @@ func ConnectPostgres(ctx context.Context, poolConfig *pgxpool.Config) (*pgx.Conn
 
 // TryEnsureDatabase will connect to the "postgres" database and attempt to
 // create the database named in the pool's configuration.
-func TryEnsureDatabase(ctx context.Context, poolConfig *pgxpool.Config, log *slog.Logger) {
+func TryEnsureDatabase(ctx context.Context, poolConfig *pgxpool.Config, log logrus.FieldLogger) {
 	pgConn, err := ConnectPostgres(ctx, poolConfig)
 	if err != nil {
-		log.WarnContext(ctx, "Failed to connect to the \"postgres\" database.", "error", err)
+		log.WithError(err).Warn("Failed to connect to the \"postgres\" database.")
 		return
 	}
 
@@ -81,13 +81,13 @@ func TryEnsureDatabase(ctx context.Context, poolConfig *pgxpool.Config, log *slo
 		// will fail immediately if we can't connect, anyway, so we can log
 		// permission errors at debug level here.
 		if IsCode(err, pgerrcode.InsufficientPrivilege) {
-			log.DebugContext(ctx, "Error creating database due to insufficient privileges.", "error", err)
+			log.WithError(err).Debug("Error creating database due to insufficient privileges.")
 		} else {
-			log.WarnContext(ctx, "Error creating database.", "error", err)
+			log.WithError(err).Warn("Error creating database.")
 		}
 	}
 	if err := pgConn.Close(ctx); err != nil {
-		log.WarnContext(ctx, "Error closing connection to the \"postgres\" database.", "error", err)
+		log.WithError(err).Warn("Error closing connection to the \"postgres\" database.")
 	}
 }
 
@@ -97,7 +97,7 @@ func TryEnsureDatabase(ctx context.Context, poolConfig *pgxpool.Config, log *slo
 // any data has been sent. It will retry unique constraint violation and
 // exclusion constraint violations, so the closure should not rely on those for
 // normal behavior.
-func Retry[T any](ctx context.Context, log *slog.Logger, f func() (T, error)) (T, error) {
+func Retry[T any](ctx context.Context, log logrus.FieldLogger, f func() (T, error)) (T, error) {
 	const idempotent = false
 	v, err := retry(ctx, log, idempotent, f)
 	return v, trace.Wrap(err)
@@ -108,13 +108,13 @@ func Retry[T any](ctx context.Context, log *slog.Logger, f func() (T, error)) (T
 // assumes that f is idempotent, so it will retry even in ambiguous situations.
 // It will retry unique constraint violation and exclusion constraint
 // violations, so the closure should not rely on those for normal behavior.
-func RetryIdempotent[T any](ctx context.Context, log *slog.Logger, f func() (T, error)) (T, error) {
+func RetryIdempotent[T any](ctx context.Context, log logrus.FieldLogger, f func() (T, error)) (T, error) {
 	const idempotent = true
 	v, err := retry(ctx, log, idempotent, f)
 	return v, trace.Wrap(err)
 }
 
-func retry[T any](ctx context.Context, log *slog.Logger, isIdempotent bool, f func() (T, error)) (T, error) {
+func retry[T any](ctx context.Context, log logrus.FieldLogger, isIdempotent bool, f func() (T, error)) (T, error) {
 	var v T
 	var err error
 	v, err = f()
@@ -143,22 +143,18 @@ func retry[T any](ctx context.Context, log *slog.Logger, isIdempotent bool, f fu
 		_ = errors.As(err, &pgErr)
 
 		if pgErr != nil && isSerializationErrorCode(pgErr.Code) {
-			log.LogAttrs(ctx, slog.LevelDebug,
-				"Operation failed due to conflicts, retrying quickly.",
-				slog.Int("attempt", i),
-				slog.Any("error", err),
-			)
+			log.WithError(err).
+				WithField("attempt", i).
+				Debug("Operation failed due to conflicts, retrying quickly.")
 			retry.Reset()
 			// the very first attempt gets instant retry on serialization failure
 			if i > 1 {
 				retry.Inc()
 			}
 		} else if (isIdempotent && pgErr == nil) || pgconn.SafeToRetry(err) {
-			log.LogAttrs(ctx, slog.LevelDebug,
-				"Operation failed, retrying.",
-				slog.Int("attempt", i),
-				slog.Any("error", err),
-			)
+			log.WithError(err).
+				WithField("attempt", i).
+				Debug("Operation failed, retrying.")
 			retry.Inc()
 		} else {
 			// we either know we shouldn't retry (on a database error), or we
@@ -211,7 +207,7 @@ func isSerializationErrorCode(code string) bool {
 // [pgx.BeginTxFunc].
 func RetryTx(
 	ctx context.Context,
-	log *slog.Logger,
+	log logrus.FieldLogger,
 	db interface {
 		BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 	},
@@ -237,7 +233,7 @@ func IsCode(err error, code string) bool {
 // the name of a table used to hold schema version numbers.
 func SetupAndMigrate(
 	ctx context.Context,
-	log *slog.Logger,
+	log logrus.FieldLogger,
 	db interface {
 		BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 		Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
@@ -263,10 +259,7 @@ func SetupAndMigrate(
 	}); err != nil {
 		// the very first SELECT in the next transaction will fail, we don't
 		// need anything higher than debug here
-		log.DebugContext(ctx, "Failed to confirm the existence of the configured table.",
-			"table", tableName,
-			"error", err,
-		)
+		log.WithError(err).Debugf("Failed to confirm the existence of the %v table.", tableName)
 	}
 
 	const idempotent = true
@@ -314,10 +307,10 @@ func SetupAndMigrate(
 	}
 
 	if int(version) != len(schemas) {
-		log.InfoContext(ctx, "Migrated database schema.",
-			"previous_version", version,
-			"current_version", len(schemas),
-		)
+		log.WithFields(logrus.Fields{
+			"previous_version": version,
+			"current_version":  len(schemas),
+		}).Info("Migrated database schema.")
 	}
 
 	return nil

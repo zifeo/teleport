@@ -82,7 +82,11 @@ func (s *HandlerConfig) CheckAndSetDefaults(ctx context.Context) error {
 		s.Logger = slog.Default().With(teleport.ComponentKey, ComponentKey)
 	}
 	if s.getAccessToken == nil {
-		s.getAccessToken = lazyGetAccessTokenFromDefaultCredentialProvider(s.Logger)
+		credProvider, err := findDefaultCredentialProvider(ctx, s.Logger)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		s.getAccessToken = getAccessTokenFromCredentialProvider(credProvider)
 	}
 	return nil
 }
@@ -283,11 +287,11 @@ const getTokenTimeout = time.Second * 5
 func (s *handler) getToken(ctx context.Context, managedIdentity string, scope string) (*azcore.AccessToken, error) {
 	key := cacheKey{managedIdentity, scope}
 
-	type result struct {
-		token *azcore.AccessToken
-		err   error
-	}
-	resultChan := make(chan result, 1)
+	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var tokenResult *azcore.AccessToken
+	var errorResult error
 
 	// call Clock.After() before FnCacheGet gets called in a different go-routine.
 	// this ensures there is no race condition in the timeout tests, as
@@ -295,21 +299,16 @@ func (s *handler) getToken(ctx context.Context, managedIdentity string, scope st
 	timeoutChan := s.Clock.After(getTokenTimeout)
 
 	go func() {
-		token, err := utils.FnCacheGet(ctx, s.tokenCache, key, func(ctx context.Context) (*azcore.AccessToken, error) {
+		tokenResult, errorResult = utils.FnCacheGet(cancelCtx, s.tokenCache, key, func(ctx context.Context) (*azcore.AccessToken, error) {
 			return s.getAccessToken(ctx, managedIdentity, scope)
 		})
-		resultChan <- result{
-			token: token,
-			err:   err,
-		}
+		cancel()
 	}()
 
 	select {
 	case <-timeoutChan:
 		return nil, trace.Wrap(context.DeadlineExceeded, "timeout waiting for access token for %v", getTokenTimeout)
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case result := <-resultChan:
-		return result.token, trace.Wrap(result.err)
+	case <-cancelCtx.Done():
+		return tokenResult, errorResult
 	}
 }

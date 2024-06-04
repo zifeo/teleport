@@ -51,7 +51,6 @@ export type Integration<
 // resource's subKind field.
 export enum IntegrationKind {
   AwsOidc = 'aws-oidc',
-  AzureOidc = 'azure-oidc',
   ExternalAuditStorage = 'external-audit-storage',
 }
 export type IntegrationSpecAwsOidc = {
@@ -140,8 +139,7 @@ export type PluginKind =
   | 'opsgenie'
   | 'okta'
   | 'servicenow'
-  | 'jamf'
-  | 'entra-id';
+  | 'jamf';
 
 export type PluginOktaSpec = {
   // scimBearerToken is the plain text of the bearer token that Okta will use
@@ -260,7 +258,7 @@ export type AwsOidcListDatabasesRequest = {
 export type AwsRdsDatabase = {
   // engine of the database. eg. aurora-mysql
   engine: RdsEngine;
-  // name is the Database's name.
+  // name is the the Database's name.
   name: string;
   // uri contains the endpoint with port for connecting to this Database.
   uri: string;

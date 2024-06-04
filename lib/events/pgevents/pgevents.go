@@ -21,7 +21,6 @@ package pgevents
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sirupsen/logrus"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/types"
@@ -58,21 +58,42 @@ const (
 
 // URL parameters for configuration.
 const (
-	authModeParam          = "auth_mode"
-	gcpConnectionNameParam = "gcp_connection_name"
-	gcpIPTypeParam         = "gcp_ip_type"
+	authModeParam = "auth_mode"
 
 	disableCleanupParam  = "disable_cleanup"
 	cleanupIntervalParam = "cleanup_interval"
 	retentionPeriodParam = "retention_period"
 )
 
+// AuthMode determines if we should use some environment-specific authentication
+// mechanism or credentials.
+type AuthMode string
+
+const (
+	// FixedAuth uses the static credentials as defined in the connection
+	// string.
+	FixedAuth AuthMode = ""
+	// AzureADAuth gets a connection token from Azure and uses it as the
+	// password when connecting.
+	AzureADAuth AuthMode = "azure"
+)
+
+// Check returns an error if the AuthMode is invalid.
+func (a AuthMode) Check() error {
+	switch a {
+	case FixedAuth, AzureADAuth:
+		return nil
+	default:
+		return trace.BadParameter("invalid authentication mode %q", a)
+	}
+}
+
 // Config is the configuration struct to pass to New.
 type Config struct {
-	pgcommon.AuthConfig
-
-	Log        *slog.Logger
+	Log        logrus.FieldLogger
 	PoolConfig *pgxpool.Config
+
+	AuthMode AuthMode
 
 	DisableCleanup  bool
 	RetentionPeriod time.Duration
@@ -101,9 +122,7 @@ func (c *Config) SetFromURL(u *url.URL) error {
 	}
 	c.PoolConfig = poolConfig
 
-	c.AuthMode = pgcommon.AuthMode(params.Get(authModeParam))
-	c.GCPConnectionName = params.Get(gcpConnectionNameParam)
-	c.GCPIPType = pgcommon.GCPIPType(params.Get(gcpIPTypeParam))
+	c.AuthMode = AuthMode(params.Get(authModeParam))
 
 	if s := params.Get(disableCleanupParam); s != "" {
 		b, err := strconv.ParseBool(s)
@@ -139,7 +158,7 @@ func (c *Config) CheckAndSetDefaults() error {
 		return trace.BadParameter("missing pool config")
 	}
 
-	if err := c.AuthConfig.Check(); err != nil {
+	if err := c.AuthMode.Check(); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -158,7 +177,7 @@ func (c *Config) CheckAndSetDefaults() error {
 	}
 
 	if c.Log == nil {
-		c.Log = slog.With(teleport.ComponentKey, componentName)
+		c.Log = logrus.WithField(teleport.ComponentKey, componentName)
 	}
 
 	return nil
@@ -175,11 +194,15 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 		return nil, trace.Wrap(err, "registering prometheus collectors")
 	}
 
-	if err := cfg.AuthConfig.ApplyToPoolConfigs(ctx, cfg.Log, cfg.PoolConfig); err != nil {
-		return nil, trace.Wrap(err)
+	if cfg.AuthMode == AzureADAuth {
+		bc, err := pgcommon.AzureBeforeConnect(cfg.Log)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		cfg.PoolConfig.BeforeConnect = bc
 	}
 
-	cfg.Log.InfoContext(ctx, "Setting up events backend.")
+	cfg.Log.Info("Setting up events backend.")
 
 	pgcommon.TryEnsureDatabase(ctx, cfg.PoolConfig, cfg.Log)
 
@@ -205,14 +228,14 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 		go l.periodicCleanup(periodicCtx, cfg.CleanupInterval, cfg.RetentionPeriod)
 	}
 
-	l.log.InfoContext(ctx, "Started events backend.")
+	l.log.Info("Started events backend.")
 
 	return l, nil
 }
 
 // Log is an external [events.AuditLogger] backed by a PostgreSQL database.
 type Log struct {
-	log  *slog.Logger
+	log  logrus.FieldLogger
 	pool *pgxpool.Pool
 
 	cancel context.CancelFunc
@@ -257,7 +280,7 @@ func (l *Log) periodicCleanup(ctx context.Context, cleanupInterval, retentionPer
 		case <-tk.C:
 		}
 
-		l.log.DebugContext(ctx, "Executing periodic cleanup.")
+		l.log.Debug("Executing periodic cleanup.")
 		start := time.Now()
 		deleted, err := pgcommon.RetryIdempotent(ctx, l.log, func() (int64, error) {
 			tag, err := l.pool.Exec(ctx,
@@ -274,10 +297,10 @@ func (l *Log) periodicCleanup(ctx context.Context, cleanupInterval, retentionPer
 
 		if err != nil {
 			batchDeleteRequestsFailure.Inc()
-			l.log.ErrorContext(ctx, "Failed to execute periodic cleanup.", "error", err)
+			l.log.WithError(err).Error("Failed to execute periodic cleanup.")
 		} else {
 			batchDeleteRequestsSuccess.Inc()
-			l.log.DebugContext(ctx, "Executed periodic cleanup.", "deleted", deleted)
+			l.log.WithField("deleted_rows", deleted).Debug("Executed periodic cleanup.")
 		}
 	}
 }

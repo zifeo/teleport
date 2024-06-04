@@ -53,10 +53,9 @@ type ClusterUserPreferencesResponse struct {
 }
 
 type UnifiedResourcePreferencesResponse struct {
-	DefaultTab            userpreferencesv1.DefaultTab            `json:"defaultTab"`
-	ViewMode              userpreferencesv1.ViewMode              `json:"viewMode"`
-	LabelsViewMode        userpreferencesv1.LabelsViewMode        `json:"labelsViewMode"`
-	AvailableResourceMode userpreferencesv1.AvailableResourceMode `json:"availableResourceMode"`
+	DefaultTab     userpreferencesv1.DefaultTab     `json:"defaultTab"`
+	ViewMode       userpreferencesv1.ViewMode       `json:"viewMode"`
+	LabelsViewMode userpreferencesv1.LabelsViewMode `json:"labelsViewMode"`
 }
 
 // AccessGraphPreferencesResponse is the JSON response for Access Graph preferences.
@@ -130,10 +129,9 @@ func makePreferenceRequest(req UserPreferencesResponse) *userpreferencesv1.Upser
 		Preferences: &userpreferencesv1.UserPreferences{
 			Theme: req.Theme,
 			UnifiedResourcePreferences: &userpreferencesv1.UnifiedResourcePreferences{
-				DefaultTab:            req.UnifiedResourcePreferences.DefaultTab,
-				ViewMode:              req.UnifiedResourcePreferences.ViewMode,
-				LabelsViewMode:        req.UnifiedResourcePreferences.LabelsViewMode,
-				AvailableResourceMode: req.UnifiedResourcePreferences.AvailableResourceMode,
+				DefaultTab:     req.UnifiedResourcePreferences.DefaultTab,
+				ViewMode:       req.UnifiedResourcePreferences.ViewMode,
+				LabelsViewMode: req.UnifiedResourcePreferences.LabelsViewMode,
 			},
 			Assist: &userpreferencesv1.AssistUserPreferences{
 				PreferredLogins: req.Assist.PreferredLogins,
@@ -221,10 +219,9 @@ func assistUserPreferencesResponse(resp *userpreferencesv1.AssistUserPreferences
 // unifiedResourcePreferencesResponse creates a JSON response for the assist user preferences.
 func unifiedResourcePreferencesResponse(resp *userpreferencesv1.UnifiedResourcePreferences) UnifiedResourcePreferencesResponse {
 	return UnifiedResourcePreferencesResponse{
-		DefaultTab:            resp.DefaultTab,
-		ViewMode:              resp.ViewMode,
-		LabelsViewMode:        resp.LabelsViewMode,
-		AvailableResourceMode: resp.AvailableResourceMode,
+		DefaultTab:     resp.DefaultTab,
+		ViewMode:       resp.ViewMode,
+		LabelsViewMode: resp.LabelsViewMode,
 	}
 }
 

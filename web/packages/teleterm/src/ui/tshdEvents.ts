@@ -18,18 +18,25 @@
 
 import { TshdEventContextBridgeService } from 'teleterm/types';
 import { IAppContext } from 'teleterm/ui/types';
+import * as tshdEvents from 'teleterm/services/tshdEvents';
 
 export function createTshdEventsContextBridgeService(
   ctx: IAppContext
 ): TshdEventContextBridgeService {
   return {
     relogin: async ({ request, onRequestCancelled }) => {
-      await ctx.reloginService.relogin(request, onRequestCancelled);
+      await ctx.reloginService.relogin(
+        request as tshdEvents.ReloginRequest,
+        onRequestCancelled
+      );
       return {};
     },
 
     sendNotification: async ({ request }) => {
-      ctx.tshdNotificationsService.sendNotification(request);
+      ctx.tshdNotificationsService.sendNotification(
+        request as tshdEvents.SendNotificationRequest
+      );
+
       return {};
     },
 
@@ -38,7 +45,7 @@ export function createTshdEventsContextBridgeService(
       onRequestCancelled,
     }) => {
       await ctx.headlessAuthenticationService.sendPendingHeadlessAuthentication(
-        request,
+        request as tshdEvents.SendPendingHeadlessAuthenticationRequest,
         onRequestCancelled
       );
       return {};
@@ -51,7 +58,7 @@ export function createTshdEventsContextBridgeService(
       }>(resolve => {
         const { closeDialog } = ctx.modalsService.openImportantDialog({
           kind: 'reauthenticate',
-          promptMfaRequest: request,
+          promptMfaRequest: request as tshdEvents.PromptMfaRequest,
           onSuccess: totpCode => resolve({ hasCanceledModal: false, totpCode }),
           onCancel: () =>
             resolve({

@@ -28,7 +28,7 @@ import (
 )
 
 func TestIntegrationJSONMarshalCycle(t *testing.T) {
-	aws, err := NewIntegrationAWSOIDC(
+	ig, err := NewIntegrationAWSOIDC(
 		Metadata{Name: "some-integration"},
 		&AWSOIDCIntegrationSpecV1{
 			RoleARN:     "arn:aws:iam::123456789012:role/DevTeams",
@@ -37,29 +37,14 @@ func TestIntegrationJSONMarshalCycle(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	azure, err := NewIntegrationAzureOIDC(
-		Metadata{Name: "some-integration"},
-		&AzureOIDCIntegrationSpecV1{
-			TenantID: "foo-bar",
-			ClientID: "baz-quux",
-		},
-	)
+	bs, err := json.Marshal(ig)
 	require.NoError(t, err)
 
-	allIntegrations := []*IntegrationV1{aws, azure}
+	var ig2 IntegrationV1
+	err = json.Unmarshal(bs, &ig2)
+	require.NoError(t, err)
 
-	for _, ig := range allIntegrations {
-		t.Run(ig.SubKind, func(t *testing.T) {
-			bs, err := json.Marshal(ig)
-			require.NoError(t, err)
-
-			var ig2 IntegrationV1
-			err = json.Unmarshal(bs, &ig2)
-			require.NoError(t, err)
-
-			require.Equal(t, &ig2, ig)
-		})
-	}
+	require.Equal(t, &ig2, ig)
 }
 
 func TestIntegrationCheckAndSetDefaults(t *testing.T) {
@@ -74,7 +59,7 @@ func TestIntegrationCheckAndSetDefaults(t *testing.T) {
 		expectedErrorIs     func(error) bool
 	}{
 		{
-			name: "aws-oidc: valid",
+			name: "valid",
 			integration: func(name string) (*IntegrationV1, error) {
 				return NewIntegrationAWSOIDC(
 					Metadata{
@@ -119,7 +104,9 @@ func TestIntegrationCheckAndSetDefaults(t *testing.T) {
 					nil,
 				)
 			},
-			expectedErrorIs: trace.IsBadParameter,
+			expectedErrorIs: func(err error) bool {
+				return trace.IsBadParameter(err)
+			},
 		},
 		{
 			name: "aws-oidc: error when issuer is not a valid url",
@@ -134,7 +121,9 @@ func TestIntegrationCheckAndSetDefaults(t *testing.T) {
 					},
 				)
 			},
-			expectedErrorIs: trace.IsBadParameter,
+			expectedErrorIs: func(err error) bool {
+				return trace.IsBadParameter(err)
+			},
 		},
 		{
 			name: "aws-oidc: issuer is not an s3 url",
@@ -149,7 +138,9 @@ func TestIntegrationCheckAndSetDefaults(t *testing.T) {
 					},
 				)
 			},
-			expectedErrorIs: trace.IsBadParameter,
+			expectedErrorIs: func(err error) bool {
+				return trace.IsBadParameter(err)
+			},
 		},
 		{
 			name: "aws-oidc: error when no role is provided",
@@ -161,71 +152,9 @@ func TestIntegrationCheckAndSetDefaults(t *testing.T) {
 					&AWSOIDCIntegrationSpecV1{},
 				)
 			},
-			expectedErrorIs: trace.IsBadParameter,
-		},
-		{
-			name: "azure-oidc: valid",
-			integration: func(name string) (*IntegrationV1, error) {
-				return NewIntegrationAzureOIDC(
-					Metadata{
-						Name: name,
-					},
-					&AzureOIDCIntegrationSpecV1{
-						ClientID: "baz-quux",
-						TenantID: "foo-bar",
-					},
-				)
+			expectedErrorIs: func(err error) bool {
+				return trace.IsBadParameter(err)
 			},
-			expectedIntegration: func(name string) *IntegrationV1 {
-				return &IntegrationV1{
-					ResourceHeader: ResourceHeader{
-						Kind:    KindIntegration,
-						SubKind: IntegrationSubKindAzureOIDC,
-						Version: V1,
-						Metadata: Metadata{
-							Name:      name,
-							Namespace: defaults.Namespace,
-						},
-					},
-					Spec: IntegrationSpecV1{
-						SubKindSpec: &IntegrationSpecV1_AzureOIDC{
-							AzureOIDC: &AzureOIDCIntegrationSpecV1{
-								ClientID: "baz-quux",
-								TenantID: "foo-bar",
-							},
-						},
-					},
-				}
-			},
-			expectedErrorIs: noErrorFunc,
-		},
-		{
-			name: "azure-oidc: error when no tenant id is provided",
-			integration: func(name string) (*IntegrationV1, error) {
-				return NewIntegrationAzureOIDC(
-					Metadata{
-						Name: name,
-					},
-					&AzureOIDCIntegrationSpecV1{
-						ClientID: "baz-quux",
-					},
-				)
-			},
-			expectedErrorIs: trace.IsBadParameter,
-		},
-		{
-			name: "azure-oidc: error when no client id is provided",
-			integration: func(name string) (*IntegrationV1, error) {
-				return NewIntegrationAzureOIDC(
-					Metadata{
-						Name: name,
-					},
-					&AzureOIDCIntegrationSpecV1{
-						TenantID: "foo-bar",
-					},
-				)
-			},
-			expectedErrorIs: trace.IsBadParameter,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

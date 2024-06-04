@@ -27,10 +27,8 @@ import (
 	"google.golang.org/grpc"
 
 	api "github.com/gravitational/teleport/gen/proto/go/teleport/lib/teleterm/v1"
-	vnetapi "github.com/gravitational/teleport/gen/proto/go/teleport/lib/teleterm/vnet/v1"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/teleterm/apiserver/handler"
-	"github.com/gravitational/teleport/lib/teleterm/vnet"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -52,7 +50,7 @@ func New(cfg Config) (*APIServer, error) {
 		grpc.MaxConcurrentStreams(defaults.GRPCMaxConcurrentStreams),
 	)
 
-	// Create Terminal and VNet services.
+	// Create Terminal service.
 
 	serviceHandler, err := handler.New(
 		handler.Config{
@@ -63,23 +61,9 @@ func New(cfg Config) (*APIServer, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	vnetService, err := vnet.New(vnet.Config{
-		DaemonService:      cfg.Daemon,
-		InsecureSkipVerify: cfg.InsecureSkipVerify,
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
 	api.RegisterTerminalServiceServer(grpcServer, serviceHandler)
-	vnetapi.RegisterVnetServiceServer(grpcServer, vnetService)
 
-	return &APIServer{
-		Config:      cfg,
-		ls:          ls,
-		grpcServer:  grpcServer,
-		vnetService: vnetService,
-	}, nil
+	return &APIServer{cfg, ls, grpcServer}, nil
 }
 
 // Serve starts accepting incoming connections
@@ -90,9 +74,6 @@ func (s *APIServer) Serve() error {
 // Stop stops the server and closes all listeners
 func (s *APIServer) Stop() {
 	s.grpcServer.GracefulStop()
-	if err := s.vnetService.Close(); err != nil {
-		log.WithError(err).Error("Error while closing VNet service")
-	}
 }
 
 func newListener(hostAddr string, listeningC chan<- utils.NetAddr) (net.Listener, error) {
@@ -127,7 +108,7 @@ func sendBoundNetworkPortToStdout(addr utils.NetAddr) {
 type APIServer struct {
 	Config
 	// ls is the server listener
-	ls          net.Listener
-	grpcServer  *grpc.Server
-	vnetService *vnet.Service
+	ls net.Listener
+	// grpc is an instance of grpc server
+	grpcServer *grpc.Server
 }

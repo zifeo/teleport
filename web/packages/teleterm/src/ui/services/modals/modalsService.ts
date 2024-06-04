@@ -17,7 +17,6 @@
  */
 
 import { useStore } from 'shared/libs/stores';
-import * as tshdEventsApi from 'gen-proto-ts/teleport/lib/teleterm/v1/tshd_events_service_pb';
 
 import * as types from 'teleterm/services/tshd/types';
 import { RootClusterUri } from 'teleterm/ui/uri';
@@ -150,13 +149,7 @@ export interface ClusterConnectReasonGatewayCertExpired {
   gateway: types.Gateway | undefined;
 }
 
-export type ClusterConnectReasonVnetCertExpired = {
-  kind: 'reason.vnet-cert-expired';
-} & tshdEventsApi.VnetCertExpired;
-
-export type ClusterConnectReason =
-  | ClusterConnectReasonGatewayCertExpired
-  | ClusterConnectReasonVnetCertExpired;
+export type ClusterConnectReason = ClusterConnectReasonGatewayCertExpired;
 
 export interface DialogClusterLogout {
   kind: 'cluster-logout';
@@ -170,13 +163,6 @@ export interface DialogDocumentsReopen {
   numberOfDocuments: number;
   onConfirm?(): void;
   onCancel?(): void;
-}
-
-export interface DialogDeviceTrustAuthorize {
-  kind: 'device-trust-authorize';
-  rootClusterUri: RootClusterUri;
-  onAuthorize(): Promise<void>;
-  onCancel(): void;
 }
 
 export interface DialogUsageData {
@@ -216,21 +202,13 @@ export interface DialogReAuthenticate {
   onCancel(): void;
 }
 
-export interface DialogChangeAccessRequestKind {
-  kind: 'change-access-request-kind';
-  onConfirm(): void;
-  onCancel(): void;
-}
-
 export type Dialog =
   | DialogClusterConnect
   | DialogClusterLogout
   | DialogDocumentsReopen
-  | DialogDeviceTrustAuthorize
   | DialogUsageData
   | DialogUserJobRole
   | DialogResourceSearchErrors
   | DialogHeadlessAuthentication
   | DialogReAuthenticate
-  | DialogChangeAccessRequestKind
   | DialogNone;

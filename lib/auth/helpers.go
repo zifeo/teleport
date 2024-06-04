@@ -299,7 +299,6 @@ func NewTestAuthServer(cfg TestAuthServerConfig) (*TestAuthServer, error) {
 		SkipPeriodicOperations: true,
 		Emitter:                emitter,
 		TraceClient:            cfg.TraceClient,
-		Clock:                  cfg.Clock,
 		KeyStoreConfig: keystore.Config{
 			Software: keystore.SoftwareConfig{
 				RSAKeyPairSource: authority.New().GenerateKeyPair,
@@ -467,7 +466,7 @@ func NewTestAuthServer(cfg TestAuthServerConfig) (*TestAuthServer, error) {
 
 	userNotificationCache, err := services.NewUserNotificationCache(services.NotificationCacheConfig{
 		Events: srv.AuthServer.Services,
-		Getter: srv.AuthServer.Cache,
+		Getter: srv.AuthServer.Services,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -477,7 +476,7 @@ func NewTestAuthServer(cfg TestAuthServerConfig) (*TestAuthServer, error) {
 
 	globalNotificationCache, err := services.NewGlobalNotificationCache(services.NotificationCacheConfig{
 		Events: srv.AuthServer.Services,
-		Getter: srv.AuthServer.Cache,
+		Getter: srv.AuthServer.Services,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -1337,7 +1336,7 @@ func (n noopEmbedder) ComputeEmbeddings(_ context.Context, _ []string) ([]embedd
 	return []embedding.Vector64{}, nil
 }
 
-// flushClt is the set of methods expected by the flushCache helper.
+// flushClt is the set of methods expected by the the flushCache helper.
 type flushClt interface {
 	// GetNamespace returns namespace by name
 	GetNamespace(name string) (*types.Namespace, error)

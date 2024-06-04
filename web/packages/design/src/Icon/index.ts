@@ -45,8 +45,6 @@ export { ArrowsOut } from './Icons/ArrowsOut';
 export { BellRinging } from './Icons/BellRinging';
 export { BookOpenText } from './Icons/BookOpenText';
 export { Bots } from './Icons/Bots';
-export { Broadcast } from './Icons/Broadcast';
-export { BroadcastSlash } from './Icons/BroadcastSlash';
 export { Bubble } from './Icons/Bubble';
 export { CCAmex } from './Icons/CCAmex';
 export { CCDiscover } from './Icons/CCDiscover';

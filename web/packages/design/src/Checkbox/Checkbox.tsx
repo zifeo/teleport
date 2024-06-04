@@ -47,9 +47,7 @@ export const CheckboxInput = styled.input`
 `;
 
 // TODO (avatus): Make this the default checkbox
-export const StyledCheckbox = styled.input.attrs(props => ({
-  type: props.type || 'checkbox',
-}))`
+export const StyledCheckbox = styled.input.attrs({ type: 'checkbox' })`
   // reset the appearance so we can style the background
   -webkit-appearance: none;
   -moz-appearance: none;

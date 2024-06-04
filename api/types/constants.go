@@ -172,8 +172,6 @@ const (
 	// KindAppOrSAMLIdPServiceProvider represent an App Server resource or a SAML IdP Service Provider (SAML Application) resource.
 	// This is not a real resource stored in the backend, it is a pseudo resource used only to provide a common interface to
 	// the ListResources RPC in order to be able to list both AppServers and SAMLIdPServiceProviders in the same request.
-	//
-	// DEPRECATED: Use KindAppServer and KindSAMLIdPServiceProvider individually.
 	KindAppOrSAMLIdPServiceProvider = "app_server_or_saml_idp_sp"
 
 	// KindDatabaseServer is a database proxy server resource.
@@ -193,8 +191,7 @@ const (
 
 	// KindKubeServer is an kubernetes server resource.
 	KindKubeServer = "kube_server"
-	// KindCrownJewel is a crown jewel resource
-	KindCrownJewel = "crown_jewel"
+
 	// KindKubernetesCluster is a Kubernetes cluster.
 	KindKubernetesCluster = "kube_cluster"
 
@@ -523,9 +520,6 @@ const (
 	// KindUserNotificationState is a resource which tracks whether a user has clicked on or dismissed a notification.
 	KindUserNotificationState = "user_notification_state"
 
-	// KindVnetConfig is a resource which holds cluster-wide configuration for VNet.
-	KindVnetConfig = "vnet_config"
-
 	// V7 is the seventh version of resources.
 	V7 = "v7"
 
@@ -640,10 +634,6 @@ const (
 	// OriginDiscoveryKubernetes indicates that the resource was imported
 	// from kubernetes cluster by discovery service.
 	OriginDiscoveryKubernetes = common.OriginDiscoveryKubernetes
-
-	// OriginEntraID indicates that the resource was imported
-	// from the Entra ID directory.
-	OriginEntraID = common.OriginEntraID
 
 	// IntegrationLabel is a resource metadata label name used to identify the integration name that created the resource.
 	IntegrationLabel = TeleportNamespace + "/integration"
@@ -984,51 +974,6 @@ const (
 
 	// OktaRoleNameLabel is the human readable name for a role sourced from Okta.
 	OktaRoleNameLabel = TeleportInternalLabelPrefix + "okta-role-name"
-
-	// PluginGenerationLabel is the label for the current generation of the plugin.
-	PluginGenerationLabel = TeleportInternalLabelPrefix + "plugin-generation"
-
-	// EntraTenantIDLabel is the label for the Entra tenant ID.
-	EntraTenantIDLabel = TeleportInternalLabelPrefix + "entra-tenant"
-
-	// EntraUniqueIDLabel is the label for the unique identifier of the object in the Entra ID directory.
-	EntraUniqueIDLabel = TeleportInternalLabelPrefix + "entra-unique-id"
-
-	// EntraUPNLabel is the label for the user principal name in Entra ID.
-	EntraUPNLabel = TeleportInternalLabelPrefix + "entra-upn"
-
-	// EntraDisplayNameLabel is the label for the display name of the object in the Entra ID directory.
-	// The display name may not be unique.
-	EntraDisplayNameLabel = TeleportInternalLabelPrefix + "entra-display-name"
-
-	// EntraSAMAccountNameLabel is the label for user's on-premises sAMAccountName.
-	EntraSAMAccountNameLabel = TeleportInternalLabelPrefix + "entra-sam-account-name"
-)
-
-const (
-	// NotificationTitleLabel is the label which contains the title of the notification.
-	NotificationTitleLabel = TeleportInternalLabelPrefix + "title"
-	// NotificationClickedLabel is the label which contains whether the notification has been clicked on by the user.
-	NotificationClickedLabel = TeleportInternalLabelPrefix + "clicked"
-	// NotificationScope is the label which contains the scope of the notification, either "user" or "global"
-	NotificationScope = TeleportInternalLabelPrefix + "scope"
-
-	// NotificationDefaultInformationalSubKind is the default subkind for an informational notification.
-	NotificationDefaultInformationalSubKind = "default-informational"
-	// NotificationDefaultWarningSubKind is the default subkind for a warning notification.
-	NotificationDefaultWarningSubKind = "default-warning"
-
-	// NotificationUserCreatedInformationalSubKind is the subkind for a user-created informational notification.
-	NotificationUserCreatedInformationalSubKind = "user-created-informational"
-	// NotificationUserCreatedWarningSubKind is the subkind for a user-created warning notification.
-	NotificationUserCreatedWarningSubKind = "user-created-warning"
-
-	// NotificationAccessRequestPendingSubKind is the subkind for a notification for an access request pending review.
-	NotificationAccessRequestPendingSubKind = "access-request-pending"
-	// NotificationAccessRequestApprovedSubKind is the subkind for a notification for a user's access request being approved.
-	NotificationAccessRequestApprovedSubKind = "access-request-approved"
-	// NotificationAccessRequestDeniedSubKind is the subkind for a notification for a user's access request being denied.
-	NotificationAccessRequestDeniedSubKind = "access-request-denied"
 )
 
 const (

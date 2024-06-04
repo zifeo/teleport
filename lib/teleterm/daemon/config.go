@@ -28,9 +28,9 @@ import (
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/client"
-	"github.com/gravitational/teleport/lib/client/clientcache"
 	"github.com/gravitational/teleport/lib/teleterm/api/uri"
 	"github.com/gravitational/teleport/lib/teleterm/clusters"
+	"github.com/gravitational/teleport/lib/teleterm/services/clientcache"
 	"github.com/gravitational/teleport/lib/teleterm/services/connectmycomputer"
 )
 
@@ -38,8 +38,7 @@ import (
 type Storage interface {
 	clusters.Resolver
 
-	ListProfileNames() ([]string, error)
-	ListRootClusters() ([]*clusters.Cluster, error)
+	ReadAll() ([]*clusters.Cluster, error)
 	Add(ctx context.Context, webProxyAddress string) (*clusters.Cluster, *client.TeleportClient, error)
 	Remove(ctx context.Context, profileName string) error
 	GetByResourceURI(resourceURI uri.ResourceURI) (*clusters.Cluster, *client.TeleportClient, error)
@@ -73,7 +72,7 @@ type Config struct {
 	ConnectMyComputerNodeDelete       *connectmycomputer.NodeDelete
 	ConnectMyComputerNodeName         *connectmycomputer.NodeName
 
-	CreateClientCacheFunc func(resolver clientcache.NewClientFunc) (ClientCache, error)
+	CreateClientCacheFunc func(resolver ResolveClusterFunc) ClientCache
 }
 
 // ResolveClusterFunc returns a cluster by URI.
@@ -84,10 +83,10 @@ type ClientCache interface {
 	// Get returns a client from the cache if there is one,
 	// otherwise it dials the remote server.
 	// The caller should not close the returned client.
-	Get(ctx context.Context, profileName, leafClusterName string) (*client.ClusterClient, error)
+	Get(ctx context.Context, clusterURI uri.ResourceURI) (*client.ProxyClient, error)
 	// ClearForRoot closes and removes clients from the cache
 	// for the root cluster and its leaf clusters.
-	ClearForRoot(profileName string) error
+	ClearForRoot(clusterURI uri.ResourceURI) error
 	// Clear closes and removes all clients.
 	Clear() error
 }
@@ -162,14 +161,10 @@ func (c *Config) CheckAndSetDefaults() error {
 	}
 
 	if c.CreateClientCacheFunc == nil {
-		c.CreateClientCacheFunc = func(newClientFunc clientcache.NewClientFunc) (ClientCache, error) {
-			retryWithRelogin := func(ctx context.Context, tc *client.TeleportClient, fn func() error, opts ...client.RetryWithReloginOption) error {
-				return clusters.AddMetadataToRetryableError(ctx, fn)
-			}
+		c.CreateClientCacheFunc = func(resolver ResolveClusterFunc) ClientCache {
 			return clientcache.New(clientcache.Config{
-				Log:                  c.Log,
-				NewClientFunc:        newClientFunc,
-				RetryWithReloginFunc: clientcache.RetryWithReloginFunc(retryWithRelogin),
+				Log:                c.Log,
+				ResolveClusterFunc: clientcache.ResolveClusterFunc(resolver),
 			})
 		}
 	}

@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"net"
 
 	"github.com/gravitational/trace"
 	"github.com/sirupsen/logrus"
@@ -42,8 +43,8 @@ type dbMiddleware struct {
 //
 // In the future, DBCertChecker is going to be extended so that it's used by both tsh and Connect
 // and this middleware will be removed.
-func (m *dbMiddleware) OnNewConnection(ctx context.Context, lp *alpn.LocalProxy) error {
-	err := lp.CheckDBCert(m.dbRoute)
+func (m *dbMiddleware) OnNewConnection(ctx context.Context, lp *alpn.LocalProxy, conn net.Conn) error {
+	err := lp.CheckDBCerts(m.dbRoute)
 	if err == nil {
 		return nil
 	}

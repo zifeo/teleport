@@ -30,7 +30,6 @@ import (
 
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/client/webclient"
-	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/types"
 	api "github.com/gravitational/teleport/gen/proto/go/teleport/lib/teleterm/v1"
 	"github.com/gravitational/teleport/lib/auth/authclient"
@@ -76,13 +75,11 @@ type ClusterWithDetails struct {
 	UserType types.UserType
 	// ProxyVersion is the cluster proxy's service version.
 	ProxyVersion string
-	// ShowResources tells if the cluster can show requestable resources on the resources page.
-	ShowResources constants.ShowResources
 }
 
 // Connected indicates if connection to the cluster can be established
 func (c *Cluster) Connected() bool {
-	return c.status.Name != "" && !c.status.IsExpired(c.clock.Now())
+	return c.status.Name != "" && !c.status.IsExpired(c.clock)
 }
 
 // GetWithDetails makes requests to the auth server to return details of the current
@@ -91,7 +88,6 @@ func (c *Cluster) Connected() bool {
 func (c *Cluster) GetWithDetails(ctx context.Context, authClient authclient.ClientI) (*ClusterWithDetails, error) {
 	var (
 		clusterPingResponse *webclient.PingResponse
-		webConfig           *webclient.WebConfig
 		authPingResponse    proto.PingResponse
 		caps                *types.AccessCapabilities
 		authClusterID       string
@@ -101,12 +97,6 @@ func (c *Cluster) GetWithDetails(ctx context.Context, authClient authclient.Clie
 	)
 
 	group, groupCtx := errgroup.WithContext(ctx)
-
-	group.Go(func() error {
-		res, err := c.clusterClient.GetWebConfig(groupCtx)
-		webConfig = res
-		return trace.Wrap(err)
-	})
 
 	group.Go(func() error {
 		res, err := c.clusterClient.Ping(groupCtx)
@@ -197,7 +187,6 @@ func (c *Cluster) GetWithDetails(ctx context.Context, authClient authclient.Clie
 		ACL:                acl,
 		UserType:           user.GetUserType(),
 		ProxyVersion:       clusterPingResponse.ServerVersion,
-		ShowResources:      webConfig.UI.ShowResources,
 	}
 
 	return withDetails, nil
@@ -218,14 +207,14 @@ func convertToAPIResourceAccess(access services.ResourceAccess) *api.ResourceAcc
 func (c *Cluster) GetRoles(ctx context.Context) ([]*types.Role, error) {
 	var roles []*types.Role
 	err := AddMetadataToRetryableError(ctx, func() error {
-		clusterClient, err := c.clusterClient.ConnectToCluster(ctx)
+		proxyClient, err := c.clusterClient.ConnectToProxy(ctx)
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		defer clusterClient.Close()
+		defer proxyClient.Close()
 
 		for _, name := range c.status.Roles {
-			role, err := clusterClient.AuthClient.GetRole(ctx, name)
+			role, err := proxyClient.GetRole(ctx, name)
 			if err != nil {
 				return trace.Wrap(err)
 			}

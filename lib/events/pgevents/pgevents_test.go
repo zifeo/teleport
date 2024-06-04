@@ -28,7 +28,6 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
-	pgcommon "github.com/gravitational/teleport/lib/backend/pgbk/common"
 	"github.com/gravitational/teleport/lib/events/test"
 	"github.com/gravitational/teleport/lib/utils"
 )
@@ -87,18 +86,7 @@ func TestPostgresEvents(t *testing.T) {
 func TestConfig(t *testing.T) {
 	configs := map[string]*Config{
 		"postgres://foo#auth_mode=azure": {
-			AuthConfig: pgcommon.AuthConfig{
-				AuthMode: pgcommon.AzureADAuth,
-			},
-			RetentionPeriod: defaultRetentionPeriod,
-			CleanupInterval: defaultCleanupInterval,
-		},
-		"postgres://foo#auth_mode=gcp-cloudsql&gcp_connection_name=project:location:instance&gcp_ip_type=private": {
-			AuthConfig: pgcommon.AuthConfig{
-				AuthMode:          pgcommon.GCPCloudSQLIAMAuth,
-				GCPConnectionName: "project:location:instance",
-				GCPIPType:         pgcommon.GCPIPTypePrivateIP,
-			},
+			AuthMode:        AzureADAuth,
 			RetentionPeriod: defaultRetentionPeriod,
 			CleanupInterval: defaultCleanupInterval,
 		},

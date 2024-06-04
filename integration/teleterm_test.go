@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os/user"
@@ -489,7 +488,7 @@ func testClientCache(t *testing.T, pack *dbhelpers.DatabasePack, creds *helpers.
 	eg, egCtx := errgroup.WithContext(ctx)
 	blocker := make(chan struct{})
 	const concurrentCalls = 5
-	concurrentCallsForClient := make([]*client.ClusterClient, concurrentCalls)
+	concurrentCallsForClient := make([]*client.ProxyClient, concurrentCalls)
 	for i := range concurrentCallsForClient {
 		client := &concurrentCallsForClient[i]
 		eg.Go(func() error {
@@ -517,6 +516,21 @@ func testClientCache(t *testing.T, pack *dbhelpers.DatabasePack, creds *helpers.
 	thirdCallForClient, err := daemonService.GetCachedClient(ctx, cluster.URI)
 	require.NoError(t, err)
 	require.NotEqual(t, secondCallForClient, thirdCallForClient)
+
+	// After closing the client (from our or a remote side)
+	// it will be removed from the cache.
+	// The call to GetCachedClient will connect to proxy and return a new client.
+	err = thirdCallForClient.Close()
+	require.NoError(t, err)
+
+	// TODO(gzdunek): Re-enable this test.
+	// This part is flaky, there is no guarantee that the goroutine waiting
+	// for the client to close will be able to remove it from the cache
+	// before we try to get a new client.
+
+	//fourthCallForClient, err := daemonService.GetCachedClient(ctx, cluster.URI)
+	//require.NoError(t, err)
+	//require.NotEqual(t, thirdCallForClient, fourthCallForClient)
 }
 
 func testCreateConnectMyComputerRole(t *testing.T, pack *dbhelpers.DatabasePack) {
@@ -1089,7 +1103,7 @@ func newMockTSHDEventsServiceServer(t *testing.T) (service *mockTSHDEventsServic
 		// before grpcServer.Serve is called and grpcServer.Serve will return
 		// grpc.ErrServerStopped.
 		err := <-serveErr
-		if !errors.Is(err, grpc.ErrServerStopped) {
+		if err != grpc.ErrServerStopped {
 			assert.NoError(t, err)
 		}
 	})

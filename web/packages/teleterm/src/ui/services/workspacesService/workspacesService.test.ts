@@ -63,17 +63,18 @@ describe('restoring workspace', () => {
       persistedWorkspaces: { [cluster.uri]: testWorkspace },
     });
 
-    expect(workspacesService.state.isInitialized).toEqual(false);
-
     await workspacesService.restorePersistedState();
-
-    expect(workspacesService.state.isInitialized).toEqual(true);
     expect(workspacesService.getWorkspaces()).toStrictEqual({
       [cluster.uri]: {
         accessRequests: {
           pending: {
-            kind: 'resource',
-            resources: new Map(),
+            app: {},
+            db: {},
+            kube_cluster: {},
+            node: {},
+            role: {},
+            windows_desktop: {},
+            user_group: {},
           },
           isBarCollapsed: false,
         },
@@ -97,18 +98,19 @@ describe('restoring workspace', () => {
       persistedWorkspaces: {},
     });
 
-    expect(workspacesService.state.isInitialized).toEqual(false);
-
     await workspacesService.restorePersistedState();
-
-    expect(workspacesService.state.isInitialized).toEqual(true);
     expect(workspacesService.getWorkspaces()).toStrictEqual({
       [cluster.uri]: {
         accessRequests: {
           isBarCollapsed: false,
           pending: {
-            kind: 'resource',
-            resources: new Map(),
+            app: {},
+            db: {},
+            kube_cluster: {},
+            node: {},
+            role: {},
+            windows_desktop: {},
+            user_group: {},
           },
         },
         localClusterUri: cluster.uri,

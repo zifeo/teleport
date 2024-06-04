@@ -33,7 +33,6 @@ export type Props = {
   noIcon?: boolean;
   event?: CtaEvent;
   textLink?: boolean;
-  url?: string;
   [index: string]: any;
 };
 
@@ -42,7 +41,6 @@ export function ButtonLockedFeature({
   noIcon = false,
   event,
   textLink = false,
-  url,
   ...rest
 }: Props) {
   const ctx = useTeleport();
@@ -58,7 +56,7 @@ export function ButtonLockedFeature({
     return (
       <Link
         target="blank"
-        href={getSalesURL(version, cfg.isEnterprise, event, url)}
+        href={getSalesURL(version, cfg.isEnterprise, event)}
         onClick={handleClick}
         {...rest}
       >
@@ -71,7 +69,7 @@ export function ButtonLockedFeature({
     <ButtonPrimary
       as="a"
       target="blank"
-      href={getSalesURL(version, cfg.isEnterprise, event, url)}
+      href={getSalesURL(version, cfg.isEnterprise, event)}
       onClick={handleClick}
       py="12px"
       width="100%"

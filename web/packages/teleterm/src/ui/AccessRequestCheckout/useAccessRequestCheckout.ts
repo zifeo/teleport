@@ -31,11 +31,7 @@ import { CreateRequest } from 'shared/components/AccessRequests/Shared/types';
 import { Option } from 'shared/components/Select';
 
 import { useAppContext } from 'teleterm/ui/appContextProvider';
-import {
-  PendingAccessRequest,
-  extractResourceRequestProperties,
-  toResourceRequest,
-} from 'teleterm/ui/services/workspacesService/accessRequestsService';
+import { PendingAccessRequest } from 'teleterm/ui/services/workspacesService';
 import { retryWithRelogin } from 'teleterm/ui/utils';
 import {
   CreateAccessRequestRequest,
@@ -150,13 +146,8 @@ export default function useAccessRequestCheckout() {
   }, [showCheckout, hasExited, createRequestAttempt.status]);
 
   function getPendingAccessRequestsPerResource(
-    pendingRequest: PendingAccessRequest
-  ): {
-    kind: ResourceKind;
-    clusterName: string;
-    id: string;
-    name: string;
-  }[] {
+    resourceIds: PendingAccessRequest
+  ) {
     const data: {
       kind: ResourceKind;
       clusterName: string;
@@ -168,31 +159,13 @@ export default function useAccessRequestCheckout() {
     if (!workspaceAccessRequest) {
       return data;
     }
-
-    switch (pendingRequest.kind) {
-      case 'role': {
-        const clusterName =
-          ctx.clustersService.findCluster(rootClusterUri)?.name;
-        pendingRequest.roles.forEach(r => {
-          data.push({ kind: 'role', id: r, name: r, clusterName });
-        });
-        break;
-      }
-      case 'resource': {
-        pendingRequest.resources.forEach(resourceRequest => {
-          const { kind, id, name } =
-            extractResourceRequestProperties(resourceRequest);
-          data.push({
-            kind,
-            id,
-            name,
-            clusterName: ctx.clustersService.findClusterByResource(
-              resourceRequest.resource.uri
-            )?.name,
-          });
-        });
-      }
-    }
+    const clusterName = ctx.clustersService.findCluster(clusterUri)?.name;
+    const resourceKeys = Object.keys(resourceIds) as ResourceKind[];
+    resourceKeys.forEach(kind => {
+      Object.keys(resourceIds[kind]).forEach(id => {
+        data.push({ kind, id, name: resourceIds[kind][id], clusterName });
+      });
+    });
     return data;
   }
 
@@ -203,24 +176,12 @@ export default function useAccessRequestCheckout() {
     return workspaceAccessRequest.getCollapsed();
   }
 
-  async function toggleResource(
+  function toggleResource(
     kind: ResourceKind,
     resourceId: string,
     resourceName: string
   ) {
-    if (kind === 'role') {
-      await workspaceAccessRequest.addOrRemoveRole(resourceId);
-      return;
-    }
-
-    await workspaceAccessRequest.addOrRemoveResource(
-      toResourceRequest({
-        kind,
-        resourceId,
-        resourceName,
-        clusterUri,
-      })
-    );
+    workspaceAccessRequest.addOrRemoveResource(kind, resourceId, resourceName);
   }
 
   function getAssumedRequests() {

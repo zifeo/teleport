@@ -242,10 +242,6 @@ type CommandLineFlags struct {
 	// `teleport integration configure access-graph aws-iam` command
 	IntegrationConfAccessGraphAWSSyncArguments IntegrationConfAccessGraphAWSSync
 
-	// IntegrationConfAzureOIDCArguments contains the arguments of
-	// `teleport integration configure azure-oidc` command
-	IntegrationConfAzureOIDCArguments IntegrationConfAzureOIDC
-
 	// IntegrationConfSAMLIdPGCPWorkforceArguments contains the arguments of
 	// `teleport integration configure samlidp gcp-workforce` command
 	IntegrationConfSAMLIdPGCPWorkforceArguments samlidpconfig.GCPWorkforceAPIParams
@@ -265,22 +261,6 @@ type CommandLineFlags struct {
 type IntegrationConfAccessGraphAWSSync struct {
 	// Role is the AWS Role associated with the Integration
 	Role string
-}
-
-// IntegrationConfAzureOIDC contains the arguments of
-// `teleport integration configure azure-oidc` command
-type IntegrationConfAzureOIDC struct {
-	// ProxyPublicAddr is the publicly-reachable URL of the Teleport Proxy.
-	// It is used as the OIDC issuer URL, as well as for SAML URIs.
-	ProxyPublicAddr string
-
-	// AuthConnectorName is the name of the SAML connector that will be created on Teleport side.
-	AuthConnectorName string
-
-	// AccessGraphEnabled is a flag indicating that access graph integration is requested.
-	// When this is true, the integration script will produce
-	// a cache file necessary for TAG synchronization.
-	AccessGraphEnabled bool
 }
 
 // IntegrationConfDeployServiceIAM contains the arguments of
@@ -826,7 +806,7 @@ func applyLogConfig(loggerConfig Log, cfg *servicecfg.Config) error {
 	case "":
 		fallthrough // not set. defaults to 'text'
 	case "text":
-		enableColors := utils.IsTerminal(os.Stderr)
+		enableColors := trace.IsTerminal(os.Stderr)
 		formatter := &logutils.TextFormatter{
 			ExtraFields:  configuredFields,
 			EnableColors: enableColors,
@@ -1230,12 +1210,6 @@ func applyProxyConfig(fc *FileConfig, cfg *servicecfg.Config) error {
 
 	if fc.Proxy.UI != nil {
 		cfg.Proxy.UI = webclient.UIConfig(*fc.Proxy.UI)
-		switch cfg.Proxy.UI.ShowResources {
-		case constants.ShowResourcesaccessibleOnly,
-			constants.ShowResourcesRequestable:
-		default:
-			return trace.BadParameter("show resources %q not supported", cfg.Proxy.UI.ShowResources)
-		}
 	}
 
 	if fc.Proxy.Assist != nil && fc.Proxy.Assist.OpenAI != nil {

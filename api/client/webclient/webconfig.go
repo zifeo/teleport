@@ -82,8 +82,6 @@ type WebConfig struct {
 	IsTeam bool `json:"isTeam"`
 	// IsIGSEnabled is true if [Features.IdentityGovernance] = true
 	IsIGSEnabled bool `json:"isIgsEnabled"`
-	// IsPolicyEnabled is true if [Features.Policy] = true
-	IsPolicyEnabled bool `json:"isPolicyEnabled"`
 	// featureLimits define limits for features.
 	// Typically used with feature teasers if feature is not enabled for the
 	// product type eg: Team product contains teasers to upgrade to Enterprise.
@@ -108,8 +106,6 @@ type WebConfig struct {
 	SAML bool `json:"saml"`
 	// MobileDeviceManagement indicates whether adding Jamf plugin is enabled
 	MobileDeviceManagement bool `json:"mobileDeviceManagement"`
-	// Edition is the edition of Teleport
-	Edition string `json:"edition"`
 }
 
 // featureLimits define limits for features.
@@ -130,11 +126,7 @@ type FeatureLimits struct {
 // UIConfig provides config options for the web UI served by the proxy service.
 type UIConfig struct {
 	// ScrollbackLines is the max number of lines the UI terminal can display in its history
-	ScrollbackLines int `json:"scrollbackLines,omitempty"`
-	// ShowResources determines which resources are shown in the web UI. Default if unset is "requestable"
-	// which means resources the user has access to and resources they can request will be shown in the
-	// resources UI. If set to `accessible_only`, only resources the user already has access to will be shown.
-	ShowResources constants.ShowResources `json:"showResources,omitempty"`
+	ScrollbackLines int `json:"scrollbackLines,omitempty"` //nolint:unused // marshaled in config/configuration.go for WebConfig
 }
 
 // WebConfigAuthProvider describes auth. provider

@@ -34,7 +34,6 @@ var supportedResourceKinds = []string{
 	types.KindDatabase,
 	types.KindKubernetesCluster,
 	types.KindApp,
-	types.KindSAMLIdPServiceProvider,
 }
 
 func List(ctx context.Context, cluster *clusters.Cluster, client Client, req *proto.ListUnifiedResourcesRequest) (*ListResponse, error) {
@@ -60,7 +59,6 @@ func List(ctx context.Context, cluster *clusters.Cluster, client Client, req *pr
 	}
 
 	for _, unifiedResource := range unifiedResourcesResponse.Resources {
-		requiresRequest := unifiedResource.RequiresRequest
 		switch e := unifiedResource.GetResource().(type) {
 		case *proto.PaginatedResource_Node:
 			response.Resources = append(response.Resources, UnifiedResource{
@@ -68,7 +66,6 @@ func List(ctx context.Context, cluster *clusters.Cluster, client Client, req *pr
 					URI:    cluster.URI.AppendServer(e.Node.GetName()),
 					Server: e.Node,
 				},
-				RequiresRequest: requiresRequest,
 			})
 		case *proto.PaginatedResource_DatabaseServer:
 			response.Resources = append(response.Resources, UnifiedResource{
@@ -76,7 +73,6 @@ func List(ctx context.Context, cluster *clusters.Cluster, client Client, req *pr
 					URI:      cluster.URI.AppendDB(e.DatabaseServer.GetName()),
 					Database: e.DatabaseServer.GetDatabase(),
 				},
-				RequiresRequest: requiresRequest,
 			})
 		case *proto.PaginatedResource_KubernetesServer:
 			response.Resources = append(response.Resources, UnifiedResource{
@@ -84,7 +80,6 @@ func List(ctx context.Context, cluster *clusters.Cluster, client Client, req *pr
 					URI:               cluster.URI.AppendKube(e.KubernetesServer.GetCluster().GetName()),
 					KubernetesCluster: e.KubernetesServer.GetCluster(),
 				},
-				RequiresRequest: requiresRequest,
 			})
 		case *proto.PaginatedResource_AppServer:
 			app := e.AppServer.GetApp()
@@ -96,10 +91,8 @@ func List(ctx context.Context, cluster *clusters.Cluster, client Client, req *pr
 					AWSRoles: cluster.GetAWSRoles(app),
 					App:      app,
 				},
-				RequiresRequest: requiresRequest,
 			})
 		case *proto.PaginatedResource_AppServerOrSAMLIdPServiceProvider:
-			//nolint:staticcheck // SA1019. TODO(sshah) DELETE IN 17.0
 			if e.AppServerOrSAMLIdPServiceProvider.IsAppServer() {
 				app := e.AppServerOrSAMLIdPServiceProvider.GetAppServer().GetApp()
 				response.Resources = append(response.Resources, UnifiedResource{
@@ -109,7 +102,6 @@ func List(ctx context.Context, cluster *clusters.Cluster, client Client, req *pr
 						AWSRoles: cluster.GetAWSRoles(app),
 						App:      app,
 					},
-					RequiresRequest: requiresRequest,
 				})
 			} else {
 				provider := e.AppServerOrSAMLIdPServiceProvider.GetSAMLIdPServiceProvider()
@@ -118,18 +110,8 @@ func List(ctx context.Context, cluster *clusters.Cluster, client Client, req *pr
 						URI:      cluster.URI.AppendApp(provider.GetName()),
 						Provider: provider,
 					},
-					RequiresRequest: requiresRequest,
 				})
 			}
-		case *proto.PaginatedResource_SAMLIdPServiceProvider:
-			provider := e.SAMLIdPServiceProvider
-			response.Resources = append(response.Resources, UnifiedResource{
-				SAMLIdPServiceProvider: &clusters.SAMLIdPServiceProvider{
-					URI:      cluster.URI.AppendApp(provider.GetName()),
-					Provider: provider,
-				},
-				RequiresRequest: requiresRequest,
-			})
 		}
 	}
 
@@ -156,5 +138,4 @@ type UnifiedResource struct {
 	Kube                   *clusters.Kube
 	App                    *clusters.App
 	SAMLIdPServiceProvider *clusters.SAMLIdPServiceProvider
-	RequiresRequest        bool
 }

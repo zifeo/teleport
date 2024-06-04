@@ -22,14 +22,12 @@ import styled from 'styled-components';
 import { Alert, Box, Flex, Indicator, Text } from 'design';
 
 import { Notification as NotificationIcon, BellRinging } from 'design/Icon';
-import Logger from 'shared/libs/logger';
 import { useRefClickOutside } from 'shared/hooks/useRefClickOutside';
 import { HoverTooltip } from 'shared/components/ToolTip';
 
-import {
-  useInfiniteScroll,
-  useKeyBasedPagination,
-} from 'shared/hooks/useInfiniteScroll';
+import { useInfiniteScroll } from 'shared/hooks';
+
+import { useKeyBasedPagination } from 'shared/hooks/useInfiniteScroll';
 import { IGNORE_CLICK_CLASSNAME } from 'shared/hooks/useRefClickOutside/useRefClickOutside';
 
 import { useTeleport } from 'teleport';
@@ -41,35 +39,35 @@ import { ButtonIconContainer } from 'teleport/TopBar/Shared';
 import { Notification } from './Notification';
 
 const PAGE_SIZE = 15;
-
-const logger = Logger.create('Notifications');
+const START_KEY_SEPARATOR = ' ';
 
 export function Notifications({ iconSize = 24 }: { iconSize?: number }) {
   const ctx = useTeleport();
   const { clusterId } = useStickyClusterId();
 
-  const [userLastSeenNotification, setUserLastSeenNotification] =
-    useState<Date>();
-
-  const {
-    resources: notifications,
-    fetch,
-    attempt,
-  } = useKeyBasedPagination({
+  const { resources, fetch, attempt } = useKeyBasedPagination({
     fetchMoreSize: PAGE_SIZE,
     initialFetchSize: PAGE_SIZE,
     fetchFunc: useCallback(
       async paginationParams => {
+        // Separate the keys.
+        const startKeys = paginationParams.startKey.split(START_KEY_SEPARATOR);
         const response = await ctx.notificationService.fetchNotifications({
           clusterId,
-          startKey: paginationParams.startKey,
+          userNotificationsStartKey: startKeys[0],
+          globalNotificationsStartKey: startKeys[1],
           limit: paginationParams.limit,
         });
 
-        setUserLastSeenNotification(response.userLastSeenNotification);
+        // We can't pass notifications directly because we need the full
+        // response object to inspect `userLastSeenNotification`.
         return {
-          agents: response.notifications,
-          startKey: response.nextKey,
+          agents: response.notifications.length ? [response] : [],
+          startKey:
+            response.userNotificationsNextKey ||
+            response.globalNotificationsNextKey
+              ? `${response.userNotificationsNextKey}${START_KEY_SEPARATOR}${response.globalNotificationsNextKey}`
+              : undefined,
         };
       },
       [clusterId, ctx.notificationService]
@@ -81,6 +79,11 @@ export function Notifications({ iconSize = 24 }: { iconSize?: number }) {
     fetch();
   }, []);
 
+  // Extract the notifications out of the resources response.
+  const notifications = resources.flatMap(r => r.notifications);
+  // Set the most recent item as the userLastSeenNotification.
+  const userLastSeenNotification = resources.at(-1)?.userLastSeenNotification;
+
   const { setTrigger } = useInfiniteScroll({
     fetch,
   });
@@ -90,40 +93,18 @@ export function Notifications({ iconSize = 24 }: { iconSize?: number }) {
 
   const ref = useRefClickOutside<HTMLDivElement>({ open, setOpen });
 
-  function onIconClick() {
-    if (!open) {
-      setOpen(true);
-
-      if (notifications.length) {
-        const latestNotificationTime = notifications[0].createdDate;
-        // If the current userLastSeenNotification is already set to the most recent notification's time, don't do anything.
-        if (userLastSeenNotification === latestNotificationTime) {
-          return;
-        }
-
-        const previousLastSeenTime = userLastSeenNotification;
-
-        // Update the visual state right away for a snappier UX.
-        setUserLastSeenNotification(latestNotificationTime);
-
-        ctx.notificationService
-          .upsertLastSeenNotificationTime(clusterId, {
-            time: latestNotificationTime,
-          })
-          .then(res => setUserLastSeenNotification(res.time))
-          .catch(err => {
-            setUserLastSeenNotification(previousLastSeenTime);
-            logger.error(`Notification last seen time update failed.`, err);
-          });
-      }
-    } else {
-      setOpen(false);
-    }
-  }
-
   const unseenNotifsCount = notifications.filter(notif =>
     isBefore(userLastSeenNotification, notif.createdDate)
   ).length;
+
+  const items = notifications
+    .filter(notif => {
+      if (view === 'All') {
+        return true;
+      }
+      return !notif.clicked;
+    })
+    .map(notif => <Notification notification={notif} key={notif.id} />);
 
   return (
     <NotificationButtonContainer
@@ -140,7 +121,7 @@ export function Notifications({ iconSize = 24 }: { iconSize?: number }) {
         `}
       >
         <ButtonIconContainer
-          onClick={onIconClick}
+          onClick={() => setOpen(!open)}
           data-testid="tb-note-button"
           open={open}
         >
@@ -163,20 +144,10 @@ export function Notifications({ iconSize = 24 }: { iconSize?: number }) {
             <Alert>Could not load notifications: {attempt.statusText}</Alert>
           </Box>
         )}
-        {attempt.status === 'success' && notifications.length === 0 && (
-          <EmptyState />
-        )}
+        {attempt.status === 'success' && items.length === 0 && <EmptyState />}
         <NotificationsList>
           <>
-            {!!notifications.length &&
-              notifications.map(notif => (
-                <Notification
-                  notification={notif}
-                  key={notif.id}
-                  view={view}
-                  closeNotificationsList={() => setOpen(false)}
-                />
-              ))}
+            {!!items.length && items}
             {open && <div ref={setTrigger} />}
             {attempt.status === 'processing' && (
               <Flex
@@ -299,9 +270,9 @@ const ViewButton = styled.div<{ selected: boolean }>`
   border-radius: 36px;
   display: flex;
   width: fit-content;
-  padding: ${p => p.theme.space[1]}px ${p => p.theme.space[3]}px;
+  padding: ${p => p.theme.space[2]}px ${p => p.theme.space[3]}px;
   justify-content: space-around;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 300;
   color: ${props =>
     props.selected
@@ -317,7 +288,7 @@ const ViewButton = styled.div<{ selected: boolean }>`
   }
 `;
 
-export type View = 'All' | 'Unread';
+type View = 'All' | 'Unread';
 
 const NotificationsList = styled.div<{ isScrollbarVisible: boolean }>`
   box-sizing: border-box;

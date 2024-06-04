@@ -413,10 +413,6 @@ const (
 
 	// MinimumEtcdVersion is the minimum version of etcd supported by Teleport
 	MinimumEtcdVersion = "3.3.0"
-
-	// EnvVarAllowNoSecondFactor is used to allow disabling second factor auth
-	// todo(lxea): DELETE IN 17
-	EnvVarAllowNoSecondFactor = "TELEPORT_ALLOW_NO_SECOND_FACTOR"
 )
 
 const (
@@ -728,14 +724,6 @@ const (
 	// version they are running.
 	VersionRequest = "x-teleport-version"
 
-	// CurrentSessionIDRequest is sent by servers to inform clients of
-	// the session ID that is being used.
-	CurrentSessionIDRequest = "current-session-id@goteleport.com"
-
-	// SessionIDQueryRequest is sent by clients to ask servers if they
-	// will generate their own session ID when a new session is created.
-	SessionIDQueryRequest = "session-id-query@goteleport.com"
-
 	// ForceTerminateRequest is an SSH request to forcefully terminate a session.
 	ForceTerminateRequest = "x-teleport-force-terminate"
 
@@ -759,8 +747,8 @@ const (
 	// EnvSSHSessionReason is a reason attached to started sessions meant to describe their intent.
 	EnvSSHSessionReason = "TELEPORT_SESSION_REASON"
 
-	// EnvSSHSessionInvited is an environment variable listing people invited to a session.
-	EnvSSHSessionInvited = "TELEPORT_SESSION_INVITED_USERS"
+	// EnvSSHSessionInvited is an environment variable listning people invited to a session.
+	EnvSSHSessionInvited = "TELEPORT_SESSION_JOIN_MODE"
 
 	// EnvSSHSessionDisplayParticipantRequirements is set to true or false to indicate if participant
 	// requirement information should be printed.
@@ -862,10 +850,6 @@ const (
 	// until a domain name stops resolving. Its main use is to ensure no
 	// auth instances are still running the previous major version.
 	WaitSubCommand = "wait"
-
-	// VnetAdminSetupSubCommand is the sub-command tsh vnet uses to perform
-	// a setup as a privileged user.
-	VnetAdminSetupSubCommand = "vnet-admin-setup"
 )
 
 const (

@@ -717,8 +717,6 @@ message BotJoinEvent {
   // join_token_name is the anonymised name of the token used to join
   // the cluster.
   string join_token_name = 3;
-  // user_name is the anonymised name of the Bot user.
-  string user_name = 4;
 }
 
 // UICreateNewRoleClickEvent is an event that can be triggered during custom role creation
@@ -766,7 +764,6 @@ enum CTA {
   CTA_ACCESS_MONITORING = 9;
   CTA_EXTERNAL_AUDIT_STORAGE = 10;
   CTA_OKTA_USER_SYNC = 11;
-  CTA_ENTRA_ID = 12;
 }
 
 // a request forwarded to a kube cluster's API server (other than exec and
@@ -1021,7 +1018,6 @@ enum IntegrationEnrollKind {
   INTEGRATION_ENROLL_KIND_MACHINE_ID_AZURE = 20;
   INTEGRATION_ENROLL_KIND_MACHINE_ID_SPACELIFT = 21;
   INTEGRATION_ENROLL_KIND_MACHINE_ID_KUBERNETES = 22;
-  INTEGRATION_ENROLL_KIND_ENTRA_ID = 23;
 }
 
 // IntegrationEnrollMetadata contains common metadata

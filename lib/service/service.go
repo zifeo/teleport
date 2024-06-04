@@ -768,7 +768,7 @@ func Run(ctx context.Context, cfg servicecfg.Config, newTeleport NewProcess) err
 		if err != nil {
 			// This error means that was a clean shutdown
 			// and no reload is necessary.
-			if errors.Is(err, ErrTeleportExited) {
+			if err == ErrTeleportExited {
 				return nil
 			}
 			return trace.Wrap(err)
@@ -781,7 +781,7 @@ func waitAndReload(ctx context.Context, sigC <-chan os.Signal, cfg servicecfg.Co
 	if err == nil {
 		return nil, ErrTeleportExited
 	}
-	if !errors.Is(err, ErrTeleportReloading) {
+	if err != ErrTeleportReloading {
 		return nil, trace.Wrap(err)
 	}
 	cfg.Logger.InfoContext(ctx, "Started in-process service reload.")
@@ -836,7 +836,7 @@ func waitAndReload(ctx context.Context, sigC <-chan os.Signal, cfg servicecfg.Co
 	timeoutCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 	srv.Shutdown(services.ProcessReloadContext(timeoutCtx))
-	if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+	if timeoutCtx.Err() == context.DeadlineExceeded {
 		// The new service can start initiating connections to the old service
 		// keeping it from shutting down gracefully, or some external
 		// connections can keep hanging the old auth service and prevent
@@ -850,7 +850,7 @@ func waitAndReload(ctx context.Context, sigC <-chan os.Signal, cfg servicecfg.Co
 		timeoutCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 		defer cancel()
 		srv.WaitWithContext(timeoutCtx)
-		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+		if timeoutCtx.Err() == context.DeadlineExceeded {
 			return nil, trace.BadParameter("the old service has failed to exit.")
 		}
 	} else {
@@ -2022,19 +2022,10 @@ func (process *TeleportProcess) initAuthService() error {
 
 	authServer.SetUnifiedResourcesCache(unifiedResourcesCache)
 
-	accessRequestCache, err := services.NewAccessRequestCache(services.AccessRequestCacheConfig{
-		Events: authServer.Services,
-		Getter: authServer.Services,
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	authServer.SetAccessRequestCache(accessRequestCache)
-
 	userNotificationCache, err := services.NewUserNotificationCache(services.NotificationCacheConfig{
 		Events: authServer.Services,
-		Getter: authServer.Cache,
+		// TODO(rudream): Use getter from cache instead of real backend.
+		Getter: authServer.Services,
 	})
 	if err != nil {
 		return trace.Wrap(err)
@@ -2044,13 +2035,24 @@ func (process *TeleportProcess) initAuthService() error {
 
 	globalNotificationCache, err := services.NewGlobalNotificationCache(services.NotificationCacheConfig{
 		Events: authServer.Services,
-		Getter: authServer.Cache,
+		// TODO(rudream): Use getter from cache instead of real backend.
+		Getter: authServer.Services,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	authServer.SetGlobalNotificationCache(globalNotificationCache)
+
+	accessRequestCache, err := services.NewAccessRequestCache(services.AccessRequestCacheConfig{
+		Events: authServer.Services,
+		Getter: authServer.Services,
+	})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	authServer.SetAccessRequestCache(accessRequestCache)
 
 	if embedderClient != nil {
 		logger.DebugContext(process.ExitContext(), "Starting embedding watcher")
@@ -2508,6 +2510,24 @@ func (process *TeleportProcess) newLocalCacheForRemoteProxy(clt authclient.Clien
 	return authclient.NewRemoteProxyWrapper(clt, cache), nil
 }
 
+// DELETE IN: 8.0.0
+//
+// newLocalCacheForOldRemoteProxy returns new instance of access point
+// configured for an old remote proxy.
+func (process *TeleportProcess) newLocalCacheForOldRemoteProxy(clt authclient.ClientI, cacheName []string) (authclient.RemoteProxyAccessPoint, error) {
+	// if caching is disabled, return access point
+	if !process.Config.CachePolicy.Enabled {
+		return clt, nil
+	}
+
+	cache, err := process.NewLocalCache(clt, cache.ForOldRemoteProxy, cacheName)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return authclient.NewRemoteProxyWrapper(clt, cache), nil
+}
+
 // newLocalCacheForApps returns new instance of access point configured for a remote proxy.
 func (process *TeleportProcess) newLocalCacheForApps(clt authclient.ClientI, cacheName []string) (authclient.AppsAccessPoint, error) {
 	// if caching is disabled, return access point
@@ -2538,20 +2558,12 @@ func (process *TeleportProcess) newLocalCacheForWindowsDesktop(clt authclient.Cl
 	return authclient.NewWindowsDesktopWrapper(clt, cache), nil
 }
 
-// accessPointWrapper is a wrapper around [authclient.ClientI]  that reduces the surface area of the
+// accessPointWrapper is a wrapper around auth.ClientI that reduces the surface area of the
 // auth.ClientI.DiscoveryConfigClient interface to services.DiscoveryConfigs.
-// Cache doesn't implement the full [authclient.ClientI]  interface, so we need to wrap [authclient.ClientI]
+// Cache doesn't implement the full auth.ClientI interface, so we need to wrap auth.ClientI to
 // to make it compatible with the services.DiscoveryConfigs interface.
 type accessPointWrapper struct {
 	authclient.ClientI
-}
-
-func (a accessPointWrapper) CrownJewelClient() services.CrownJewels {
-	return a.ClientI.CrownJewelServiceClient()
-}
-
-func (a accessPointWrapper) DatabaseObjectsClient() services.DatabaseObjects {
-	return a.ClientI.DatabaseObjectsClient()
 }
 
 func (a accessPointWrapper) DiscoveryConfigClient() services.DiscoveryConfigs {
@@ -2794,6 +2806,7 @@ func (process *TeleportProcess) initSSH() error {
 			process.proxyPublicAddr(),
 			conn.Client,
 			regular.SetLimiter(limiter),
+			regular.SetShell(cfg.SSH.Shell),
 			regular.SetEmitter(&events.StreamerAndEmitter{Emitter: asyncEmitter, Streamer: conn.Client}),
 			regular.SetLabels(cfg.SSH.Labels, cfg.SSH.CmdLabels, process.cloudLabels),
 			regular.SetNamespace(namespace),
@@ -2817,6 +2830,7 @@ func (process *TeleportProcess) initSSH() error {
 			regular.SetInventoryControlHandle(process.inventoryHandle),
 			regular.SetTracerProvider(process.TracingProvider),
 			regular.SetSessionController(sessionController),
+			regular.SetCAGetter(authClient.GetCertAuthority),
 			regular.SetPublicAddrs(cfg.SSH.PublicAddrs),
 		)
 		if err != nil {
@@ -4148,34 +4162,35 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 
 		tsrv, err = reversetunnel.NewServer(
 			reversetunnel.Config{
-				Context:               process.ExitContext(),
-				Component:             teleport.Component(teleport.ComponentProxy, process.id),
-				ID:                    process.Config.HostUUID,
-				ClusterName:           clusterName,
-				ClientTLS:             clientTLSConfig,
-				Listener:              reverseTunnelLimiter.WrapListener(listeners.reverseTunnel),
-				GetHostSigners:        sshutils.StaticHostSigners(conn.ServerIdentity.KeySigner),
-				LocalAuthClient:       conn.Client,
-				LocalAccessPoint:      accessPoint,
-				NewCachingAccessPoint: process.newLocalCacheForRemoteProxy,
-				Limiter:               reverseTunnelLimiter,
-				KeyGen:                cfg.Keygen,
-				Ciphers:               cfg.Ciphers,
-				KEXAlgorithms:         cfg.KEXAlgorithms,
-				MACAlgorithms:         cfg.MACAlgorithms,
-				DataDir:               process.Config.DataDir,
-				PollingPeriod:         process.Config.PollingPeriod,
-				FIPS:                  cfg.FIPS,
-				Emitter:               streamEmitter,
-				Log:                   process.log,
-				LockWatcher:           lockWatcher,
-				PeerClient:            peerClient,
-				NodeWatcher:           nodeWatcher,
-				CertAuthorityWatcher:  caWatcher,
-				CircuitBreakerConfig:  process.Config.CircuitBreakerConfig,
-				LocalAuthAddresses:    utils.NetAddrsToStrings(process.Config.AuthServerAddresses()),
-				IngressReporter:       ingressReporter,
-				PROXYSigner:           proxySigner,
+				Context:                       process.ExitContext(),
+				Component:                     teleport.Component(teleport.ComponentProxy, process.id),
+				ID:                            process.Config.HostUUID,
+				ClusterName:                   clusterName,
+				ClientTLS:                     clientTLSConfig,
+				Listener:                      reverseTunnelLimiter.WrapListener(listeners.reverseTunnel),
+				GetHostSigners:                sshutils.StaticHostSigners(conn.ServerIdentity.KeySigner),
+				LocalAuthClient:               conn.Client,
+				LocalAccessPoint:              accessPoint,
+				NewCachingAccessPoint:         process.newLocalCacheForRemoteProxy,
+				NewCachingAccessPointOldProxy: process.newLocalCacheForOldRemoteProxy,
+				Limiter:                       reverseTunnelLimiter,
+				KeyGen:                        cfg.Keygen,
+				Ciphers:                       cfg.Ciphers,
+				KEXAlgorithms:                 cfg.KEXAlgorithms,
+				MACAlgorithms:                 cfg.MACAlgorithms,
+				DataDir:                       process.Config.DataDir,
+				PollingPeriod:                 process.Config.PollingPeriod,
+				FIPS:                          cfg.FIPS,
+				Emitter:                       streamEmitter,
+				Log:                           process.log,
+				LockWatcher:                   lockWatcher,
+				PeerClient:                    peerClient,
+				NodeWatcher:                   nodeWatcher,
+				CertAuthorityWatcher:          caWatcher,
+				CircuitBreakerConfig:          process.Config.CircuitBreakerConfig,
+				LocalAuthAddresses:            utils.NetAddrsToStrings(process.Config.AuthServerAddresses()),
+				IngressReporter:               ingressReporter,
+				PROXYSigner:                   proxySigner,
 			})
 		if err != nil {
 			return trace.Wrap(err)
@@ -4552,6 +4567,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		regular.SetOnHeartbeat(process.OnHeartbeat(teleport.ComponentProxy)),
 		regular.SetEmitter(streamEmitter),
 		regular.SetLockWatcher(lockWatcher),
+		regular.SetNodeWatcher(nodeWatcher),
 		// Allow Node-wide file copying checks to succeed so they can be
 		// accurately checked later when an SCP/SFTP request hits the
 		// destination Node.
@@ -4810,7 +4826,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 			}
 
 			err := kubeServer.Serve(listeners.kube, mopts...)
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err != nil && err != http.ErrServerClosed {
 				logger.WarnContext(process.ExitContext(), "Kube TLS server exited with error.", "error", err)
 			}
 			return nil
@@ -5930,6 +5946,8 @@ func (process *TeleportProcess) Shutdown(ctx context.Context) {
 // Close broadcasts close signals and exits immediately
 func (process *TeleportProcess) Close() error {
 	process.BroadcastEvent(Event{Name: TeleportExitEvent})
+
+	process.Config.Keygen.Close()
 
 	var errors []error
 
