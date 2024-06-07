@@ -56,7 +56,6 @@ const (
 	TypeClipboardData                   = MessageType(6)
 	TypeClientUsername                  = MessageType(7)
 	TypeMouseWheel                      = MessageType(8)
-	TypeError                           = MessageType(9)
 	TypeMFA                             = MessageType(10)
 	TypeSharedDirectoryAnnounce         = MessageType(11)
 	TypeSharedDirectoryAcknowledge      = MessageType(12)
@@ -140,8 +139,6 @@ func decodeMessage(firstByte byte, in byteReader) (Message, error) {
 		return decodeClientUsername(in)
 	case TypeClipboardData:
 		return decodeClipboardData(in, maxClipboardDataLength)
-	case TypeError:
-		return decodeError(in)
 	case TypeNotification:
 		return decodeNotification(in)
 	case TypeMFA:
@@ -548,31 +545,6 @@ func decodeClientUsername(in io.Reader) (ClientUsername, error) {
 		return ClientUsername{}, trace.Wrap(err)
 	}
 	return ClientUsername{Username: username}, nil
-}
-
-// Error is used to send a fatal error message to the browser.
-// In Teleport 12 and up, Error is deprecated and Notification
-// should be preferred.
-// | message type (9) | message_length uint32 | message []byte |
-type Error struct {
-	Message string
-}
-
-func (m Error) Encode() ([]byte, error) {
-	buf := new(bytes.Buffer)
-	buf.WriteByte(byte(TypeError))
-	if err := encodeString(buf, m.Message); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return buf.Bytes(), nil
-}
-
-func decodeError(in io.Reader) (Error, error) {
-	message, err := decodeString(in, tdpMaxNotificationMessageLength)
-	if err != nil {
-		return Error{}, trace.Wrap(err)
-	}
-	return Error{Message: message}, nil
 }
 
 type Severity byte

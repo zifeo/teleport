@@ -56,7 +56,6 @@ func TestEncodeDecode(t *testing.T) {
 		ClientScreenSpec{Width: 123, Height: 456},
 		ClientUsername{Username: "admin"},
 		MouseWheel{Axis: HorizontalWheelAxis, Delta: -123},
-		Error{Message: "An error occurred"},
 	} {
 		t.Run(fmt.Sprintf("%T", m), func(t *testing.T) {
 			buf, err := m.Encode()
@@ -218,13 +217,6 @@ func TestSizeLimitsAreNonFatal(t *testing.T) {
 		{
 			name:  "rejects long Clipboard",
 			msg:   ClipboardData(bytes.Repeat([]byte("a"), maxClipboardDataLength+1)),
-			fatal: false,
-		},
-		{
-			name: "rejects long Error",
-			msg: Error{
-				Message: string(bytes.Repeat([]byte("a"), tdpMaxNotificationMessageLength+1)),
-			},
 			fatal: false,
 		},
 		{
