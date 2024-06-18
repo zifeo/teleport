@@ -1,0 +1,43 @@
+# First set up the host tools on the buildbox in /opt. This includes
+# * A bunch of stuff from the APT repositories
+# * Building and installing cross-tool ng
+# * Using cross-tool ng to build a toolchain for the 4 architectures: amd64 arm64 386 arm
+# * Installing Go and Rust
+
+FROM ubuntu:22.04 as buildbox
+
+# Create a buildbox user that owns all the tools installed in /opt. When using the
+# buildbox, a different uid/gid should be used as these tools should not be
+# modifiable when using the buildbox
+ARG BUILDBOX_UID=999
+ARG BUILDBOX_GID=999
+RUN groupadd -g $BUILDBOX_GID buildbox
+RUN useradd -d /home/buildbox -m -g $BUILDBOX_GID -u $BUILDBOX_UID -s /bin/bash buildbox
+
+ARG THIRDPARTY_DIR=/opt/thirdparty
+RUN install -d -m 0775 -o buildbox -g buildbox $THIRDPARTY_DIR
+
+# Non-interactive configuration of tzdata
+ENV DEBIAN_FRONTEND noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN true
+RUN { echo 'tzdata tzdata/Areas select Etc'; echo 'tzdata tzdata/Zones/Etc select UTC'; } | debconf-set-selections
+
+RUN apt-get update
+RUN apt-get install -y gcc g++ gperf bison flex texinfo help2man make libncurses5-dev \
+    python3-dev autoconf automake libtool libtool-bin gawk wget bzip2 xz-utils unzip \
+    patch libstdc++6 rsync git meson ninja-build
+
+USER buildbox
+WORKDIR /home/buildbox
+
+COPY ct-ng-configs ct-ng-configs
+COPY cross-compile.mk ./Makefile
+
+# Build and install ct-ng 
+#ARG BUILDARCH
+
+#RUN make diagnose ARCH=$BUILDARCH THIRDPARTY_DIR=$THIRDPARTY_DIR
+#RUN make install-ctng ARCH=$BUILDARCH THIRDPARTY_DIR=$THIRDPARTY_DIR
+
+# Build cross-compiling toolchains with ct-ng
+#RUN make ctng-build ARCH=amd64 THIRDPARTY_DIR=$THIRDPARTY_DIR

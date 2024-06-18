@@ -3,9 +3,9 @@
 
 ARCH ?= $(shell go env GOARCH)
 
-# repo_root = $(shell git rev-parse --show-toplevel)
-repo_root = $(abspath $(dir $(firstword $(MAKEFILE_LIST)))/..)
-BUILDDIR = $(repo_root)/build
+# mk_dir = $(shell git rev-parse --show-toplevel)/build.assets
+mk_dir = $(dir $(firstword $(MAKEFILE_LIST)))
+BUILDDIR = $(abspath $(mk_dir)/../build)
 
 # THIRDPARTY_DIR is the root of where third-party libraries and programs are
 # downloaded, built and installed.
@@ -79,11 +79,11 @@ CTNG_DEFCONFIG = $(CTNG_BUILDDIR)/defconfig
 CTNG_CONFIG = $(CTNG_BUILDDIR)/.config
 
 # Create a defconfig if it does not exist
-$(repo_root)/build.assets/ct-ng-configs/$(ARCH).defconfig:
+$(mk_dir)/ct-ng-configs/$(ARCH).defconfig:
 	touch $@
 
 # Copy the defconfig into the build dir
-$(CTNG_DEFCONFIG): $(repo_root)/build.assets/ct-ng-configs/$(ARCH).defconfig | $(CTNG_BUILDDIR)
+$(CTNG_DEFCONFIG): $(mk_dir)/ct-ng-configs/$(ARCH).defconfig | $(CTNG_BUILDDIR)
 	cp $^ $@
 
 # Create an expanded config from the defconfig
@@ -96,7 +96,7 @@ $(CTNG_CONFIG): $(CTNG_DEFCONFIG)
 ctng-menuconfig: $(CTNG_CONFIG) | $(CTNG_BUILDDIR)
 	cd $(CTNG_BUILDDIR) && $(THIRDPARTY_HOST_PREFIX)/bin/ct-ng menuconfig
 	cd $(CTNG_BUILDDIR) && $(THIRDPARTY_HOST_PREFIX)/bin/ct-ng savedefconfig
-	cp $(CTNG_BUILDDIR)/defconfig $(repo_root)/build.assets/ct-ng-configs/$(ARCH).defconfig
+	cp $(CTNG_BUILDDIR)/defconfig $(mk_dir)/ct-ng-configs/$(ARCH).defconfig
 
 # Build the toolchain with the config in the defconfig for the architecture. We need to
 # clear out some env vars because ct-ng does not want them set. We export a couple of
@@ -104,20 +104,32 @@ ctng-menuconfig: $(CTNG_CONFIG) | $(CTNG_BUILDDIR)
 .PHONY: ctng-build
 ctng-build: $(CTNG_CONFIG) | $(CTNG_BUILDDIR)
 	@mkdir -p $(THIRDPARTY_DLDIR)
-	cd $(CTNG_BUILDDIR) && $(THIRDPARTY_HOST_PREFIX)/bin/ct-ng build
+	cd $(CTNG_BUILDDIR) && \
+		THIRDPARTY_HOST_PREFIX=$(THIRDPARTY_HOST_PREFIX) \
+		THIRDPARTY_DLDIR=$(THIRDPARTY_DLDIR) \
+		$(THIRDPARTY_HOST_PREFIX)/bin/ct-ng build
+
+# Download sources for building the toolchain
+.PHONY: ctng-source
+ctng-source: $(CTNG_CONFIG) | $(CTNG_BUILDDIR)
+	@mkdir -p $(THIRDPARTY_DLDIR)
+	cd $(CTNG_BUILDDIR) && \
+		THIRDPARTY_HOST_PREFIX=$(THIRDPARTY_HOST_PREFIX) \
+		THIRDPARTY_DLDIR=$(THIRDPARTY_DLDIR) \
+		$(THIRDPARTY_HOST_PREFIX)/bin/ct-ng source
 
 # =============================================================================
-# clang-14
+# clang-12
 #
-# We need to build clang-14 ourselves because we need a specific version (14.0.6)
+# We need to build clang-12 ourselves because we need a specific version (12.0.0)
 # for FIPS compliance. That version of clang is needed to build boringssl
 # for use by rust to build rdp-client (via the boring-sys crate).
 #
 # clang is built for the host system, using the host system compiler, not ctng.
 
-clang_VERSION = 14.0.6
+clang_VERSION = 12.0.0
 clang_GIT_REF = llvmorg-$(clang_VERSION)
-clang_GIT_REF_HASH = f28c006a5895fc0e329fe15fead81e37457cb1d1
+clang_GIT_REF_HASH = d28af7c654d8db0b68c175db5ce212d74fb5e9bc
 clang_GIT_REPO = https://github.com/llvm/llvm-project.git
 clang_SRCDIR = $(call tp-src-host-dir,clang)
 
@@ -555,11 +567,14 @@ fetch-https-%:
 	$(if $(wildcard $(tp-https-src-dir)),,$(tp-https-extract-tar-cmd))
 
 diagnose:
-	@echo repo_root = $(repo_root)
+	@echo mk_dir = $(mk_dir)
+	@echo BUILDDIR = $(BUILDDIR)
 	@echo THIRDPARTY_DIR = $(THIRDPARTY_DIR)
-	@echo THIRDPARTY_SRCDIR = $(THIRDPARTY_SRCDIR)
 	@echo THIRDPARTY_DLDIR = $(THIRDPARTY_DLDIR)
 	@echo THIRDPARTY_PREFIX = $(THIRDPARTY_PREFIX)
+	@echo THIRDPARTY_SRCDIR = $(THIRDPARTY_SRCDIR)
+	@echo THIRDPARTY_HOST_PREFIX = $(THIRDPARTY_HOST_PREFIX)
+	@echo THIRDPARTY_HOST_SRCDIR = $(THIRDPARTY_HOST_SRCDIR)
 	@echo CTNG_TARGET = $(CTNG_TARGET)
 	@echo PATH = $(PATH)
 
