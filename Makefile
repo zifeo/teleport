@@ -101,6 +101,8 @@ CARGO_TARGET_darwin_amd64 := x86_64-apple-darwin
 CARGO_TARGET_darwin_arm64 := aarch64-apple-darwin
 CARGO_TARGET_linux_arm64 := aarch64-unknown-linux-gnu
 CARGO_TARGET_linux_amd64 := x86_64-unknown-linux-gnu
+CARGO_TARGET_linux_386 := i686-unknown-linux-gnu
+CARGO_TARGET_linux_arm := armv7-unknown-linux-gnueabi
 
 CARGO_TARGET := --target=${CARGO_TARGET_${OS}_${ARCH}}
 
@@ -122,15 +124,10 @@ is_fips_on_arm64 := yes
 endif
 endif
 
-# Do not build RDP client on 32-bit ARM or 386, or for FIPS builds on arm64.
-ifneq ("$(ARCH)","arm")
-ifneq ("$(ARCH)","386")
 ifneq ("$(is_fips_on_arm64)","yes")
 with_rdpclient := yes
 RDPCLIENT_MESSAGE := with-Windows-RDP-client
 RDPCLIENT_TAG := desktop_access_rdp
-endif
-endif
 endif
 
 endif
@@ -244,23 +241,13 @@ TEST_LOG_DIR = ${abspath ./test-logs}
 
 # Set CGOFLAG and BUILDFLAGS as needed for the OS/ARCH.
 ifeq ("$(OS)","linux")
-# True if $ARCH == amd64 || $ARCH == arm64
-ifeq ("$(ARCH)","arm64")
-	ifeq ($(IS_NATIVE_BUILD),"no")
-		CGOFLAG += CC=aarch64-linux-gnu-gcc
-	endif
-else ifeq ("$(ARCH)","arm")
+ifeq ("$(ARCH)","arm")
 CGOFLAG = CGO_ENABLED=1
-
-# ARM builds need to specify the correct C compiler
-ifeq ($(IS_NATIVE_BUILD),"no")
-CC=arm-linux-gnueabihf-gcc
-endif
 
 # Add -debugtramp=2 to work around 24 bit CALL/JMP instruction offset.
 # Add "-extldflags -Wl,--long-plt" to avoid ld assertion failure on large binaries
 GO_LDFLAGS += -extldflags=-Wl,--long-plt -debugtramp=2
-endif
+endif # ARCH == arm
 endif # OS == linux
 
 ifeq ("$(OS)-$(ARCH)","darwin-arm64")
