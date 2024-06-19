@@ -1,0 +1,112 @@
+# Cross-compiling build box
+#
+# Stage 1 builds crosstool-NG for the 4 architectures we support: arm64, amd64,
+# arm and 386, and also builds the third party C libraries that Teleport needs
+# to build, also for these architectures.
+#
+# We also build a specific version of clang that is required for a FIPS
+# compliant build of boring ssl, used by the boring rust crate.
+
+FROM ubuntu:24.04 AS stage1
+
+# Create a buildbox user that owns all the tools installed in /opt. When using the
+# buildbox, a different uid/gid should be used as these tools should not be
+# modifiable when using the buildbox
+ARG BUILDBOX_UID=99
+ARG BUILDBOX_GID=99
+RUN groupadd -g $BUILDBOX_GID buildbox
+RUN useradd -d /home/buildbox -m -g $BUILDBOX_GID -u $BUILDBOX_UID -s /bin/bash buildbox
+
+ARG THIRDPARTY_DIR=/opt/thirdparty
+RUN install -d -m 0775 -o buildbox -g buildbox $THIRDPARTY_DIR
+
+# Non-interactive configuration of tzdata
+ENV DEBIAN_FRONTEND noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN true
+RUN { echo 'tzdata tzdata/Areas select Etc'; echo 'tzdata tzdata/Zones/Etc select UTC'; } | debconf-set-selections
+
+RUN apt-get update
+RUN apt-get install -y \
+	autoconf \
+	autoconf-archive \
+	automake \
+	autopoint \
+	bison \
+	bzip2 \
+	cmake \
+	curl \
+	flex \
+	g++ \
+	gawk \
+	gcc \
+	gettext \
+	git \
+	gperf \
+	help2man \
+	libncurses5-dev \
+	libstdc++6 \
+	libtool \
+	libtool-bin \
+	make \
+	meson \
+	ninja-build \
+	patch \
+	pkg-config \
+	python3-dev \
+	rsync \
+	texinfo \
+	texi2html \
+	unzip \
+	xz-utils
+
+RUN apt-get update && apt-get install -y \
+    autoconf \
+    automake \
+    autopoint \
+    bison \
+    cmake \
+    curl \
+    flex \
+    gettext \
+    git \
+    libtool \
+    make \
+    pkg-config \
+    sed \
+    w3m \
+    wget \
+    xsltproc \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN install -d -m 0775 -o buildbox -g buildbox /opt/go /opt/rustup /opt/cargo
+
+USER buildbox
+WORKDIR /home/buildbox
+
+COPY ct-ng-configs ct-ng-configs
+COPY cross-compile.mk ./Makefile
+
+# Install Go
+ARG BUILDARCH
+ARG GOLANG_VERSION=1.22.4
+RUN curl -fsSL https://storage.googleapis.com/golang/go${GOLANG_VERSION}.linux-${BUILDARCH}.tar.gz | \
+	tar -C /opt -xz && \
+	/opt/go/bin/go version
+
+# Install Rust
+ARG RUST_VERSION=1.77.0
+ENV RUSTUP_HOME=/opt/rustup
+ENV CARGO_HOME=/opt/cargo
+RUN curl --proto =https --tlsv1.2 -fsSL https://sh.rustup.rs | \
+	sh -s -- -y --profile minimal --default-toolchain ${RUST_VERSION} && \
+	${CARGO_HOME}/bin/rustup --version && \
+	${CARGO_HOME}/bin/cargo --version && \
+	${CARGO_HOME}/bin/rustc --version && \
+	${CARGO_HOME}/bin/rustup target add \
+		x86_64-unknown-linux-gnu \
+		aarch64-unknown-linux-gnu \
+		i686-unknown-linux-gnu \
+		armv7-unknown-linux-gnueabi
+
+ENV PATH=/opt/go/bin:${CARGO_HOME}/bin:${PATH}
