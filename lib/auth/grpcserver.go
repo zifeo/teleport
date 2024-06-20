@@ -103,6 +103,7 @@ import (
 	"github.com/gravitational/teleport/lib/httplib"
 	"github.com/gravitational/teleport/lib/joinserver"
 	"github.com/gravitational/teleport/lib/observability/metrics"
+	"github.com/gravitational/teleport/lib/rbac"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/services/local"
 	"github.com/gravitational/teleport/lib/session"
@@ -5409,7 +5410,27 @@ func NewGRPCServer(cfg GRPCServerConfig) (*GRPCServer, error) {
 		loginrulepb.RegisterLoginRuleServiceServer(server, loginrule.NotImplementedService{})
 	}
 
-	authzService, err := authorizationv1.New(authorizationv1.ServiceParams{})
+	// RBAC Engine and AuthorizationService.
+	clusterName, err := cfg.AuthServer.GetClusterName()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	rbacEngine, err := rbac.NewEngine(rbac.EngineParams{
+		// TODO(codingllama): Logger.
+		ClusterName: clusterName.GetClusterName(),
+		AuthServer:  cfg.AuthServer,
+		RoleGetter:  cfg.AuthServer,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	authzService, err := authorizationv1.New(authorizationv1.ServiceParams{
+		// TODO(codingllama): Logger.
+		Authorizer:           cfg.Authorizer,
+		AuthPreferenceGetter: cfg.AuthServer,
+		UserGetter:           cfg.AuthServer,
+		Engine:               rbacEngine,
+	})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
