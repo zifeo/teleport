@@ -3,6 +3,9 @@
 
 ARCH ?= $(shell go env GOARCH)
 
+# Default parallelism of builds
+NPROC ?= $(shell nproc)
+
 # mk_dir = $(shell git rev-parse --show-toplevel)/build.assets
 mk_dir = $(dir $(firstword $(MAKEFILE_LIST)))
 BUILDDIR = $(abspath $(mk_dir)/../build)
@@ -55,7 +58,7 @@ ctng_SRCDIR = $(call tp-src-host-dir,ctng)
 install-ctng: fetch-git-ctng
 	cd $(ctng_SRCDIR) && ./bootstrap
 	cd $(ctng_SRCDIR) && ./configure --prefix=$(THIRDPARTY_HOST_PREFIX)
-	$(MAKE) -C $(ctng_SRCDIR) -j$(shell nproc)
+	$(MAKE) -C $(ctng_SRCDIR) -j$(NPROC)
 	$(MAKE) -C $(ctng_SRCDIR) install
 
 # -----------------------------------------------------------------------------
@@ -125,19 +128,23 @@ clang_GIT_REF_HASH = d28af7c654d8db0b68c175db5ce212d74fb5e9bc
 clang_GIT_REPO = https://github.com/llvm/llvm-project.git
 clang_SRCDIR = $(call tp-src-host-dir,clang)
 
-.PHONY: install-clang
+.PHONY: fetch-clang configure-clang install-clang
 fetch-clang: fetch-git-clang
-configure-clang:
+configure-clang: fetch-clang
 	cd $(clang_SRCDIR) && cmake \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_INSTALL_PREFIX=$(THIRDPARTY_HOST_PREFIX) \
 		-DLLVM_ENABLE_PROJECTS=clang \
 		-DLLVM_BUILD_TOOLS=ON \
 		-G "Unix Makefiles" llvm
-build-clang:
+install-clang: configure-clang
 	cd $(clang_SRCDIR) && \
-		$(MAKE) -j$(nproc) install-llvm-strip install-clang-format install-clang \
-		install-clang-resource-headers install-libclang
+		$(MAKE) -j$(NPROC) \
+			install-llvm-strip \
+			install-clang-format \
+			install-clang \
+			install-clang-resource-headers \
+			install-libclang
 
 # =============================================================================
 # Environment setup for building with ctng toolchain
@@ -303,7 +310,7 @@ zlib_SRCDIR = $(call tp-src-dir,zlib)
 tp-build-zlib: fetch-git-zlib
 	cd $(zlib_SRCDIR) && \
 		$(CROSS_COMPILE) ./configure --prefix="$(THIRDPARTY_PREFIX)" --static
-	$(CROSS_COMPILE) $(MAKE) -C $(zlib_SRCDIR) CFLAGS+=-fPIE -j$(shell nproc)
+	$(CROSS_COMPILE) $(MAKE) -C $(zlib_SRCDIR) CFLAGS+=-fPIE -j$(NPROC)
 	$(CROSS_COMPILE) $(MAKE) -C $(zlib_SRCDIR) install
 
 # -----------------------------------------------------------------------------
@@ -317,7 +324,7 @@ zstd_SRCDIR = $(call tp-src-dir,zstd)
 
 .PHONY: tp-build-zstd
 tp-build-zstd: fetch-git-zstd
-	$(CROSS_COMPILE) $(MAKE) -C $(zstd_SRCDIR) CPPFLAGS_STATICLIB+=-fPIE -j$(shell nproc)
+	$(CROSS_COMPILE) $(MAKE) -C $(zstd_SRCDIR) CPPFLAGS_STATICLIB+=-fPIE -j$(NPROC)
 	$(CROSS_COMPILE) $(MAKE) -C $(zstd_SRCDIR) install PREFIX=$(THIRDPARTY_PREFIX)
 
 # -----------------------------------------------------------------------------
@@ -331,7 +338,7 @@ libelf_SRCDIR = $(call tp-src-dir,libelf)
 
 .PHONY: tp-build-libelf
 tp-build-libelf: fetch-git-libelf
-	$(CROSS_COMPILE) $(MAKE) -C $(libelf_SRCDIR) CFLAGS+=-fPIE -j$(shell nproc) libelf.a
+	$(CROSS_COMPILE) $(MAKE) -C $(libelf_SRCDIR) CFLAGS+=-fPIE -j$(NPROC) libelf.a
 	$(CROSS_COMPILE) $(MAKE) -C $(libelf_SRCDIR) install-headers install-static PREFIX=$(THIRDPARTY_PREFIX)
 
 # -----------------------------------------------------------------------------
@@ -366,7 +373,7 @@ tp-build-libtirpc: fetch-https-libtirpc
 		--enable-shared=no \
 		--disable-gssapi \
 		$(if $(CTNG_TARGET),--host=$(CTNG_TARGET))
-	$(CROSS_COMPILE) $(MAKE) -C $(libtirpc_SRCDIR) -j$(shell nproc)
+	$(CROSS_COMPILE) $(MAKE) -C $(libtirpc_SRCDIR) -j$(NPROC)
 	$(CROSS_COMPILE) $(MAKE) -C $(libtirpc_SRCDIR) install
 
 # -----------------------------------------------------------------------------
@@ -387,7 +394,7 @@ tp-build-libpam: fetch-git-libpam
 		--disable-doc --disable-examples \
 		--includedir=$(THIRDPARTY_PREFIX)/include/security \
 		$(if $(CTNG_ARCH),--host=$(CTNG_ARCH))
-	$(CROSS_COMPILE) $(MAKE) -C $(libpam_SRCDIR) -j$(shell nproc)
+	$(CROSS_COMPILE) $(MAKE) -C $(libpam_SRCDIR) -j$(NPROC)
 	$(CROSS_COMPILE) $(MAKE) -C $(libpam_SRCDIR) install
 
 # -----------------------------------------------------------------------------
@@ -403,7 +410,7 @@ libudev_zero_SRCDIR = $(call tp-src-dir,libudev_zero)
 tp-build-libudev_zero: fetch-git-libudev_zero
 	$(CROSS_COMPILE) $(MAKE) -C $(libudev_zero_SRCDIR) \
 		PREFIX=$(THIRDPARTY_PREFIX) \
-		install-static -j$(shell nproc)
+		install-static -j$(NPROC)
 
 # -----------------------------------------------------------------------------
 # libcbor
@@ -423,7 +430,7 @@ tp-build-libcbor: fetch-git-libcbor
 		-DCMAKE_BUILD_TYPE=Release \
 		-DWITH_EXAMPLES=OFF \
 		.
-	$(CROSS_COMPILE) $(MAKE) -C $(libcbor_SRCDIR) -j$(shell nproc)
+	$(CROSS_COMPILE) $(MAKE) -C $(libcbor_SRCDIR) -j$(NPROC)
 	$(CROSS_COMPILE) $(MAKE) -C $(libcbor_SRCDIR) install
 
 # -----------------------------------------------------------------------------
@@ -448,7 +455,7 @@ tp-build-openssl: fetch-git-openssl
 		$(CROSS_COMPILE) ./config "$(openssl_TARGET)" enable-fips --release -fPIC no-shared \
 		--prefix=$(THIRDPARTY_PREFIX) \
 		--libdir=$(THIRDPARTY_PREFIX)/lib
-	$(CROSS_COMPILE) $(MAKE) -C $(openssl_SRCDIR) -j$(shell nproc)
+	$(CROSS_COMPILE) $(MAKE) -C $(openssl_SRCDIR) -j$(NPROC)
 	$(CROSS_COMPILE) $(MAKE) -C $(openssl_SRCDIR) install_sw install_ssldirs install_fips
 	sed "s|@@PREFIX@@|${THIRDPARTY_PREFIX}|" \
 		< pkgconfig/crosstool/libcrypto-static.pc \
@@ -476,7 +483,7 @@ tp-build-libfido2: fetch-git-libfido2
 		-DBUILD_MANPAGES=OFF \
 		-DBUILD_TOOLS=OFF \
 		.
-	$(CROSS_COMPILE) $(MAKE) -C $(libfido2_SRCDIR) -j$(shell nproc)
+	$(CROSS_COMPILE) $(MAKE) -C $(libfido2_SRCDIR) -j$(NPROC)
 	$(CROSS_COMPILE) $(MAKE) -C $(libfido2_SRCDIR) install
 	sed "s|@@PREFIX@@|${THIRDPARTY_PREFIX}|" \
 		< pkgconfig/crosstool/libfido2-static.pc \
@@ -502,7 +509,7 @@ tp-build-libpcsclite: fetch-git-libpcsclite
 		--prefix="$(THIRDPARTY_PREFIX)" \
 		--enable-static --with-pic \
 		--disable-libsystemd --with-systemdsystemunitdir=no
-	$(CROSS_COMPILE) $(MAKE) -C $(libpcsclite_SRCDIR)/src -j$(shell nproc) PROGRAMS= all
+	$(CROSS_COMPILE) $(MAKE) -C $(libpcsclite_SRCDIR)/src -j$(NPROC) PROGRAMS= all
 	$(CROSS_COMPILE) $(MAKE) -C $(libpcsclite_SRCDIR)/src PROGRAMS= install
 
 # -----------------------------------------------------------------------------
