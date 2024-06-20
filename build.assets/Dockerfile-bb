@@ -93,9 +93,17 @@ RUN make ctng-build ARCH=386 && \
 RUN make ctng-build ARCH=arm && \
 	rm -rf ${THIRDPARTY_DIR}/arm/ctng
 
+RUN rm -rf ${THIRDPARTY_DIR}/download
+
+FROM stage2 AS clang
+
 # Build and install clang
-RUN make install-clang ARCH=$BUILDARCH && \
+# Set BUILDARCH if not set when not using buildkit. Only works for arm64 and amd64.
+RUN BUILDARCH=${BUILDARCH:-$(uname -m | sed -e 's/aarch64/arm64/' -e 's/x86_64/amd64/')} && \
+	make -j1 fetch-clang configure-clang build-clang ARCH=$BUILDARCH && \
 	rm -rf ${THIRDPARTY_DIR}/host/src
+
+FROM clang AS tplibs
 
 # Build and install third party C libraries for all architectures
 RUN make thirdparty-build-libs ARCH=amd64 && \
@@ -142,7 +150,7 @@ RUN install -d -m 0775 -o buildbox -g buildbox /opt/go /opt/rustup /opt/cargo
 
 # Install third party toolchain and libraries
 ARG THIRDPARTY_DIR=/opt/thirdparty
-COPY --from=stage2 ${THIRDPARTY_DIR} ${THIRDPARTY_DIR}
+COPY --from=tplibs ${THIRDPARTY_DIR} ${THIRDPARTY_DIR}
 
 USER buildbox
 
