@@ -131,15 +131,13 @@ configure-clang:
 	cd $(clang_SRCDIR) && cmake \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_INSTALL_PREFIX=$(THIRDPARTY_HOST_PREFIX) \
-		-DLLVM_ENABLE_PROJECTS="clang;libcxx;libcxxabi" \
-		-DLLVM_ENABLE_LIBCXX=ON \
-		-G Ninja llvm
+		-DLLVM_ENABLE_PROJECTS=clang \
+		-DLLVM_BUILD_TOOLS=ON \
+		-G "Unix Makefiles" llvm
 build-clang:
-	cd $(clang_SRCDIR) && cmake --build .
-
-install-clang: fetch-clang configure-clang build-clang
-	cd $(clang_SRCDIR) && cmake \
-		-DCMAKE_INSTALL_PREFIX=$(THIRDPARTY_HOST_PREFIX) -P cmake_install.cmake
+	cd $(clang_SRCDIR) && \
+		$(MAKE) -j$(nproc) install-llvm-strip install-clang-format install-clang \
+		install-clang-resource-headers install-libclang
 
 # =============================================================================
 # Environment setup for building with ctng toolchain
