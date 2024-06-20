@@ -1,0 +1,155 @@
+// Copyright 2024 Gravitational, Inc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package teleport.authorization.v1;
+
+import "google/rpc/status.proto";
+import "teleport/authorization/v1/action.proto";
+import "teleport/authorization/v1/authorization_bundle.proto";
+import "teleport/authorization/v1/authorize_request.proto";
+import "teleport/authorization/v1/external_state.proto";
+import "teleport/authorization/v1/grant.proto";
+import "teleport/authorization/v1/resource.proto";
+import "teleport/authorization/v1/subject.proto";
+
+option go_package = "github.com/gravitational/teleport/api/gen/proto/go/teleport/authorization/v1;authorizationpb";
+
+service AuthorizationService {
+  // Authorize verifies if a Subject can perform a given Action against a
+  // Resource. A successful Authorize call does not inherently grant any access,
+  // it simply asks RBAC whether access _should_ be granted.
+  //
+  // Authorize responses are boolean in nature. Use Explain for a nuanced
+  // response.
+  //
+  // Authorize may be called by Teleport services inquiring about user
+  // permissions, or by users verifying their own permissions. Queries against
+  // unknown or disallowed resources both return PermissionDenied.
+  rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse);
+
+  // Batched variant of Authorize.
+  rpc BatchAuthorize(BatchAuthorizeRequest) returns (BatchAuthorizeResponse);
+
+  // Explain runs an Authorize operation and returns detailed data about the
+  // factors that decided its outcome.
+  rpc Explain(ExplainRequest) returns (ExplainResponse);
+
+  // Enumerate enumerates grants from a (subject, action, resource)
+  // authorization tuple where one of the components is missing.
+  //
+  // Teleport services may enumerate arbitrary combinations. Users may enumerate
+  // according to their own permissions ("read" on relevant RBAC entities or
+  // "access_graph/read").
+  //
+  // Subject is considered to be in their most capable state unless a state is
+  // explicitly supplied.
+  rpc Enumerate(EnumerateRequest) returns (EnumerateResponse);
+
+  // Batched variant of Enumerate.
+  rpc BatchEnumerate(BatchEnumerateRequest) returns (BatchEnumerateResponse);
+
+  // EnumerateChange enumerates Grant changes in face of a hypothetical RBAC
+  // entity change.
+  rpc EnumerateChange(EnumerateChangeRequest) returns (EnumerateChangeResponse);
+}
+
+message AuthorizeResponse {}
+
+message BatchAuthorizeRequest {
+  repeated AuthorizeRequest requests = 1;
+}
+
+message BatchAuthorizeResponse {
+  // Outcome for each request, in input order.
+  repeated google.rpc.Status responses = 1;
+}
+
+message ExplainRequest {
+  AuthorizeRequest authorize_request = 1;
+}
+
+message ExplainResponse {
+  // Outcome decided by the effective_grant.
+  AuthorizeOutcome outcome = 1;
+
+  // Reasons decided by the effective_grant.
+  // Typically empty on successes. May hold multiple reasons for failure.
+  // Reasons may be under-explained by the system. For example, fixing all
+  // reasons for the present denial may simply cause a further denial by
+  // another, more restrictive grant.
+  repeated AuthorizeReason reasons = 2;
+
+  // Grant that decided the outcome.
+  // If multiple grants could decide the same outcome the system picks the
+  // effective grant at its discretion.
+  Grant effective_grant = 3;
+  // Grants considered to determine the outcome.
+  repeated Grant all_grants = 4;
+}
+
+enum AuthorizeOutcome {
+  AUTHORIZE_OUTCOME_UNSPECIFIED = 0;
+  AUTHORIZE_OUTCOME_ALLOWED = 1;
+  AUTHORIZE_OUTCOME_DENIED = 2;
+}
+
+enum AuthorizeReason {
+  AUTHORIZE_REASON_UNSPECIFIED = 0;
+  AUTHORIZE_REASON_DENIED_BY_ROLE = 1;
+  AUTHORIZE_REASON_DENIED_BY_MFA_DEVICE = 2;
+  AUTHORIZE_REASON_DENIED_BY_TRUSTED_DEVICE = 3;
+  // etc...
+}
+
+message EnumerateRequest {
+  Subject subject = 1; // two of (subject, action, resource) must be present
+  Action action = 2;
+  Resource resource = 3;
+  ExternalState external_state = 4;
+}
+
+message EnumerateResponse {
+  repeated Grant grants = 1;
+}
+
+message BatchEnumerateRequest {
+  repeated EnumerateRequest requests = 1;
+}
+
+message BatchEnumerateResponse {
+  repeated BatchEnumerateResponseItem responses = 2;
+}
+
+message BatchEnumerateResponseItem {
+  EnumerateResponse response = 1;
+
+  // Only present on failures.
+  google.rpc.Status status = 2;
+}
+
+message EnumerateChangeRequest {
+  // Authorization entities to add or modify, represented in their entirety.
+  AuthorizationBundle bundle_to_add = 1;
+  // Authorizatoin entities to remove. Only identifiers are necessary.
+  AuthorizationBundle bundle_to_remove = 2;
+}
+
+message EnumerateChangeResponse {
+  // Grants added due to the bundle modifications.
+  repeated Grant added_grants = 1;
+  // Grants removed due to the bundle modifications.
+  repeated Grant removed_grants = 2;
+}

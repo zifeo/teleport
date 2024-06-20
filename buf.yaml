@@ -34,6 +34,8 @@ lint:
     - proto/teleport/lib/multiplexer/test/ping.proto
     - proto/teleport/lib/web/terminal/envelope.proto
   ignore_only:
+    COMMENT_ENUM:
+      - api/proto/teleport/authorization/v1 # temporary!
     COMMENT_MESSAGE:
       - proto/prehog
       - proto/teleport/lib/teleterm/v1/access_request.proto
@@ -47,10 +49,13 @@ lint:
       - proto/teleport/lib/teleterm/v1/server.proto
       - proto/teleport/lib/teleterm/v1/service.proto
       - proto/teleport/lib/teleterm/v1/usage_events.proto
+      - api/proto/teleport/authorization/v1 # temporary!
     COMMENT_RPC:
       - proto/prehog
+      - api/proto/teleport/authorization/v1 # temporary!
     COMMENT_SERVICE:
       - proto/prehog
+      - api/proto/teleport/authorization/v1 # temporary!
     FIELD_LOWER_SNAKE_CASE:
       - api/proto/teleport/legacy/types/device.proto
     PACKAGE_DIRECTORY_MATCH:

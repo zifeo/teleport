@@ -1,0 +1,57 @@
+// Copyright 2024 Gravitational, Inc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package teleport.authorization.v1;
+
+import "teleport/authorization/v1/action.proto";
+import "teleport/authorization/v1/resource.proto";
+import "teleport/authorization/v1/subject.proto";
+
+option go_package = "github.com/gravitational/teleport/api/gen/proto/go/teleport/authorization/v1;authorizationpb";
+
+// Grant is the atom of the RBAC system, it is a glue entity that ties the
+// authorization tuple of (subject, action, resource) together.
+//
+// Grants may be positive (nature ALLOW) or negative (nature DENY).
+//
+// RBAC operations are, in their essence, a combination of an expansion and a
+// search of grants.
+message Grant {
+  Subject subject = 1;
+  Action action = 2;
+  Resource resource = 3;
+  GrantNature nature = 4;
+  GrantSource granted_by = 5;
+}
+
+enum GrantNature {
+  GRANT_NATURE_UNSPECIFIED = 0;
+  GRANT_NATURE_ALLOW = 1;
+  GRANT_NATURE_DENY = 2;
+}
+
+// Source of a Grant, from the direct source to the subject.
+//
+// For example:
+// - Direct: Role (no parent)
+// - Indirect: Role -> AccessList -> AccessList (group)
+// - External: ExternalGrantsService (no parent)
+message GrantSource {
+  string kind = 1; // Role, AccessList, etc
+  string sub_kind = 2;
+  string id = 3;
+  GrantSource parent = 4;
+}

@@ -1,0 +1,50 @@
+// Copyright 2024 Gravitational, Inc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package teleport.authorization.v1;
+
+import "teleport/authorization/v1/impersonator.proto";
+import "teleport/authorization/v1/traits.proto";
+
+option go_package = "github.com/gravitational/teleport/api/gen/proto/go/teleport/authorization/v1;authorizationpb";
+
+// Subject is the part taking action in an RBAC request.
+message Subject {
+  string kind = 1; // only types.KindUser supported
+  string sub_kind = 2;
+  // int version = n;
+  string id = 3; // aka User.Name
+  SubjectState subject_state = 4; // dynamic Subject state
+
+  // Subject traits, as assigned during login.
+  Traits traits = 5;
+
+  // Impersonator for the current Subject.
+  // Impersonation constraints the roles the Subject may assume.
+  Impersonator impersonator = 6;
+
+  // Active access requests.
+  // An access request represents a temporary escalation of permissions.
+  string active_access_request_ids = 7;
+}
+
+// SubjectState captures dynamic Subject state (ie, state that may change on the
+// over the course of a "login session").
+message SubjectState {
+  bool mfa_verified = 1;
+  bool device_verified = 2;
+  // etc...
+}

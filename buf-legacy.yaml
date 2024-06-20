@@ -35,6 +35,11 @@ lint:
     - RPC_REQUEST_RESPONSE_UNIQUE
     - RPC_REQUEST_STANDARD_NAME
     - RPC_RESPONSE_STANDARD_NAME
+  ignore_only:
+    COMMENT_RPC:
+      - api/proto/teleport/authorization/v1 # temporary!
+    COMMENT_SERVICE:
+      - api/proto/teleport/authorization/v1 # temporary!
 
 breaking:
   use:
