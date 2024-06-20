@@ -7,7 +7,7 @@
 # We also build a specific version of clang that is required for a FIPS
 # compliant build of boring ssl, used by the boring rust crate.
 
-ARG BASE_IMAGE=ubuntu:24.04
+ARG BASE_IMAGE=ubuntu:22.04
 
 FROM ${BASE_IMAGE} AS stage1
 
