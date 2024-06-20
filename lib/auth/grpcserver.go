@@ -51,6 +51,7 @@ import (
 	"github.com/gravitational/teleport/api/constants"
 	accessmonitoringrules "github.com/gravitational/teleport/api/gen/proto/go/teleport/accessmonitoringrules/v1"
 	auditlogpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/auditlog/v1"
+	authorizationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/authorization/v1"
 	clusterconfigpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/clusterconfig/v1"
 	crownjewelpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/crownjewel/v1"
 	dbobjectpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/dbobject/v1"
@@ -94,6 +95,7 @@ import (
 	"github.com/gravitational/teleport/lib/auth/userpreferences/userpreferencesv1"
 	"github.com/gravitational/teleport/lib/auth/users/usersv1"
 	"github.com/gravitational/teleport/lib/auth/vnetconfig/v1"
+	"github.com/gravitational/teleport/lib/authorizationv1"
 	"github.com/gravitational/teleport/lib/authz"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
@@ -5406,6 +5408,12 @@ func NewGRPCServer(cfg GRPCServerConfig) (*GRPCServer, error) {
 	if cfg.PluginRegistry == nil || !cfg.PluginRegistry.IsRegistered("auth.enterprise") {
 		loginrulepb.RegisterLoginRuleServiceServer(server, loginrule.NotImplementedService{})
 	}
+
+	authzService, err := authorizationv1.New(authorizationv1.ServiceParams{})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	authorizationpb.RegisterAuthorizationServiceServer(server, authzService)
 
 	return authServer, nil
 }

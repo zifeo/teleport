@@ -63,6 +63,7 @@ import (
 	accesslistv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/accesslist/v1"
 	accessmonitoringrulev1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/accessmonitoringrules/v1"
 	auditlogpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/auditlog/v1"
+	authorizationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/authorization/v1"
 	clusterconfigpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/clusterconfig/v1"
 	crownjewelv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/crownjewel/v1"
 	dbobjectv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/dbobject/v1"
@@ -746,6 +747,11 @@ func (c *Client) setClosed() bool {
 // "not implemented" errors (as per the default gRPC behavior).
 func (c *Client) DevicesClient() devicepb.DeviceTrustServiceClient {
 	return devicepb.NewDeviceTrustServiceClient(c.conn)
+}
+
+// AuthorizationClient returns an unadorned AuthorizationService gRPC client.
+func (c *Client) AuthorizationClient() authorizationpb.AuthorizationServiceClient {
+	return authorizationpb.NewAuthorizationServiceClient(c.conn)
 }
 
 // CreateDeviceResource creates a device using its resource representation.
