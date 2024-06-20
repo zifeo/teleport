@@ -149,8 +149,10 @@ USER buildbox
 # Install Go
 ARG BUILDARCH
 ARG GOLANG_VERSION=1.22.4
-RUN curl -fsSL https://storage.googleapis.com/golang/${GOLANG_VERSION}.linux-${BUILDARCH}.tar.gz | \
-	tar -C /opt xz - && \
+# Set BUILDARCH if not set when not using buildkit. Only works for arm64 and amd64.
+RUN BUILDARCH=${BUILDARCH:-$(uname -m | sed -e 's/aarch64/arm64/' -e 's/x86_64/amd64/')} && \
+	curl -fsSL https://storage.googleapis.com/golang/go${GOLANG_VERSION}.linux-${BUILDARCH}.tar.gz | \
+	tar -C /opt -xz && \
 	/opt/go/bin/go version
 
 # Install Rust
