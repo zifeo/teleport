@@ -2639,6 +2639,16 @@ func (set RoleSet) checkAccess(r AccessCheckable, traits wrappers.Traits, state 
 		r.GetKind(), additionalDeniedMessage)
 }
 
+func CheckRoleLabelsMatch(
+	condition types.RoleConditionType,
+	role types.Role,
+	userTraits wrappers.Traits,
+	resource AccessCheckable,
+	debug bool,
+) (bool, string, error) {
+	return checkRoleLabelsMatch(condition, role, userTraits, resource, debug)
+}
+
 // checkRoleLabelsMatch checks if the [role] matches the labels of [resource]
 // for [condition].
 // It considers both the role labels (<kind>_labels) and label expression

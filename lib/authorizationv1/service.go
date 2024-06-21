@@ -120,6 +120,31 @@ func (s *Service) Authorize(ctx context.Context, req *authorizationpb.AuthorizeR
 	}
 }
 
+func (s *Service) Explain(ctx context.Context, req *authorizationpb.ExplainRequest) (*authorizationpb.ExplainResponse, error) {
+	authCtx, err := s.authorizer.Authorize(ctx)
+	if err != nil {
+		// err swallowed on purpose.
+		return nil, trace.Wrap(errAccessDenied)
+	}
+	// TODO(codingllama): Verify authorization to perform this call!
+
+	engine := s.engine
+
+	if req.AuthorizeRequest.GetUseCallerAsSubject() {
+		identityAccessInfo, err := s.assignCallerToSubject(ctx, authCtx, &req.AuthorizeRequest.Subject)
+		if err != nil {
+			// err from assignCallerToSubject is already redacted.
+			return nil, trace.Wrap(err)
+		}
+
+		// Override engine's identity, we want to use the certificate as-is.
+		engine = engine.WithSubjectAccessInfo(identityAccessInfo)
+	}
+
+	resp, err := engine.Explain(ctx, req)
+	return resp, trace.Wrap(err)
+}
+
 func (s *Service) assignCallerToSubject(ctx context.Context, authCtx *authz.Context, out **authorizationpb.Subject) (*services.AccessInfo, error) {
 	kind := authCtx.User.GetKind()
 	if kind != types.KindUser {

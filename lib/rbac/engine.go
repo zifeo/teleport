@@ -18,13 +18,16 @@ package rbac
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	authorizationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/authorization/v1"
 	"github.com/gravitational/teleport/api/types"
+	"github.com/gravitational/teleport/api/types/wrappers"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/trace"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -38,6 +41,7 @@ var (
 type AuthServer interface {
 	GetAuthPreference(ctx context.Context) (types.AuthPreference, error)
 	GetNode(ctx context.Context, namespace, name string) (types.Server, error)
+	GetUser(ctx context.Context, name string, withSecrets bool) (types.User, error)
 	GetUserOrLoginState(ctx context.Context, username string) (services.UserState, error)
 }
 
@@ -110,42 +114,15 @@ func (e *Engine) resolveSubjectAccessInfo(ctx context.Context, userID string) (*
 }
 
 func (e *Engine) Authorize(ctx context.Context, req *authorizationpb.AuthorizeRequest) (ok bool, err error) {
-	userID := req.GetSubject().GetId()
-	login := req.GetAction().GetLogin()
-	resourceID := req.GetResource().GetId()
-	switch {
-	case req == nil:
-		return false, trace.BadParameter("req required")
-	case req.Subject == nil:
-		return false, trace.BadParameter("subject required")
-	case req.Action == nil:
-		return false, trace.BadParameter("action required")
-	case req.Resource == nil:
-		return false, trace.BadParameter("resource required")
-	case req.Subject.Kind == "":
-		return false, trace.BadParameter("subject kind required")
-	case req.Subject.Kind != types.KindUser:
-		return false, trace.BadParameter("subject kind %q not supported", req.Subject.Kind)
-	case userID == "":
-		return false, trace.BadParameter("subject ID required")
-	case req.Action.Verb == "":
-		return false, trace.BadParameter("action verb required")
-	case req.Action.Verb != "access":
-		return false, trace.BadParameter("action verb %q not supported", req.Action.Verb)
-	case login == "": // because we require verb="access" above
-		return false, trace.BadParameter("action login required")
-	case req.Resource.Kind == "":
-		return false, trace.BadParameter("resource kind required")
-	case req.Resource.Kind != types.KindNode:
-		return false, trace.BadParameter("resource kind %q not supported", req.Resource.Kind)
-	case resourceID == "":
-		return false, trace.BadParameter("resource ID required")
+	if err := validateAuthorizeRequest(req); err != nil {
+		return false, trace.Wrap(err)
 	}
 
 	// TODO(codingllama): Authorize and Explain should use the same algorithm.
 	//  For now we'll authorize the "old" way.
 
 	// Prepare the AccessChecker.
+	userID := req.GetSubject().GetId()
 	accessInfo, err := e.resolveSubjectAccessInfo(ctx, userID)
 	if err != nil {
 		// err from resolveSubjectAccessInfo already redacted.
@@ -159,6 +136,7 @@ func (e *Engine) Authorize(ctx context.Context, req *authorizationpb.AuthorizeRe
 	}
 
 	// Fetch resource.
+	resourceID := req.GetResource().GetId()
 	node, err := e.authServer.GetNode(ctx, apidefaults.Namespace, resourceID)
 	if err != nil {
 		e.logger.DebugContext(ctx, "Authorize: failed to read node", "error", err, "name", resourceID)
@@ -181,6 +159,7 @@ func (e *Engine) Authorize(ctx context.Context, req *authorizationpb.AuthorizeRe
 	}
 
 	// Determine access.
+	login := req.GetAction().GetLogin()
 	accessErr := accessChecker.CheckAccess(
 		node,
 		accessState,
@@ -196,4 +175,360 @@ func (e *Engine) Authorize(ctx context.Context, req *authorizationpb.AuthorizeRe
 	}
 
 	return ok, nil
+}
+
+func validateAuthorizeRequest(req *authorizationpb.AuthorizeRequest) error {
+	switch {
+	case req == nil:
+		return trace.BadParameter("authorize_request required")
+	case req.Subject == nil:
+		return trace.BadParameter("subject required")
+	case req.Action == nil:
+		return trace.BadParameter("action required")
+	case req.Resource == nil:
+		return trace.BadParameter("resource required")
+	case req.Subject.Kind == "":
+		return trace.BadParameter("subject kind required")
+	case req.Subject.Kind != types.KindUser:
+		return trace.BadParameter("subject kind %q not supported", req.Subject.Kind)
+	case req.Subject.Id == "":
+		return trace.BadParameter("subject ID required")
+	case req.Action.Verb == "":
+		return trace.BadParameter("action verb required")
+	case req.Action.Verb != "access":
+		return trace.BadParameter("action verb %q not supported", req.Action.Verb)
+	case req.Action.Login == "": // because we require verb="access" above
+		return trace.BadParameter("action login required")
+	case req.Resource.Kind == "":
+		return trace.BadParameter("resource kind required")
+	case req.Resource.Kind != types.KindNode:
+		return trace.BadParameter("resource kind %q not supported", req.Resource.Kind)
+	case req.Resource.Id == "":
+		return trace.BadParameter("resource ID required")
+	default:
+		return nil
+	}
+}
+
+func (e *Engine) Explain(ctx context.Context, req *authorizationpb.ExplainRequest) (*authorizationpb.ExplainResponse, error) {
+	if err := validateAuthorizeRequest(req.AuthorizeRequest); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	expandedBundle, err := e.fetchBundle(ctx, req.AuthorizeRequest)
+	if err != nil {
+		// err from fetchBundle already redacted.
+		return nil, trace.Wrap(err)
+	}
+
+	var effectiveGrant *authorizationpb.Grant
+	var allGrants []*authorizationpb.Grant
+	if err := expandGrants(req.AuthorizeRequest.Action, expandedBundle, func(grant authorizationpb.Grant) (cont bool) {
+		g := &grant
+
+		if effectiveGrant == nil {
+			effectiveGrant = g
+		} else if effectiveGrant.Nature == authorizationpb.GrantNature_GRANT_NATURE_ALLOW &&
+			g.Nature == authorizationpb.GrantNature_GRANT_NATURE_DENY {
+			effectiveGrant = g // Deny takes precedence
+		}
+
+		allGrants = append(allGrants, g)
+		return true
+	}); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// If no grants exist the implied deny-all grant wins.
+	if len(allGrants) == 0 {
+		denyAll := &authorizationpb.Grant{
+			Subject: &authorizationpb.Subject{
+				Id: "*",
+			},
+			Action: &authorizationpb.Action{
+				Verb: "*",
+			},
+			Resource: &authorizationpb.Resource{
+				Id: "*",
+			},
+			Nature: authorizationpb.GrantNature_GRANT_NATURE_DENY,
+		}
+		effectiveGrant = denyAll
+		allGrants = append(allGrants, denyAll)
+	}
+
+	var outcome authorizationpb.AuthorizeOutcome
+	if effectiveGrant.Nature == authorizationpb.GrantNature_GRANT_NATURE_ALLOW {
+		outcome = authorizationpb.AuthorizeOutcome_AUTHORIZE_OUTCOME_ALLOWED
+	} else {
+		outcome = authorizationpb.AuthorizeOutcome_AUTHORIZE_OUTCOME_DENIED
+	}
+
+	return &authorizationpb.ExplainResponse{
+		Outcome: outcome,
+		// TODO(codingllama): Deny reasons.
+		// Reasons: nil,
+		EffectiveGrant: effectiveGrant,
+		AllGrants:      allGrants,
+	}, nil
+}
+
+type expandedBundle struct {
+	*authorizationpb.AuthorizationBundle
+
+	subjects []*Subject
+
+	// Parallel to AuthorizationBundle.Resources.
+	resources []*Resource
+}
+
+func (e *expandedBundle) subjectAssignedRole(_ *Subject, _ *Resource, _ *authorizationpb.Role) bool {
+	// TODO(codingllama): Support multi-user bundles
+	//  (like we would have for Enumerate or EnumerateChange).
+
+	// Always true for single-user expanded bundles.
+	return true
+}
+
+func (e *Engine) fetchBundle(
+	ctx context.Context,
+	req *authorizationpb.AuthorizeRequest,
+) (*expandedBundle, error) {
+	// AccessInfo.
+	accessInfo, err := e.resolveSubjectAccessInfo(ctx, req.Subject.Id)
+	if err != nil {
+		// err from resolveSubjectAccessInfo already redacted.
+		return nil, trace.Wrap(err)
+	}
+	subject := &Subject{
+		Subject: proto.Clone(req.Subject).(*authorizationpb.Subject),
+	}
+	// Copy traits from AccessInfo.
+	subject.Subject.Traits = &authorizationpb.Traits{}
+	for key, vals := range accessInfo.Traits {
+		subject.Subject.Traits.Traits = append(subject.Subject.Traits.Traits, &authorizationpb.Trait{
+			Key:    key,
+			Values: vals,
+		})
+	}
+
+	// Roles.
+	roleSet, err := services.FetchRoles(accessInfo.Roles, e.roleGetter, accessInfo.Traits)
+	if err != nil {
+		e.logger.WarnContext(ctx, "Explain: failed to fetch Subject roles", "error", err)
+		return nil, trace.Wrap(ErrInternal)
+	}
+	roles := make([]*authorizationpb.Role, len(roleSet))
+	for i, role := range roleSet {
+		roleV6, ok := role.(*types.RoleV6)
+		if !ok {
+			e.logger.WarnContext(ctx,
+				"Explain: failed to cast role to RoleV6",
+				"error", err,
+				"role_type", fmt.Sprintf("%T", role),
+			)
+			return nil, trace.Wrap(ErrInternal)
+		}
+
+		roles[i] = &authorizationpb.Role{
+			Resource: roleV6,
+		}
+	}
+
+	// Node.
+	node, err := e.authServer.GetNode(ctx, apidefaults.Namespace, req.Resource.Id)
+	if err != nil {
+		e.logger.DebugContext(ctx, "Authorize: failed to read node", "error", err, "name", req.Resource.Id)
+		// err swallowed on purpose, assumed to be NotFound.
+		return nil, trace.Wrap(ErrAccessDenied)
+	}
+	resource := &Resource{
+		Resource:  proto.Clone(req.Resource).(*authorizationpb.Resource),
+		checkable: node,
+	}
+	// TODO(codingllama): Combine labels with ServerInfo.
+	resource.Labels = mapToLabels(node.GetLabels())
+
+	// TODO(codingllama): ServerInfos.
+	// TODO(codingllama): AccessRequests.
+	// TODO(codingllama): AccessLists.
+
+	return &expandedBundle{
+		AuthorizationBundle: &authorizationpb.AuthorizationBundle{
+			// Users: nil,
+			Roles:     roles,
+			Resources: []*authorizationpb.Resource{resource.Resource},
+			// ServerInfos:    nil,
+			// AccessRequests: nil,
+			// AccessLists:    nil,
+		},
+		subjects:  []*Subject{subject},
+		resources: []*Resource{resource},
+	}, nil
+}
+
+func expandGrants(
+	action *authorizationpb.Action,
+	bundle *expandedBundle,
+	visit func(grant authorizationpb.Grant) (cont bool),
+) error {
+	for _, s := range bundle.subjects {
+		for _, role := range bundle.Roles {
+			source := &authorizationpb.GrantSource{
+				Kind: role.GetResource().Kind,
+				Id:   role.GetResource().GetName(),
+			}
+			for _, resource := range bundle.resources {
+				if !bundle.subjectAssignedRole(s, resource, role) {
+					continue
+				}
+				switch cont, err := expandGrant(
+					s, action, resource, role.GetResource(), source, visit); {
+				case err != nil:
+					return trace.Wrap(err)
+				case !cont:
+					return nil
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func expandGrant(
+	subject *Subject,
+	action *authorizationpb.Action,
+	resource *Resource,
+	role *types.RoleV6,
+	source *authorizationpb.GrantSource,
+	visit func(grant authorizationpb.Grant) (cont bool),
+) (cont bool, err error) {
+	// TODO(codingllama): SSH assumption.
+	var matchers services.RoleMatchers
+	if action.Login != "" {
+		matchers = append(matchers, services.NewLoginMatcher(action.Login))
+	}
+
+	// Expand deny grant.
+	ok, err := roleDenies(
+		role,
+		resource.AccessCheckable(),
+		matchers,
+		subject.GetTraits(),
+		false, /* debug */
+	)
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+	if ok {
+		// Allocations avoided on purpose.
+		if cont := visit(authorizationpb.Grant{
+			Subject:   subject.Subject,
+			Action:    action,
+			Resource:  resource.Resource,
+			Nature:    authorizationpb.GrantNature_GRANT_NATURE_DENY,
+			GrantedBy: source,
+		}); !cont {
+			return cont, nil
+		}
+	}
+
+	// Expand allow grant.
+	ok, err = roleAllows(
+		role,
+		resource.AccessCheckable(),
+		matchers,
+		subject.GetTraits(),
+		false, /* debug */
+	)
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+	if ok {
+		// Allocations avoided on purpose.
+		if cont := visit(authorizationpb.Grant{
+			Subject:   subject.Subject,
+			Action:    action,
+			Resource:  resource.Resource,
+			Nature:    authorizationpb.GrantNature_GRANT_NATURE_ALLOW,
+			GrantedBy: source,
+		}); !cont {
+			return cont, nil
+		}
+	}
+
+	return true, nil
+}
+
+type roleMatchFunc func(*types.RoleV6, services.AccessCheckable, services.RoleMatchers, wrappers.Traits, bool) (bool, error)
+
+func roleAllows(
+	role *types.RoleV6,
+	resource services.AccessCheckable,
+	matchers services.RoleMatchers,
+	traits wrappers.Traits,
+	debug bool,
+) (bool, error) {
+	return roleMatches(types.Allow, role, resource, matchers, traits, debug)
+}
+
+func roleDenies(
+	role *types.RoleV6,
+	resource services.AccessCheckable,
+	matchers services.RoleMatchers,
+	traits wrappers.Traits,
+	debug bool,
+) (bool, error) {
+	return roleMatches(types.Deny, role, resource, matchers, traits, debug)
+}
+
+func roleMatches(
+	cond types.RoleConditionType,
+	role *types.RoleV6,
+	resource services.AccessCheckable,
+	matchers services.RoleMatchers,
+	traits wrappers.Traits,
+	debug bool,
+) (bool, error) {
+	// Ideally we want to rewrite AccessChecker so it uses rbac.Engine, not the
+	// other way around.
+
+	match, _, err := services.CheckRoleLabelsMatch(cond, role, traits, resource, debug)
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+	if !match {
+		return false, nil
+	}
+	if cond == types.Deny {
+		// Denies are eager.
+		return true, nil
+	}
+
+	if cond == types.Allow {
+		match, err = matchers.MatchAll(role, cond)
+	} else {
+		// TODO(codingllama): Capture/log matcher somehow?
+		match, _, err = matchers.MatchAny(role, cond)
+	}
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+
+	// TODO(codingllama): Verify MFA and trusted device?
+
+	return match, nil
+}
+
+func mapToLabels(m map[string]string) *authorizationpb.Labels {
+	labels := &authorizationpb.Labels{
+		Labels: make([]*authorizationpb.Label, 0, len(m)),
+	}
+	for key, value := range m {
+		labels.Labels = append(labels.Labels, &authorizationpb.Label{
+			Key:    key,
+			Values: []string{value},
+		})
+	}
+	return labels
 }
