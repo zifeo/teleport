@@ -179,6 +179,7 @@ RUN curl --proto =https --tlsv1.2 -fsSL https://sh.rustup.rs | \
 		armv7-unknown-linux-gnueabi
 
 ENV PATH=/opt/go/bin:${CARGO_HOME}/bin:${THIRDPARTY_DIR}/host/bin:${PATH}
+ENV THIRDPARTY_DIR=${THIRDPARTY_DIR}
 
 # Set CARGO_HOME and GOPATH to somewhere writable as the user of the buildbox
 # will have a UID/GID different to the buildbox user.
