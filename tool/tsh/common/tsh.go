@@ -1195,6 +1195,7 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 	vnetAdminSetupCmd := newVnetAdminSetupCommand(app)
 
 	canICmd := newCanICommand(app)
+	explainCmd := newExplainCommand(app)
 
 	if runtime.GOOS == constants.WindowsOS {
 		bench.Hidden()
@@ -1565,6 +1566,8 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 
 	case canICmd.ssh.FullCommand():
 		err = canICmd.ssh.run(&cf)
+	case explainCmd.ssh.FullCommand():
+		err = explainCmd.ssh.run(&cf)
 
 	default:
 		// Handle commands that might not be available.

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -60,9 +61,58 @@ type canISSHCommand struct {
 }
 
 func (c *canISSHCommand) run(cf *CLIConf) error {
-	tmp := strings.Split(c.userHost, "@")
+	ctx := cf.Context
+	err := makeNodeAuthorizeRequests(
+		cf,
+		c.userHost,
+		func(
+			authzClient authorizationpb.AuthorizationServiceClient,
+			req *authorizationpb.AuthorizeRequest,
+			_ *clientpb.PaginatedResource,
+			singleNodeMatch bool,
+		) error {
+			nodeID := req.Resource.GetId()
+
+			// TODO(codingllama): Authorize the entire page at once with BatchAuthorize.
+			_, err := authzClient.Authorize(ctx, req)
+
+			var outcome string
+			if err == nil {
+				outcome = "yes"
+			} else if err != nil {
+				slog.DebugContext(ctx,
+					"Authorization failed or denied",
+					"error", err,
+					"node", nodeID,
+				)
+				outcome = "no"
+			}
+
+			if singleNodeMatch {
+				fmt.Printf("%s\n", outcome)
+			} else {
+				fmt.Printf("Node %s: %s\n", nodeID, outcome)
+			}
+
+			return nil
+		},
+	)
+	return trace.Wrap(err)
+}
+
+func makeNodeAuthorizeRequests(
+	cf *CLIConf,
+	userHost string,
+	visit func(
+		authzClient authorizationpb.AuthorizationServiceClient,
+		req *authorizationpb.AuthorizeRequest,
+		resource *clientpb.PaginatedResource,
+		singleNodeMatch bool,
+	) error,
+) error {
+	tmp := strings.Split(userHost, "@")
 	if len(tmp) != 2 || tmp[0] == "" || tmp[1] == "" {
-		return trace.BadParameter("user@host spec invalid: %q", c.userHost)
+		return trace.BadParameter("user@host spec invalid: %q", userHost)
 	}
 	user := tmp[0]
 	host := tmp[1]
@@ -100,37 +150,6 @@ func (c *canISSHCommand) run(cf *CLIConf) error {
 	defer clusterClient.Close()
 	defer authClient.Close()
 
-	isAuthorized := func(nodeID string) bool {
-		_, err := authzClient.Authorize(ctx, &authorizationpb.AuthorizeRequest{
-			Subject: &authorizationpb.Subject{
-				SubjectState: &authorizationpb.SubjectState{
-					MfaVerified:    true, // clear all checks
-					DeviceVerified: true, // clear all checks
-				},
-			},
-			Action: &authorizationpb.Action{
-				Verb:  "access",
-				Login: user,
-			},
-			Resource: &authorizationpb.Resource{
-				Kind: types.KindNode,
-				Id:   nodeID,
-			},
-			// Override non-state Subject fields with current the identity.
-			UseCallerAsSubject: true,
-		})
-		if err == nil {
-			return true
-		}
-
-		slog.DebugContext(ctx,
-			"Authorization failed or denied",
-			"error", err,
-			"node", nodeID,
-		)
-		return false
-	}
-
 	firstPage := true
 	return trace.Wrap(
 		findNodesByHostname(
@@ -144,20 +163,29 @@ func (c *canISSHCommand) run(cf *CLIConf) error {
 				firstPage = false
 
 				for _, resource := range page {
-					name := resource.GetNode().GetName()
+					nodeID := resource.GetNode().GetName()
 
-					// TODO(codingllama): Authorize the entire page at once with BatchAuthorize.
-					var outcome string
-					if isAuthorized(name) {
-						outcome = "yes"
-					} else {
-						outcome = "no"
+					req := &authorizationpb.AuthorizeRequest{
+						Subject: &authorizationpb.Subject{
+							SubjectState: &authorizationpb.SubjectState{
+								MfaVerified:    true, // pass all checks
+								DeviceVerified: true, // pass all checks
+							},
+						},
+						Action: &authorizationpb.Action{
+							Verb:  "access",
+							Login: user,
+						},
+						Resource: &authorizationpb.Resource{
+							Kind: types.KindNode,
+							Id:   nodeID,
+						},
+						// Override non-state Subject fields with current the identity.
+						UseCallerAsSubject: true,
 					}
 
-					if singleNodeMatch {
-						fmt.Printf("%s\n", outcome)
-					} else {
-						fmt.Printf("Node %s: %s\n", name, outcome)
+					if err := visit(authzClient, req, resource, singleNodeMatch); err != nil {
+						return trace.Wrap(err)
 					}
 				}
 
@@ -166,12 +194,32 @@ func (c *canISSHCommand) run(cf *CLIConf) error {
 	)
 }
 
+var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 func findNodesByHostname(
 	ctx context.Context,
 	authClient authclient.ClientI,
 	hostname string,
 	visit func(page []*clientpb.PaginatedResource, hasMorePages bool) error,
 ) error {
+	// TODO(codingllama): Hacky hack!
+	//  Users can't query nodes they don't have access to, but if you know the
+	//  node ID you can see the deny rules taking place. (For now.)
+	if uuidRE.MatchString(hostname) {
+		node := &clientpb.PaginatedResource{
+			Resource: &clientpb.PaginatedResource_Node{
+				Node: &types.ServerV2{
+					Kind: types.KindNode,
+					Metadata: types.Metadata{
+						Name: hostname,
+					},
+					Spec: types.ServerSpecV2{},
+				},
+			},
+		}
+		return trace.Wrap(visit([]*clientpb.PaginatedResource{node}, false /* hasMorePages */))
+	}
+
 	var pageToken string
 	for {
 		resourcesResp, err := authClient.ListUnifiedResources(ctx, &clientpb.ListUnifiedResourcesRequest{
@@ -207,4 +255,130 @@ func findNodesByHostname(
 		}
 	}
 	return nil
+}
+func newExplainCommand(app *kingpin.Application) *explainCommand {
+	explain := &explainCommand{
+		ssh: &explainSSHCommand{},
+	}
+
+	root := app.Command("explain", "Explain RBAC decisions")
+	explain.CmdClause = root
+
+	ssh := root.Command("ssh", "Explain SSH RBAC decisions")
+	explain.ssh.CmdClause = ssh
+	ssh.Arg("user@host", "SSH user and host").Required().StringVar(&explain.ssh.userHost)
+
+	return explain
+}
+
+type explainCommand struct {
+	*kingpin.CmdClause
+
+	ssh *explainSSHCommand
+}
+
+type explainSSHCommand struct {
+	*kingpin.CmdClause
+
+	userHost string
+}
+
+func (c *explainSSHCommand) run(cf *CLIConf) error {
+	ctx := cf.Context
+
+	first := true
+	err := makeNodeAuthorizeRequests(
+		cf,
+		c.userHost,
+		func(
+			authzClient authorizationpb.AuthorizationServiceClient,
+			req *authorizationpb.AuthorizeRequest,
+			_ *clientpb.PaginatedResource,
+			_ bool,
+		) error {
+			resp, err := authzClient.Explain(ctx, &authorizationpb.ExplainRequest{
+				AuthorizeRequest: req,
+			})
+			if err != nil {
+				return trace.Wrap(err)
+			}
+
+			if first {
+				first = false
+			} else {
+				fmt.Println()
+			}
+
+			fmt.Printf("Explain access to node %v\n", req.Resource.GetId())
+			fmt.Printf("Outcome: %v\n", resp.Outcome)
+			if len(resp.Reasons) > 0 {
+				fmt.Printf("Reasons: %v\n", resp.Reasons)
+			}
+			fmt.Printf("Effective grant: %v\n", grantToString(resp.EffectiveGrant))
+			fmt.Print("All grants: ")
+			for _, grant := range resp.AllGrants {
+				fmt.Printf("\t%v\n", grantToString(grant))
+			}
+
+			return nil
+		},
+	)
+	return trace.Wrap(err)
+}
+
+func grantToString(g *authorizationpb.Grant) string {
+	if g == nil {
+		return "nil"
+	}
+
+	var buf strings.Builder
+	buf.WriteRune('(')
+	// Subject (kind/id)
+	if kind := g.Subject.GetKind(); kind != "" {
+		buf.WriteString(kind)
+		buf.WriteRune('/')
+	}
+	buf.WriteString(g.Subject.GetId())
+	// Action
+	buf.WriteString(", ")
+	buf.WriteString(g.Action.GetVerb())
+	// Resource (kind/id)
+	buf.WriteString(", ")
+	if kind := g.Resource.GetKind(); kind != "" {
+		buf.WriteString(kind)
+		buf.WriteRune('/')
+	}
+	buf.WriteString(g.Resource.GetId())
+	// Nature
+	buf.WriteString(", ")
+	switch g.Nature {
+	case authorizationpb.GrantNature_GRANT_NATURE_UNSPECIFIED:
+		buf.WriteString("nature=UNSPECIFIED")
+	case authorizationpb.GrantNature_GRANT_NATURE_ALLOW:
+		buf.WriteString("ALLOW")
+	case authorizationpb.GrantNature_GRANT_NATURE_DENY:
+		buf.WriteString("DENY")
+	default:
+		buf.WriteString("nature=")
+		buf.WriteString(g.Nature.String())
+	}
+	// Login
+	if g.Action.GetLogin() != "" {
+		buf.WriteString(", ")
+		buf.WriteString("login=")
+		buf.WriteString(g.Action.Login)
+	}
+	// GrantedBy.
+	if g.GrantedBy != nil {
+		buf.WriteString(", ")
+		buf.WriteString("grantedBy=")
+		if kind := g.GrantedBy.Kind; kind != "" {
+			buf.WriteString(g.GrantedBy.Kind)
+			buf.WriteRune('/')
+		}
+		buf.WriteString(g.GrantedBy.Id)
+	}
+	buf.WriteRune(')')
+
+	return buf.String()
 }
