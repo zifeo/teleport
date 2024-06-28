@@ -23,6 +23,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/gravitational/teleport/api/client/kubeprovision"
 	"io"
 	"log/slog"
 	"net"
@@ -72,6 +73,7 @@ import (
 	externalauditstoragev1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/externalauditstorage/v1"
 	integrationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/integration/v1"
 	kubeproto "github.com/gravitational/teleport/api/gen/proto/go/teleport/kube/v1"
+	kubeprovisionv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/kubeprovision/v1"
 	kubewaitingcontainerpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/kubewaitingcontainer/v1"
 	loginrulepb "github.com/gravitational/teleport/api/gen/proto/go/teleport/loginrule/v1"
 	machineidv1pb "github.com/gravitational/teleport/api/gen/proto/go/teleport/machineid/v1"
@@ -4602,6 +4604,11 @@ func (c *Client) DatabaseObjectImportRuleClient() dbobjectimportrulev1.DatabaseO
 // DatabaseObjectClient returns a client for managing database objects.
 func (c *Client) DatabaseObjectClient() dbobjectv1.DatabaseObjectServiceClient {
 	return dbobjectv1.NewDatabaseObjectServiceClient(c.conn)
+}
+
+// KubeProvisionServiceClient returns a client for managing kube provisions.
+func (c *Client) KubeProvisionServiceClient() *kubeprovision.Client {
+	return kubeprovision.NewClient(kubeprovisionv1.NewKubeProvisionServiceClient(c.conn))
 }
 
 // DiscoveryConfigClient returns a DiscoveryConfig client.

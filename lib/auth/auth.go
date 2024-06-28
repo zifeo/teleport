@@ -246,6 +246,12 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 			return nil, trace.Wrap(err)
 		}
 	}
+	if cfg.KubeProvisions == nil {
+		cfg.KubeProvisions, err = local.NewKubeProvisionService(cfg.Backend)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
 	if cfg.ConnectionsDiagnostic == nil {
 		cfg.ConnectionsDiagnostic = local.NewConnectionsDiagnosticService(cfg.Backend)
 	}
@@ -290,6 +296,12 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 	}
 	if cfg.DatabaseObjects == nil {
 		cfg.DatabaseObjects, err = local.NewDatabaseObjectService(cfg.Backend)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+	if cfg.KubeProvision == nil {
+		cfg.KubeProvision, err = local.NewKubeProvisionService(cfg.Backend)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -421,6 +433,7 @@ func NewServer(cfg *InitConfig, opts ...ServerOption) (*Server, error) {
 		Notifications:             cfg.Notifications,
 		AccessMonitoringRules:     cfg.AccessMonitoringRules,
 		CrownJewels:               cfg.CrownJewels,
+		KubeProvisions:            cfg.KubeProvisions,
 		BotInstance:               cfg.BotInstance,
 	}
 
@@ -597,6 +610,7 @@ type Services struct {
 	services.AccessMonitoringRules
 	services.CrownJewels
 	services.BotInstance
+	services.KubeProvisions
 }
 
 // SecReportsClient returns the security reports client.

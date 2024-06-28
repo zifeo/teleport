@@ -110,6 +110,8 @@ type UserACL struct {
 	AccessMonitoringRule ResourceAccess `json:"accessMonitoringRule"`
 	// CrownJewel defines access to manage CrownJewel resources.
 	CrownJewel ResourceAccess `json:"crownJewel"`
+	// KubeProvision defines access to manage KubeProvision resources.
+	KubeProvisions ResourceAccess `json:"KubeProvisions"`
 }
 
 func hasAccess(roleSet RoleSet, ctx *Context, kind string, verbs ...string) bool {

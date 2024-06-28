@@ -211,6 +211,9 @@ type InitConfig struct {
 	// CrownJewels is a service that manages CrownJewels.
 	CrownJewels services.CrownJewels
 
+	// KubeProvisions is a service that manages KubeProvisions.
+	KubeProvisions services.KubeProvisions
+
 	// Integrations is a service that manages Integrations.
 	Integrations services.Integrations
 
@@ -231,6 +234,9 @@ type InitConfig struct {
 
 	// Kubernetes is a service that manages kubernetes cluster resources.
 	Kubernetes services.Kubernetes
+
+	// KubeProvision is a service that manages kube provision resources.
+	KubeProvision services.KubeProvisions
 
 	// AssertionReplayService is a service that mitigates SSO assertion replay.
 	*local.AssertionReplayService
