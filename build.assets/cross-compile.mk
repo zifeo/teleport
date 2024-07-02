@@ -146,6 +146,15 @@ install-clang: configure-clang
 			install-clang-resource-headers \
 			install-libclang
 
+boringssl_VERSION = fips-20210429
+boringssl_GIT_REF = $(boringssl_VERSION)
+boringssl_GIT_REF_HASH = 853ca1ea1168dff08011e5d42d94609cc0ca2e27
+boringssl_GIT_REPO = https://github.com/google/boringssl
+boringssl_SRCDIR = $(call tp-src-dir,boringssl)
+
+.PHONY: build-boringssl
+build-boringssl: fetch-git-boringssl
+
 # =============================================================================
 # Environment setup for building with ctng toolchain
 #
