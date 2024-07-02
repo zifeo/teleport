@@ -133,6 +133,7 @@ RUN apt-get update && apt-get install -y \
     git \
     libtool \
     make \
+    ninja-build \
     pkg-config \
     sed \
     w3m \
@@ -181,7 +182,8 @@ RUN curl --proto =https --tlsv1.2 -fsSL https://sh.rustup.rs | \
 ENV PATH=/opt/go/bin:${CARGO_HOME}/bin:${THIRDPARTY_DIR}/host/bin:${PATH}
 ENV THIRDPARTY_DIR=${THIRDPARTY_DIR}
 
-# Set CARGO_HOME and GOPATH to somewhere writable as the user of the buildbox
+# Set CARGO_HOME, GOPATH and GOCACHE to somewhere writable as the user of the buildbox
 # will have a UID/GID different to the buildbox user.
 ENV CARGO_HOME=/tmp/cargo
 ENV GOPATH=/tmp/go
+ENV GOCACHE=/tmp/go/cache
