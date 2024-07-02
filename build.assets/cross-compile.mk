@@ -153,10 +153,10 @@ install-clang: configure-clang
 # USE_CTNG is `no` or empty.
 
 CTNG_TARGET = $(CTNG_TARGET_$(ARCH))
-CTNG_TARGET_amd64 = x86_64-glibc217-linux-gnu
-CTNG_TARGET_arm64 = aarch64-glibc217-linux-gnu
-CTNG_TARGET_386 = i686-glibc217-linux-gnu
-CTNG_TARGET_arm = armv7-glibc217-linux-gnueabi
+CTNG_TARGET_amd64 = x86_64-unknown-linux-gnu
+CTNG_TARGET_arm64 = aarch64-unknown-linux-gnu
+CTNG_TARGET_386 = i686-unknown-linux-gnu
+CTNG_TARGET_arm = armv7-unknown-linux-gnueabi
 
 # The crosstool/toolchain architecture is a little different to the Go
 # architecture. It's possible that this is just libpam specific as that
