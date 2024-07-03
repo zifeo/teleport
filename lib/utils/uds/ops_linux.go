@@ -26,14 +26,19 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
-	"unsafe"
 
 	"github.com/gravitational/trace"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sys/unix"
 )
 
-const sunPathLen = int(unsafe.Sizeof(syscall.RawSockaddrUnix{}.Path))
+// sunPathLen is the size of [unix.RawSockaddrUnix.Path]; spelled out as a
+// number so that we don't have to import unsafe just for
+// unsafe.Sizeof(unix.RawSockaddrUnix{}.Path).
+const sunPathLen = 108
+
+// static check that [sunPathLen] is correct
+var _ [sunPathLen]int8 = unix.RawSockaddrUnix{}.Path
 
 // ListenUnix is like [net.ListenUnix] but with a context (or like
 // [net.ListenConfig.Listen] without a type assertion). The network must be
@@ -76,7 +81,7 @@ func (lc *ListenConfig) ListenUnix(ctx context.Context, network, path string) (*
 		// there's no way to un-unshare, so by not calling
 		// runtime.UnlockOSThread we will just throw away the thread at the end
 		// of this goroutine
-		if err := syscall.Unshare(syscall.CLONE_FS); err != nil {
+		if err := unix.Unshare(unix.CLONE_FS); err != nil {
 			if errors.Is(err, os.ErrPermission) {
 				// just joking around, who needs CLONE_FS (might as well not
 				// trash a thread tho)
@@ -146,7 +151,7 @@ func (lc *ListenConfig) ListenUnixgram(ctx context.Context, network, path string
 		// there's no way to un-unshare, so by not calling
 		// runtime.UnlockOSThread we will just throw away the thread at the end
 		// of this goroutine
-		if err := syscall.Unshare(syscall.CLONE_FS); err != nil {
+		if err := unix.Unshare(unix.CLONE_FS); err != nil {
 			if errors.Is(err, os.ErrPermission) {
 				// just joking around, who needs CLONE_FS (might as well not
 				// trash a thread tho)
@@ -216,7 +221,7 @@ func (d *Dialer) DialUnix(ctx context.Context, network, path string) (*net.UnixC
 		// there's no way to un-unshare, so by not calling
 		// runtime.UnlockOSThread we will just throw away the thread at the end
 		// of this goroutine
-		if err := syscall.Unshare(syscall.CLONE_FS); err != nil {
+		if err := unix.Unshare(unix.CLONE_FS); err != nil {
 			if errors.Is(err, os.ErrPermission) {
 				// just joking around, who needs CLONE_FS (might as well not
 				// trash a thread tho)

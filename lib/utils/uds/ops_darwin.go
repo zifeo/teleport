@@ -24,14 +24,18 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
-	"unsafe"
 
 	"github.com/gravitational/trace"
 	"golang.org/x/sys/unix"
 )
 
-const sunPathLen = int(unsafe.Sizeof(syscall.RawSockaddrUnix{}.Path))
+// sunPathLen is the size of [unix.RawSockaddrUnix.Path]; spelled out as a
+// number so that we don't have to import unsafe just for
+// unsafe.Sizeof(unix.RawSockaddrUnix{}.Path).
+const sunPathLen = 104
+
+// static check that [sunPathLen] is correct
+var _ [sunPathLen]int8 = unix.RawSockaddrUnix{}.Path
 
 // ListenUnix is like [net.ListenUnix] but with a context (or like
 // [net.ListenConfig.Listen] without a type assertion). The network must be
