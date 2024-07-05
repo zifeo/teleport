@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"slices"
 	"strings"
@@ -75,6 +76,8 @@ type Engine struct {
 	redisClient redis.UniversalClient
 	// awsIAMAuthSupported is the saved result of isAWSIAMAuthSupported.
 	awsIAMAuthSupported *bool
+	// clientMessageRead indicates processing client messages has started.
+	clientMessageRead bool
 }
 
 // InitializeConnection initializes the database connection.
@@ -141,13 +144,42 @@ func (e *Engine) checkDefaultUserRequired() error {
 
 // SendError sends error message to connected client.
 func (e *Engine) SendError(redisErr error) {
+	slog.WarnContext(e.Context, "=== sending error", "error", redisErr)
 	if redisErr == nil || utils.IsOKNetworkError(redisErr) {
 		return
 	}
 
+	// If the first message is a HELLO test, do not return authentication
+	// errors to the HELLO command as it can be swallowed by the client as part
+	// of its fallback mechanism. First return the unknown command error then
+	// send the authentication errors to the next incoming command.
+	e.maybeHandleFirstHello()
+
 	if err := e.sendToClient(redisErr); err != nil {
 		e.Log.ErrorContext(e.Context, "Failed to send message to the client.", "error", err)
 		return
+	}
+}
+
+// maybeHandleFirstHello returns an unknown command error if the first message
+// is a Hello test.
+func (e *Engine) maybeHandleFirstHello() {
+	if e.clientMessageRead {
+		return
+	}
+
+	cmd, err := e.readClientCmd(e.Context)
+	if err != nil {
+		e.Log.ErrorContext(e.Context, "Failed to read first client message.", "error", err)
+		return
+	}
+	slog.WarnContext(e.Context, "=== got command", "cmd", cmd, "name", cmd.Name())
+	if strings.ToLower(cmd.Name()) != helloCmd {
+		return
+	}
+	response := protocol.MakeUnknownCommandErrorForCmd(cmd)
+	if err := e.sendToClient(response); err != nil {
+		e.Log.ErrorContext(e.Context, "Failed to send message to the client.", "error", err)
 	}
 }
 
@@ -249,12 +281,12 @@ func (e *Engine) getNewClientFn(ctx context.Context, sessionCtx *common.Session)
 	}
 
 	return func(username, password string) (redis.UniversalClient, error) {
-		onConnect, err := e.createOnClientConnectFunc(ctx, sessionCtx, username, password)
+		credenialsProvider, err := e.createCredentialsProvider(ctx, sessionCtx, username, password)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 
-		redisClient, err := newClient(ctx, connectionOptions, tlsConfig, onConnect)
+		redisClient, err := newClient(ctx, connectionOptions, tlsConfig, credenialsProvider)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -263,9 +295,10 @@ func (e *Engine) getNewClientFn(ctx context.Context, sessionCtx *common.Session)
 	}, nil
 }
 
-// createOnClientConnectFunc creates a callback function that is called after a
-// successful client connection with the Redis server.
-func (e *Engine) createOnClientConnectFunc(ctx context.Context, sessionCtx *common.Session, username, password string) (onClientConnectFunc, error) {
+// createCredentialsProvider creates a callback function that provides username
+// and password.
+// This function may return nil, nil as nil credenialsProvider is valid.
+func (e *Engine) createCredentialsProvider(ctx context.Context, sessionCtx *common.Session, username, password string) (fetchCredentialsFunc, error) {
 	switch {
 	// If password is provided by client.
 	case password != "":
@@ -299,7 +332,7 @@ func (e *Engine) createOnClientConnectFunc(ctx context.Context, sessionCtx *comm
 		return fetchCredentialsOnConnect(e.Context, sessionCtx, e.Audit, credFetchFn), nil
 
 	default:
-		return noopOnConnect, nil
+		return nil, nil
 	}
 }
 
@@ -454,6 +487,8 @@ func (e *Engine) process(ctx context.Context, sessionCtx *common.Session) error 
 
 // readClientCmd reads commands from connected Redis client.
 func (e *Engine) readClientCmd(ctx context.Context) (*redis.Cmd, error) {
+	e.clientMessageRead = true
+
 	cmd := &redis.Cmd{}
 	if err := cmd.ReadReply(e.clientReader); err != nil {
 		return nil, trace.Wrap(err)
