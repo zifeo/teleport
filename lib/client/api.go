@@ -19,6 +19,8 @@
 package client
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -34,6 +36,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -47,6 +50,7 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/net/http2"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/term"
 	"google.golang.org/grpc"
 
 	"github.com/gravitational/teleport"
@@ -2656,6 +2660,27 @@ func commandLimit(ctx context.Context, getter roleGetter, mfaRequired bool) int 
 	}
 }
 
+func copyCompleteLines(w io.Writer, readers []io.Reader) error {
+	wg := errgroup.Group{}
+	mu := sync.Mutex{}
+	for _, r := range readers {
+		wg.Go(func() error {
+			scanner := bufio.NewScanner(r)
+			for scanner.Scan() {
+				mu.Lock()
+				b := append(scanner.Bytes(), '\n')
+				_, err := w.Write(b)
+				mu.Unlock()
+				if err != nil {
+					return trace.Wrap(err)
+				}
+			}
+			return trace.Wrap(scanner.Err())
+		})
+	}
+	return trace.Wrap(wg.Wait())
+}
+
 type execResult struct {
 	hostname   string
 	exitStatus int
@@ -2699,8 +2724,16 @@ func (tc *TeleportClient) runCommandOnNodes(ctx context.Context, clt *ClusterCli
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(commandLimit(ctx, clt.AuthClient, mfaRequiredCheck.Required))
+
+	stdoutBuffers := make([]io.Reader, 0, len(nodes))
+	stderrBuffers := make([]io.Reader, 0, len(nodes))
 	for _, node := range nodes {
 		node := node
+		stdout := &bytes.Buffer{}
+		stdoutBuffers = append(stdoutBuffers, stdout)
+		stderr := &bytes.Buffer{}
+		stderrBuffers = append(stderrBuffers, stderr)
+
 		g.Go(func() error {
 			ctx, span := tc.Tracer.Start(
 				gctx,
@@ -2733,7 +2766,12 @@ func (tc *TeleportClient) runCommandOnNodes(ctx context.Context, clt *ClusterCli
 			displayName := nodeName(node)
 			fmt.Printf("Running command on %v:\n", displayName)
 
-			if err := nodeClient.RunCommand(ctx, command, WithLabeledOutput()); err != nil && tc.ExitStatus == 0 {
+			width, _, err := term.GetSize(int(os.Stdout.Fd()))
+			if err != nil {
+				width = 0
+			}
+
+			if err := nodeClient.RunCommand(ctx, command, WithLabeledOutput(width), WithOutput(stdout, stderr)); err != nil && tc.ExitStatus == 0 {
 				fmt.Fprintln(tc.Stderr, err)
 				return nil
 			}
@@ -2744,6 +2782,9 @@ func (tc *TeleportClient) runCommandOnNodes(ctx context.Context, clt *ClusterCli
 			return nil
 		})
 	}
+
+	go copyCompleteLines(tc.Stdout, stdoutBuffers)
+	go copyCompleteLines(tc.Stderr, stderrBuffers)
 
 	// Non-command-related errors will have already been reported by the goroutines,
 	// and command-related errors will be reported in writeCommandResults.

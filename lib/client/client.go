@@ -419,28 +419,42 @@ func (c *NodeClient) RunInteractiveShell(ctx context.Context, mode types.Session
 
 // lineLabeledWriter is an io.Writer that prepends a label to each line it writes.
 type lineLabeledWriter struct {
-	linePrefix        []byte
-	w                 io.Writer
-	shouldWritePrefix bool
+	linePrefix    []byte
+	w             io.Writer
+	maxLineLength int
+
+	shouldWritePrefix   bool
+	currentLineProgress int
 }
 
-func newLineLabeledWriter(w io.Writer, label string) io.Writer {
-	return &lineLabeledWriter{
-		linePrefix:        []byte(fmt.Sprintf("[%v] ", label)),
-		w:                 w,
-		shouldWritePrefix: true,
+func newLineLabeledWriter(w io.Writer, label string, maxLineLength int) (io.Writer, error) {
+	prefix := []byte(fmt.Sprintf("[%v] ", label))
+	var lineLength int
+	if maxLineLength != 0 {
+		lineLength = maxLineLength - len(prefix)
+		if lineLength <= 0 {
+			return nil, trace.BadParameter("maxLineLength of %v is too short", maxLineLength)
+		}
 	}
+	return &lineLabeledWriter{
+		linePrefix:        prefix,
+		w:                 w,
+		maxLineLength:     lineLength,
+		shouldWritePrefix: true,
+	}, nil
 }
 
 func (lw *lineLabeledWriter) writeChunk(b []byte, bytesWritten int, newline bool) (int, error) {
 	n, err := lw.w.Write(b)
 	bytesWritten += n
+	lw.currentLineProgress += n
 	if err != nil {
 		return bytesWritten, trace.Wrap(err)
 	}
 	if newline {
 		n, err = lw.w.Write([]byte("\n"))
 		bytesWritten += n
+		lw.currentLineProgress = 0
 	}
 	return bytesWritten, trace.Wrap(err)
 }
@@ -451,7 +465,15 @@ func (lw *lineLabeledWriter) Write(input []byte) (int, error) {
 	rest := input
 	var found bool
 	for {
-		line, rest, found = bytes.Cut(rest, []byte("\n"))
+		orig := rest
+		line, rest, found = bytes.Cut(orig, []byte("\n"))
+		// If we overflowed a line, cut a little earlier.
+		if lw.maxLineLength != 0 && lw.currentLineProgress+len(line) > lw.maxLineLength {
+			linePortion := lw.maxLineLength - lw.currentLineProgress
+			line = orig[:linePortion]
+			rest = orig[linePortion:]
+			found = true
+		}
 		// Write the prefix unless we're either continuing a line from the last
 		// write or we're at the end.
 		if lw.shouldWritePrefix && (len(line) > 0 || found) {
@@ -480,7 +502,10 @@ func (lw *lineLabeledWriter) Write(input []byte) (int, error) {
 
 // RunCommandOptions is a set of options for NodeClient.RunCommand.
 type RunCommandOptions struct {
-	labelLines bool
+	labelLines    bool
+	maxLineLength int
+	stdout        io.Writer
+	stderr        io.Writer
 }
 
 // RunCommandOption is a functional argument for NodeClient.RunCommand.
@@ -488,9 +513,17 @@ type RunCommandOption func(opts *RunCommandOptions)
 
 // WithLabeledOutput labels each line of output from a command with the node's
 // hostname.
-func WithLabeledOutput() RunCommandOption {
+func WithLabeledOutput(maxLineLength int) RunCommandOption {
 	return func(opts *RunCommandOptions) {
 		opts.labelLines = true
+		opts.maxLineLength = maxLineLength
+	}
+}
+
+func WithOutput(stdout, stderr io.Writer) RunCommandOption {
+	return func(opts *RunCommandOptions) {
+		opts.stdout = stdout
+		opts.stderr = stderr
 	}
 }
 
@@ -509,12 +542,25 @@ func (c *NodeClient) RunCommand(ctx context.Context, command []string, opts ...R
 	}
 
 	// Set up output streams
-	stdout := c.TC.Stdout
-	stderr := c.TC.Stderr
+	stdout := options.stdout
+	if stdout == nil {
+		stdout = c.TC.Stdout
+	}
+	stderr := options.stderr
+	if stderr == nil {
+		stderr = c.TC.Stderr
+	}
 	if c.hostname != "" {
 		if options.labelLines {
-			stdout = newLineLabeledWriter(c.TC.Stdout, c.hostname)
-			stderr = newLineLabeledWriter(c.TC.Stderr, c.hostname)
+			var err error
+			stdout, err = newLineLabeledWriter(c.TC.Stdout, c.hostname, options.maxLineLength)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+			stderr, err = newLineLabeledWriter(c.TC.Stderr, c.hostname, options.maxLineLength)
+			if err != nil {
+				return trace.Wrap(err)
+			}
 		}
 
 		if c.sshLogDir != "" {
