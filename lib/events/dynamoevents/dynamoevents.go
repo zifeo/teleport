@@ -27,20 +27,20 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	awssession "github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/applicationautoscaling"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/applicationautoscaling"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/smithy-go"
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
@@ -51,8 +51,9 @@ import (
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/backend/dynamo"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
-	dynamometrics "github.com/gravitational/teleport/lib/observability/metrics/dynamo"
+	"github.com/gravitational/teleport/lib/modules"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -72,24 +73,24 @@ const (
 )
 
 // Defines the attribute schema for the DynamoDB event table and index.
-var tableSchema = []*dynamodb.AttributeDefinition{
+var tableSchema = []dynamodbtypes.AttributeDefinition{
 	// Existing attributes pre RFD 24.
 	{
 		AttributeName: aws.String(keySessionID),
-		AttributeType: aws.String("S"),
+		AttributeType: dynamodbtypes.ScalarAttributeTypeS,
 	},
 	{
 		AttributeName: aws.String(keyEventIndex),
-		AttributeType: aws.String("N"),
+		AttributeType: dynamodbtypes.ScalarAttributeTypeN,
 	},
 	{
 		AttributeName: aws.String(keyCreatedAt),
-		AttributeType: aws.String("N"),
+		AttributeType: dynamodbtypes.ScalarAttributeTypeN,
 	},
 	// New attribute in RFD 24.
 	{
 		AttributeName: aws.String(keyDate),
-		AttributeType: aws.String("S"),
+		AttributeType: dynamodbtypes.ScalarAttributeTypeS,
 	},
 }
 
@@ -117,15 +118,15 @@ type Config struct {
 	DisableConflictCheck bool
 
 	// ReadMaxCapacity is the maximum provisioned read capacity.
-	ReadMaxCapacity int64
+	ReadMaxCapacity int32
 	// ReadMinCapacity is the minimum provisioned read capacity.
-	ReadMinCapacity int64
+	ReadMinCapacity int32
 	// ReadTargetValue is the ratio of consumed read to provisioned capacity.
 	ReadTargetValue float64
 	// WriteMaxCapacity is the maximum provisioned write capacity.
-	WriteMaxCapacity int64
+	WriteMaxCapacity int32
 	// WriteMinCapacity is the minimum provisioned write capacity.
-	WriteMinCapacity int64
+	WriteMinCapacity int32
 	// WriteTargetValue is the ratio of consumed write to provisioned capacity.
 	WriteTargetValue float64
 
@@ -204,10 +205,7 @@ type Log struct {
 	*log.Entry
 	// Config is a backend configuration
 	Config
-	svc dynamodbiface.DynamoDBAPI
-
-	// session holds the AWS client.
-	session *awssession.Session
+	dbClient *dynamodb.Client
 }
 
 type event struct {
@@ -266,43 +264,38 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	b := &Log{
-		Entry:  l,
-		Config: cfg,
+
+	opts := []func(*config.LoadOptions) error{
+		config.WithRegion(cfg.Region),
+		config.WithHTTPClient(&http.Client{
+			Transport: &http.Transport{
+				Proxy:               http.ProxyFromEnvironment,
+				MaxIdleConns:        defaults.HTTPMaxIdleConns,
+				MaxIdleConnsPerHost: defaults.HTTPMaxIdleConnsPerHost,
+			},
+		}),
 	}
 
-	awsConfig := aws.Config{}
+	if modules.GetModules().IsBoringBinary() && cfg.UseFIPSEndpoint == types.ClusterAuditConfigSpecV2_FIPS_ENABLED {
+		opts = append(opts, config.WithUseFIPSEndpoint(aws.FIPSEndpointStateEnabled))
+	}
 
-	// Override the default environment's region if value set in YAML file:
-	if cfg.Region != "" {
-		awsConfig.Region = aws.String(cfg.Region)
+	awsConfig, err := config.LoadDefaultConfig(ctx, opts...)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	b := &Log{
+		Entry:    l,
+		Config:   cfg,
+		dbClient: dynamodb.NewFromConfig(awsConfig),
 	}
 
 	// Override the service endpoint using the "endpoint" query parameter from
 	// "audit_events_uri". This is for non-AWS DynamoDB-compatible backends.
-	if cfg.Endpoint != "" {
-		awsConfig.Endpoint = aws.String(cfg.Endpoint)
-	}
-
-	b.session, err = awssession.NewSessionWithOptions(awssession.Options{
-		SharedConfigState: awssession.SharedConfigEnable,
-		Config:            awsConfig,
-	})
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	// Create DynamoDB service.
-	svc, err := dynamometrics.NewAPIMetrics(dynamometrics.Events, dynamodb.New(b.session, &aws.Config{
-		// Setting this on the individual service instead of the session, as DynamoDB Streams
-		// and Application Auto Scaling do not yet have FIPS endpoints in non-GovCloud.
-		// See also: https://aws.amazon.com/compliance/fips/#FIPS_Endpoints_by_Service
-		UseFIPSEndpoint: events.FIPSProtoStateToAWSState(cfg.UseFIPSEndpoint),
-	}))
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	b.svc = svc
+	//if cfg.Endpoint != "" {
+	//	awsConfig.Endpoint = aws.String(cfg.Endpoint)
+	//}
 
 	// check if the table exists?
 	ts, err := b.getTableStatus(ctx, b.Tablename)
@@ -320,21 +313,23 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	err = dynamo.TurnOnTimeToLive(ctx, b.svc, b.Tablename, keyExpires)
+	err = dynamo.TurnOnTimeToLive(ctx, b.dbClient, b.Tablename, keyExpires)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	// Enable continuous backups if requested.
 	if b.Config.EnableContinuousBackups {
-		if err := dynamo.SetContinuousBackups(ctx, b.svc, b.Tablename); err != nil {
+		if err := dynamo.SetContinuousBackups(ctx, b.dbClient, b.Tablename); err != nil {
 			return nil, trace.Wrap(err)
 		}
 	}
 
 	// Enable auto scaling if requested.
 	if b.Config.EnableAutoScaling {
-		if err := dynamo.SetAutoScaling(ctx, applicationautoscaling.New(b.session), dynamo.GetTableID(b.Tablename), dynamo.AutoScalingParams{
+		autoscalingClient := applicationautoscaling.NewFromConfig(awsConfig)
+
+		if err := dynamo.SetAutoScaling(ctx, autoscalingClient, dynamo.GetTableID(b.Tablename), dynamo.AutoScalingParams{
 			ReadMinCapacity:  b.Config.ReadMinCapacity,
 			ReadMaxCapacity:  b.Config.ReadMaxCapacity,
 			ReadTargetValue:  b.Config.ReadTargetValue,
@@ -345,7 +340,7 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 			return nil, trace.Wrap(err)
 		}
 
-		if err := dynamo.SetAutoScaling(ctx, applicationautoscaling.New(b.session), dynamo.GetIndexID(b.Tablename, indexTimeSearchV2), dynamo.AutoScalingParams{
+		if err := dynamo.SetAutoScaling(ctx, autoscalingClient, dynamo.GetIndexID(b.Tablename, indexTimeSearchV2), dynamo.AutoScalingParams{
 			ReadMinCapacity:  b.Config.ReadMinCapacity,
 			ReadMaxCapacity:  b.Config.ReadMaxCapacity,
 			ReadTargetValue:  b.Config.ReadTargetValue,
@@ -451,7 +446,7 @@ func (l *Log) putAuditEvent(ctx context.Context, sessionID string, in apievents.
 		return trace.Wrap(err)
 	}
 
-	if _, err = l.svc.PutItemWithContext(ctx, input); err != nil {
+	if _, err = l.dbClient.PutItem(ctx, input); err != nil {
 		err = convertError(err)
 
 		switch {
@@ -492,7 +487,7 @@ func (l *Log) createPutItem(sessionID string, in apievents.AuditEvent) (*dynamod
 		CreatedAtDate:  in.GetTime().Format(iso8601DateFormat),
 	}
 	l.setExpiry(&e)
-	av, err := dynamodbattribute.MarshalMap(e)
+	av, err := attributevalue.MarshalMap(e)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -546,7 +541,7 @@ type checkpointKey struct {
 	Date string `json:"date,omitempty"`
 
 	// A DynamoDB query iterator. Allows us to resume a partial query.
-	Iterator map[string]*dynamodb.AttributeValue `json:"iterator,omitempty"`
+	Iterator map[string]dynamodbtypes.AttributeValue `json:"iterator,omitempty"`
 
 	// EventKey is a derived identifier for an event used for resuming
 	// sub-page breaks due to size constraints.
@@ -674,11 +669,11 @@ func (l *Log) searchEventsRaw(ctx context.Context, fromUTC, toUTC time.Time, nam
 	}
 
 	indexName := aws.String(indexTimeSearchV2)
-	var left int64
+	var left int32
 	if limit != 0 {
-		left = int64(limit)
+		left = int32(limit)
 	} else {
-		left = math.MaxInt64
+		left = math.MaxInt32
 	}
 
 	// Resume scanning at the correct date. We need to do this because we send individual queries per date
@@ -730,7 +725,7 @@ func (l *Log) searchEventsRaw(ctx context.Context, fromUTC, toUTC time.Time, nam
 		fromUTC:    fromUTC,
 		toUTC:      toUTC,
 		tableName:  l.Tablename,
-		api:        l.svc,
+		api:        l.dbClient,
 		forward:    forward,
 		indexName:  indexName,
 		filter:     filter,
@@ -771,7 +766,7 @@ func GetCreatedAtFromStartKey(startKey string) (time.Time, error) {
 		return time.Time{}, errors.New("missing iterator")
 	}
 	var e event
-	if err := dynamodbattribute.UnmarshalMap(checkpoint.Iterator, &e); err != nil {
+	if err := attributevalue.UnmarshalMap(checkpoint.Iterator, &e); err != nil {
 		return time.Time{}, trace.Wrap(err)
 	}
 	if e.CreatedAt <= 0 {
@@ -921,7 +916,7 @@ func fromWhereExpr(cond *types.WhereExpr, params *condFilterParams) (string, err
 
 // getTableStatus checks if a given table exists
 func (l *Log) getTableStatus(ctx context.Context, tableName string) (tableStatus, error) {
-	_, err := l.svc.DescribeTableWithContext(ctx, &dynamodb.DescribeTableInput{
+	_, err := l.dbClient.DescribeTable(ctx, &dynamodb.DescribeTableInput{
 		TableName: aws.String(tableName),
 	})
 	err = convertError(err)
@@ -936,7 +931,7 @@ func (l *Log) getTableStatus(ctx context.Context, tableName string) (tableStatus
 
 // indexExists checks if a given index exists on a given table and that it is active or updating.
 func (l *Log) indexExists(ctx context.Context, tableName, indexName string) (bool, error) {
-	tableDescription, err := l.svc.DescribeTableWithContext(ctx, &dynamodb.DescribeTableInput{
+	tableDescription, err := l.dbClient.DescribeTable(ctx, &dynamodb.DescribeTableInput{
 		TableName: aws.String(tableName),
 	})
 	if err != nil {
@@ -944,7 +939,7 @@ func (l *Log) indexExists(ctx context.Context, tableName, indexName string) (boo
 	}
 
 	for _, gsi := range tableDescription.Table.GlobalSecondaryIndexes {
-		if *gsi.IndexName == indexName && (*gsi.IndexStatus == dynamodb.IndexStatusActive || *gsi.IndexStatus == dynamodb.IndexStatusUpdating) {
+		if *gsi.IndexName == indexName && (gsi.IndexStatus == dynamodbtypes.IndexStatusActive || gsi.IndexStatus == dynamodbtypes.IndexStatusUpdating) {
 			return true, nil
 		}
 	}
@@ -958,18 +953,18 @@ func (l *Log) indexExists(ctx context.Context, tableName, indexName string) (boo
 // currently is always set to "FullPath" (used to be something else, that's
 // why it's a parameter for migration purposes)
 func (l *Log) createTable(ctx context.Context, tableName string) error {
-	provisionedThroughput := dynamodb.ProvisionedThroughput{
+	provisionedThroughput := dynamodbtypes.ProvisionedThroughput{
 		ReadCapacityUnits:  aws.Int64(l.ReadCapacityUnits),
 		WriteCapacityUnits: aws.Int64(l.WriteCapacityUnits),
 	}
-	elems := []*dynamodb.KeySchemaElement{
+	elems := []dynamodbtypes.KeySchemaElement{
 		{
 			AttributeName: aws.String(keySessionID),
-			KeyType:       aws.String("HASH"),
+			KeyType:       dynamodbtypes.KeyTypeHash,
 		},
 		{
 			AttributeName: aws.String(keyEventIndex),
-			KeyType:       aws.String("RANGE"),
+			KeyType:       dynamodbtypes.KeyTypeRange,
 		},
 	}
 	c := dynamodb.CreateTableInput{
@@ -977,38 +972,41 @@ func (l *Log) createTable(ctx context.Context, tableName string) error {
 		AttributeDefinitions:  tableSchema,
 		KeySchema:             elems,
 		ProvisionedThroughput: &provisionedThroughput,
-		GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
+		GlobalSecondaryIndexes: []dynamodbtypes.GlobalSecondaryIndex{
 			{
 				IndexName: aws.String(indexTimeSearchV2),
-				KeySchema: []*dynamodb.KeySchemaElement{
+				KeySchema: []dynamodbtypes.KeySchemaElement{
 					{
 						// Partition by date instead of namespace.
 						AttributeName: aws.String(keyDate),
-						KeyType:       aws.String("HASH"),
+						KeyType:       dynamodbtypes.KeyTypeHash,
 					},
 					{
 						AttributeName: aws.String(keyCreatedAt),
-						KeyType:       aws.String("RANGE"),
+						KeyType:       dynamodbtypes.KeyTypeRange,
 					},
 				},
-				Projection: &dynamodb.Projection{
-					ProjectionType: aws.String("ALL"),
+				Projection: &dynamodbtypes.Projection{
+					ProjectionType: dynamodbtypes.ProjectionTypeAll,
 				},
 				ProvisionedThroughput: &provisionedThroughput,
 			},
 		},
 	}
-	_, err := l.svc.CreateTableWithContext(ctx, &c)
+	_, err := l.dbClient.CreateTable(ctx, &c)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	log.Infof("Waiting until table %q is created", tableName)
-	err = l.svc.WaitUntilTableExistsWithContext(ctx, &dynamodb.DescribeTableInput{
-		TableName: aws.String(tableName),
-	})
+	waiter := dynamodb.NewTableExistsWaiter(l.dbClient)
+	err = waiter.Wait(ctx,
+		&dynamodb.DescribeTableInput{TableName: aws.String(tableName)},
+		time.Hour,
+	)
 	if err == nil {
 		log.Infof("Table %q has been created", tableName)
 	}
+
 	return trace.Wrap(err)
 }
 
@@ -1019,15 +1017,15 @@ func (l *Log) Close() error {
 
 // deleteAllItems deletes all items from the database, used in tests
 func (l *Log) deleteAllItems(ctx context.Context) error {
-	out, err := l.svc.ScanWithContext(ctx, &dynamodb.ScanInput{TableName: aws.String(l.Tablename)})
+	out, err := l.dbClient.Scan(ctx, &dynamodb.ScanInput{TableName: aws.String(l.Tablename)})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	var requests []*dynamodb.WriteRequest
+	var requests []dynamodbtypes.WriteRequest
 	for _, item := range out.Items {
-		requests = append(requests, &dynamodb.WriteRequest{
-			DeleteRequest: &dynamodb.DeleteRequest{
-				Key: map[string]*dynamodb.AttributeValue{
+		requests = append(requests, dynamodbtypes.WriteRequest{
+			DeleteRequest: &dynamodbtypes.DeleteRequest{
+				Key: map[string]dynamodbtypes.AttributeValue{
 					keySessionID:  item[keySessionID],
 					keyEventIndex: item[keyEventIndex],
 				},
@@ -1043,8 +1041,8 @@ func (l *Log) deleteAllItems(ctx context.Context) error {
 		chunk := requests[:top]
 		requests = requests[top:]
 
-		_, err := l.svc.BatchWriteItemWithContext(ctx, &dynamodb.BatchWriteItemInput{
-			RequestItems: map[string][]*dynamodb.WriteRequest{
+		_, err := l.dbClient.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]dynamodbtypes.WriteRequest{
 				l.Tablename: chunk,
 			},
 		})
@@ -1060,15 +1058,20 @@ func (l *Log) deleteAllItems(ctx context.Context) error {
 // deleteTable deletes DynamoDB table with a given name
 func (l *Log) deleteTable(ctx context.Context, tableName string, wait bool) error {
 	tn := aws.String(tableName)
-	_, err := l.svc.DeleteTableWithContext(ctx, &dynamodb.DeleteTableInput{TableName: tn})
+	_, err := l.dbClient.DeleteTable(ctx, &dynamodb.DeleteTableInput{TableName: tn})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if wait {
-		return trace.Wrap(
-			l.svc.WaitUntilTableNotExistsWithContext(ctx, &dynamodb.DescribeTableInput{TableName: tn}))
+	if !wait {
+		return nil
 	}
-	return nil
+
+	waiter := dynamodb.NewTableNotExistsWaiter(l.dbClient)
+
+	return trace.Wrap(waiter.Wait(ctx,
+		&dynamodb.DescribeTableInput{TableName: tn},
+		time.Hour,
+	))
 }
 
 var errAWSValidation = errors.New("aws validation error")
@@ -1077,34 +1080,47 @@ func convertError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var aerr awserr.Error
-	if !errors.As(err, &aerr) {
-		return err
+
+	var conditionalCheckFailedError *dynamodbtypes.ConditionalCheckFailedException
+	if errors.As(err, &conditionalCheckFailedError) {
+		return trace.AlreadyExists(conditionalCheckFailedError.ErrorMessage())
 	}
 
-	switch aerr.Code() {
-	case dynamodb.ErrCodeConditionalCheckFailedException:
-		return trace.AlreadyExists(aerr.Error())
-	case dynamodb.ErrCodeProvisionedThroughputExceededException:
-		return trace.ConnectionProblem(aerr, aerr.Error())
-	case dynamodb.ErrCodeResourceNotFoundException:
-		return trace.NotFound(aerr.Error())
-	case dynamodb.ErrCodeItemCollectionSizeLimitExceededException:
-		return trace.BadParameter(aerr.Error())
-	case dynamodb.ErrCodeInternalServerError:
-		return trace.BadParameter(aerr.Error())
-	case ErrValidationException:
-		// A ValidationException  type is missing from AWS SDK.
-		// Use errAWSValidation that for most cases will contain:
-		// "Item size has exceeded the maximum allowed size" AWS validation error.
-		return trace.Wrap(errAWSValidation, aerr.Error())
-	default:
-		return err
+	var throughputExceededError *dynamodbtypes.ProvisionedThroughputExceededException
+	if errors.As(err, &throughputExceededError) {
+		return trace.ConnectionProblem(throughputExceededError, throughputExceededError.ErrorMessage())
 	}
+
+	var notFoundError *dynamodbtypes.ResourceNotFoundException
+	if errors.As(err, &notFoundError) {
+		return trace.NotFound(notFoundError.ErrorMessage())
+	}
+
+	var collectionLimitExceededError *dynamodbtypes.ItemCollectionSizeLimitExceededException
+	if errors.As(err, &notFoundError) {
+		return trace.BadParameter(collectionLimitExceededError.ErrorMessage())
+	}
+
+	var internalError *dynamodbtypes.InternalServerError
+	if errors.As(err, &internalError) {
+		return trace.BadParameter(internalError.ErrorMessage())
+	}
+
+	var ae smithy.APIError
+	if errors.As(err, &ae) {
+		if ae.ErrorCode() == ErrValidationException {
+			// A ValidationException  type is missing from AWS SDK.
+			// Use errAWSValidation that for most cases will contain:
+			// "Item size has exceeded the maximum allowed size" AWS validation error.
+			return trace.Wrap(errAWSValidation, ae.ErrorMessage())
+		}
+	}
+
+	return err
 }
 
 type query interface {
-	QueryWithContext(ctx context.Context, input *dynamodb.QueryInput, opts ...request.Option) (*dynamodb.QueryOutput, error)
+	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 }
 
 type eventsFetcher struct {
@@ -1116,7 +1132,7 @@ type eventsFetcher struct {
 	checkpoint *checkpointKey
 	foundStart bool
 	dates      []string
-	left       int64
+	left       int32
 
 	fromUTC   time.Time
 	toUTC     time.Time
@@ -1133,7 +1149,7 @@ func (l *eventsFetcher) processQueryOutput(output *dynamodb.QueryOutput, hasLeft
 
 	for _, item := range output.Items {
 		var e event
-		if err := dynamodbattribute.UnmarshalMap(item, &e); err != nil {
+		if err := attributevalue.UnmarshalMap(item, &e); err != nil {
 			return nil, false, trace.WrapWithMessage(err, "failed to unmarshal event")
 		}
 		data, err := json.Marshal(e.FieldsMap)
@@ -1188,10 +1204,6 @@ func (l *eventsFetcher) processQueryOutput(output *dynamodb.QueryOutput, hasLeft
 
 func (l *eventsFetcher) QueryByDateIndex(ctx context.Context, filterExpr *string) (values []event, err error) {
 	query := "CreatedAtDate = :date AND CreatedAt BETWEEN :start and :end"
-	var attributeNames map[string]*string
-	if len(l.filter.condParams.attrNames) > 0 {
-		attributeNames = aws.StringMap(l.filter.condParams.attrNames)
-	}
 
 dateLoop:
 	for i, date := range l.dates {
@@ -1206,7 +1218,7 @@ dateLoop:
 			attributes[fmt.Sprintf(":eventType%d", i)] = eventType
 		}
 		maps.Copy(attributes, l.filter.condParams.attrValues)
-		attributeValues, err := dynamodbattribute.MarshalMap(attributes)
+		attributeValues, err := attributevalue.MarshalMap(attributes)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -1214,16 +1226,16 @@ dateLoop:
 			input := dynamodb.QueryInput{
 				KeyConditionExpression:    aws.String(query),
 				TableName:                 aws.String(l.tableName),
-				ExpressionAttributeNames:  attributeNames,
+				ExpressionAttributeNames:  l.filter.condParams.attrNames,
 				ExpressionAttributeValues: attributeValues,
 				IndexName:                 aws.String(indexTimeSearchV2),
 				ExclusiveStartKey:         l.checkpoint.Iterator,
-				Limit:                     aws.Int64(l.left),
+				Limit:                     aws.Int32(l.left),
 				FilterExpression:          filterExpr,
 				ScanIndexForward:          aws.Bool(l.forward),
 			}
 			start := time.Now()
-			out, err := l.api.QueryWithContext(ctx, &input)
+			out, err := l.api.Query(ctx, &input)
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
@@ -1267,10 +1279,6 @@ dateLoop:
 
 func (l *eventsFetcher) QueryBySessionIDIndex(ctx context.Context, sessionID string, filterExpr *string) (values []event, err error) {
 	query := "SessionID = :id"
-	var attributeNames map[string]*string
-	if len(l.filter.condParams.attrNames) > 0 {
-		attributeNames = aws.StringMap(l.filter.condParams.attrNames)
-	}
 
 	attributes := map[string]interface{}{
 		":id": sessionID,
@@ -1280,23 +1288,23 @@ func (l *eventsFetcher) QueryBySessionIDIndex(ctx context.Context, sessionID str
 	}
 	maps.Copy(attributes, l.filter.condParams.attrValues)
 
-	attributeValues, err := dynamodbattribute.MarshalMap(attributes)
+	attributeValues, err := attributevalue.MarshalMap(attributes)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	input := dynamodb.QueryInput{
 		KeyConditionExpression:    aws.String(query),
 		TableName:                 aws.String(l.tableName),
-		ExpressionAttributeNames:  attributeNames,
+		ExpressionAttributeNames:  l.filter.condParams.attrNames,
 		ExpressionAttributeValues: attributeValues,
 		IndexName:                 nil, // Use primary SessionID index.
 		ExclusiveStartKey:         l.checkpoint.Iterator,
-		Limit:                     aws.Int64(l.left),
+		Limit:                     aws.Int32(l.left),
 		FilterExpression:          filterExpr,
 		ScanIndexForward:          aws.Bool(l.forward),
 	}
 	start := time.Now()
-	out, err := l.api.QueryWithContext(ctx, &input)
+	out, err := l.api.Query(ctx, &input)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
