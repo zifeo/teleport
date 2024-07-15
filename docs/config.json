@@ -655,37 +655,59 @@
           "slug": "/management/introduction/"
         },
         {
-          "title": "Using Dynamic Resources",
-          "slug": "/management/dynamic-resources/",
+          "title": "Using Infrastructure as Code",
+          "slug": "/management/infrastructure-as-code/",
           "entries": [
+	    {
+	    	"title": "Terraform Starter Setup",
+	    	"slug": "/management/infrastructure-as-code/terraform-starter/",
+	    	"entries": [
+		    {
+		    	"title": "Part 1: Enroll Resources",
+		    	"slug": "/management/infrastructure-as-code/terraform-starter/enroll-resources/"
+		    },
+		    {
+		    	"title": "Part 2: Configure RBAC",
+		    	"slug":  "/management/infrastructure-as-code/terraform-starter/rbac/"
+		    }
+		]
+	    },
             {
-              "title": "Managing Users and Roles",
-              "slug": "/management/dynamic-resources/user-and-role/"
-            },
-            {
-              "title": "Registering Agentless OpenSSH",
-              "slug": "/management/dynamic-resources/agentless-ssh-servers/"
-            },
-            {
-              "title": "Managing Access Lists",
-              "slug": "/management/dynamic-resources/access-list/"
-            },
+            	"title": "Managing Resources",
+            	"slug": "/management/infrastructure-as-code/managing-resources/managing-resources/",
+            	"entries": [
+                  {
+                    "title": "Managing Users and Roles",
+                    "slug": "/management/infrastructure-as-code/managing-resources/user-and-role/"
+                  },
+                  {
+                    "title": "Registering Agentless OpenSSH",
+                    "slug": "/management/infrastructure-as-code/managing-resources/agentless-ssh-servers/"
+                  },
+                  {
+                    "title": "Managing Access Lists",
+                    "slug": "/management/infrastructure-as-code/managing-resources/access-list/"
+                  }
+                ]
+	    },
             {
               "title": "Kubernetes Operator",
-              "slug": "/management/dynamic-resources/teleport-operator/"
-            },
-            {
-              "title": "Kubernetes Operator in teleport-cluster Helm chart",
-              "slug": "/management/dynamic-resources/teleport-operator-helm/",
-              "forScopes": ["oss","enterprise"]
-            },
-            {
-              "title": "Standalone Kubernetes Operator",
-              "slug": "/management/dynamic-resources/teleport-operator-standalone/"
+              "slug": "/management/infrastructure-as-code/teleport-operator/",
+              "entries": [
+                {
+                  "title": "Kubernetes Operator in teleport-cluster Helm chart",
+                  "slug": "/management/infrastructure-as-code/teleport-operator/teleport-operator-helm/",
+                  "forScopes": ["oss","enterprise"]
+                },
+                {
+                  "title": "Standalone Kubernetes Operator",
+                  "slug": "/management/infrastructure-as-code/teleport-operator/teleport-operator-standalone/"
+                }
+	      ]
             },
             {
               "title": "Set up the Terraform Provider",
-              "slug": "/management/dynamic-resources/terraform-provider/"
+              "slug": "/management/infrastructure-as-code/terraform-provider/"
             }
           ]
         },
@@ -1486,7 +1508,7 @@
     },
     {
       "source": "/agents/deploy-agents-terraform/",
-      "destination": "/enroll-resources/agents/deploy-agents-terraform/",
+      "destination": "/management/infrastructure-as-code/terraform-starter/enroll-resources/",
       "permanent": true
     },
     {
@@ -2672,6 +2694,46 @@
     {
       "source": "/user-manual/",
       "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/management/dynamic-resources/",
+      "destination": "/management/infrastructure-as-code/",
+      "permanent": true
+    },
+    {
+      "source": "/management/dynamic-resources/access-list/",
+      "destination": "/management/infrastructure-as-code/managing-resources/access-list/",
+      "permanent": true
+    },
+    {
+      "source": "/management/dynamic-resources/agentless-ssh-servers/",
+      "destination": "/management/infrastructure-as-code/managing-resources/agentless-ssh-servers/",
+      "permanent": true
+    },
+    {
+      "source": "/management/dynamic-resources/teleport-operator-helm/",
+      "destination": "/management/infrastructure-as-code/teleport-operator/teleport-operator-helm/",
+      "permanent": true
+    },
+    {
+      "source": "/management/dynamic-resources/teleport-operator-standalone/",
+      "destination": "/management/infrastructure-as-code/teleport-operator/teleport-operator-standalone/",
+      "permanent": true
+    },
+    {
+      "source": "/management/dynamic-resources/teleport-operator/",
+      "destination": "/management/infrastructure-as-code/teleport-operator/",
+      "permanent": true
+    },
+    {
+      "source": "/management/dynamic-resources/terraform-provider/",
+      "destination": "/management/infrastructure-as-code/terraform-provider/",
+      "permanent": true
+    },
+    {
+      "source": "/management/dynamic-resources/user-and-role/",
+      "destination": "/management/infrastructure-as-code/managing-resources/user-and-role/",
       "permanent": true
     }
   ]
