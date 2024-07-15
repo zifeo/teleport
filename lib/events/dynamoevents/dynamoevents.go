@@ -213,7 +213,7 @@ type event struct {
 	EventIndex     int64
 	EventType      string
 	CreatedAt      int64
-	Expires        *int64 `json:"Expires,omitempty"`
+	Expires        *int64 `json:"Expires,omitempty" dynamodbav:",omitempty"`
 	FieldsMap      events.EventFields
 	EventNamespace string
 	CreatedAtDate  string
@@ -538,14 +538,14 @@ func daysBetween(start, end time.Time) []string {
 
 type checkpointKey struct {
 	// The date that the Dynamo iterator corresponds to.
-	Date string `json:"date,omitempty"`
+	Date string `json:"date,omitempty" dynamodbav:",omitempty"`
 
 	// A DynamoDB query iterator. Allows us to resume a partial query.
-	Iterator map[string]dynamodbtypes.AttributeValue `json:"iterator,omitempty"`
+	Iterator map[string]dynamodbtypes.AttributeValue `json:"iterator,omitempty" dynamodbav:",omitempty"`
 
 	// EventKey is a derived identifier for an event used for resuming
 	// sub-page breaks due to size constraints.
-	EventKey string `json:"event_key,omitempty"`
+	EventKey string `json:"event_key,omitempty" dynamodbav:",omitempty"`
 }
 
 // SearchEvents is a flexible way to find events.

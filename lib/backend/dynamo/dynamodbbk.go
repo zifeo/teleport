@@ -180,7 +180,7 @@ type record struct {
 	FullPath  string
 	Value     []byte
 	Timestamp int64
-	Expires   *int64 `json:"Expires,omitempty"`
+	Expires   *int64 `json:"Expires,omitempty" dynamodbav:",omitempty"`
 	Revision  string
 }
 

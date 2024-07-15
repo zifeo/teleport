@@ -21,7 +21,6 @@ package dynamoevents
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"net/url"
 	"os"
@@ -30,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
@@ -64,8 +62,8 @@ func setupDynamoContext(t *testing.T) *dynamoContext {
 	fakeClock := clockwork.NewFakeClockAt(time.Now().UTC())
 
 	log, err := New(context.Background(), Config{
-		Region:       "eu-north-1",
-		Tablename:    fmt.Sprintf("teleport-test-%v", uuid.New().String()),
+		Region:       "us-east-1",
+		Tablename:    "timr-events-test",
 		Clock:        fakeClock,
 		UIDGenerator: utils.NewFakeUID(),
 	})
