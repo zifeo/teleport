@@ -536,28 +536,25 @@ func (c *NodeClient) RunCommand(ctx context.Context, command []string, opts ...R
 	)
 	defer span.End()
 
-	var options RunCommandOptions
+	options := RunCommandOptions{
+		stdout: c.TC.Stdout,
+		stderr: c.TC.Stderr,
+	}
 	for _, opt := range opts {
 		opt(&options)
 	}
 
 	// Set up output streams
 	stdout := options.stdout
-	if stdout == nil {
-		stdout = c.TC.Stdout
-	}
 	stderr := options.stderr
-	if stderr == nil {
-		stderr = c.TC.Stderr
-	}
 	if c.hostname != "" {
 		if options.labelLines {
 			var err error
-			stdout, err = newLineLabeledWriter(c.TC.Stdout, c.hostname, options.maxLineLength)
+			stdout, err = newLineLabeledWriter(options.stdout, c.hostname, options.maxLineLength)
 			if err != nil {
 				return trace.Wrap(err)
 			}
-			stderr, err = newLineLabeledWriter(c.TC.Stderr, c.hostname, options.maxLineLength)
+			stderr, err = newLineLabeledWriter(options.stderr, c.hostname, options.maxLineLength)
 			if err != nil {
 				return trace.Wrap(err)
 			}

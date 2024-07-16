@@ -6153,19 +6153,6 @@ func testList(t *testing.T, suite *integrationTestSuite) {
 	}
 }
 
-func containsSubsequence(s, subseq string) bool {
-	i := 0
-	for _, c := range []byte(s) {
-		if i == len(subseq) {
-			return true
-		}
-		if c == subseq[i] {
-			i++
-		}
-	}
-	return i == len(subseq)
-}
-
 // TestCmdLabels verifies the behavior of running commands via labels
 // with a mixture of regular and reversetunnel nodes.
 func testCmdLabels(t *testing.T, suite *integrationTestSuite) {
@@ -6201,7 +6188,7 @@ func testCmdLabels(t *testing.T, suite *integrationTestSuite) {
 	teleport := suite.NewTeleportWithConfig(t, nil, nil, makeConfig())
 	defer teleport.StopAll()
 
-	// Create and start a reversetunnel node.
+	// Create and start a node.
 	nodeConfig := func() *servicecfg.Config {
 		tconf := suite.defaultServiceConfig()
 		tconf.Hostname = "server-02"
@@ -6254,12 +6241,10 @@ func testCmdLabels(t *testing.T, suite *integrationTestSuite) {
 
 			output, err := runCommand(t, teleport, tt.command, cfg, 1)
 			require.NoError(t, err)
-			output = strings.TrimSpace(output)
-			// Output from multiple nodes occasionally interleaves, so we have to be
-			// a little creative in asserting it.
-			require.Equal(t, len(tt.expectLines)-1, strings.Count(output, "\n"))
+			outputLines := strings.Split(strings.TrimSpace(output), "\n")
+			require.Len(t, outputLines, len(tt.expectLines))
 			for _, line := range tt.expectLines {
-				require.True(t, containsSubsequence(output, line), "command output %q does not contain line %q", output, line)
+				require.Contains(t, outputLines, line)
 			}
 		})
 	}

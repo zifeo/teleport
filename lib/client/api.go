@@ -20,7 +20,6 @@ package client
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -2660,6 +2659,8 @@ func commandLimit(ctx context.Context, getter roleGetter, mfaRequired bool) int 
 	}
 }
 
+// copyCompleteLines copies data from a set of readers into a single writer
+// one complete line at a time, so the output is legible.
 func copyCompleteLines(w io.Writer, readers []io.Reader) error {
 	wg := errgroup.Group{}
 	mu := sync.Mutex{}
@@ -2667,11 +2668,13 @@ func copyCompleteLines(w io.Writer, readers []io.Reader) error {
 		wg.Go(func() error {
 			scanner := bufio.NewScanner(r)
 			for scanner.Scan() {
-				mu.Lock()
 				b := append(scanner.Bytes(), '\n')
+				mu.Lock()
 				_, err := w.Write(b)
 				mu.Unlock()
-				if err != nil {
+				if utils.IsOKNetworkError(err) {
+					return nil
+				} else if err != nil {
 					return trace.Wrap(err)
 				}
 			}
@@ -2727,12 +2730,19 @@ func (tc *TeleportClient) runCommandOnNodes(ctx context.Context, clt *ClusterCli
 
 	stdoutBuffers := make([]io.Reader, 0, len(nodes))
 	stderrBuffers := make([]io.Reader, 0, len(nodes))
+	width, _, err := term.GetSize(int(os.Stdin.Fd()))
+	if err != nil {
+		width = 0
+	}
+
 	for _, node := range nodes {
 		node := node
-		stdout := &bytes.Buffer{}
-		stdoutBuffers = append(stdoutBuffers, stdout)
-		stderr := &bytes.Buffer{}
-		stderrBuffers = append(stderrBuffers, stderr)
+		stdoutR, stdoutW := io.Pipe()
+		stdoutBuffers = append(stdoutBuffers, stdoutR)
+		defer stdoutR.Close()
+		stderrR, stderrW := io.Pipe()
+		stderrBuffers = append(stderrBuffers, stderrR)
+		defer stderrW.Close()
 
 		g.Go(func() error {
 			ctx, span := tc.Tracer.Start(
@@ -2766,12 +2776,7 @@ func (tc *TeleportClient) runCommandOnNodes(ctx context.Context, clt *ClusterCli
 			displayName := nodeName(node)
 			fmt.Printf("Running command on %v:\n", displayName)
 
-			width, _, err := term.GetSize(int(os.Stdout.Fd()))
-			if err != nil {
-				width = 0
-			}
-
-			if err := nodeClient.RunCommand(ctx, command, WithLabeledOutput(width), WithOutput(stdout, stderr)); err != nil && tc.ExitStatus == 0 {
+			if err := nodeClient.RunCommand(ctx, command, WithLabeledOutput(width), WithOutput(stdoutW, stderrW)); err != nil && tc.ExitStatus == 0 {
 				fmt.Fprintln(tc.Stderr, err)
 				return nil
 			}
