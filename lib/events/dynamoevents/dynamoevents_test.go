@@ -62,10 +62,12 @@ func setupDynamoContext(t *testing.T) *dynamoContext {
 	fakeClock := clockwork.NewFakeClockAt(time.Now().UTC())
 
 	log, err := New(context.Background(), Config{
-		Region:       "us-east-1",
-		Tablename:    "timr-events-test",
-		Clock:        fakeClock,
-		UIDGenerator: utils.NewFakeUID(),
+		Region:             "us-east-1",
+		Tablename:          "timr-events-test",
+		Clock:              fakeClock,
+		UIDGenerator:       utils.NewFakeUID(),
+		ReadCapacityUnits:  100,
+		WriteCapacityUnits: 100,
 	})
 	require.NoError(t, err)
 

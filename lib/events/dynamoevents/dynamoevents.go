@@ -45,6 +45,7 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 
 	"github.com/gravitational/teleport"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
@@ -54,6 +55,7 @@ import (
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/modules"
+	"github.com/gravitational/teleport/lib/observability/metrics"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -284,6 +286,9 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	otelaws.AppendMiddlewares(&awsConfig.APIOptions, otelaws.WithAttributeSetter(otelaws.DynamoDBAttributeSetter))
+	awsConfig.APIOptions = append(awsConfig.APIOptions, metrics.AWSPrometheusMiddleware())
 
 	b := &Log{
 		Entry:    l,
@@ -648,10 +653,13 @@ func (l *Log) searchEventsRaw(ctx context.Context, fromUTC, toUTC time.Time, nam
 
 	if startKey != "" {
 		if createdAt, err := GetCreatedAtFromStartKey(startKey); err == nil {
-			if fromUTC.After(createdAt) {
+			// we compare the cursor unix time to the from unix in order to drop the nanoseconds
+			// that are not present in the cursor.
+			if fromUTC.Unix() > createdAt.Unix() {
 				// if fromUTC is after than the cursor, we changed the window and need to reset the cursor.
 				// This is a guard check when iterating over the events using sliding window
 				// and the previous cursor no longer fits the new window.
+				fmt.Println("fromUTC is after than the cursor, we changed the window and need to reset the cursor.", fromUTC, createdAt)
 				checkpoint = checkpointKey{}
 			}
 			if createdAt.After(toUTC) {
@@ -772,7 +780,7 @@ func GetCreatedAtFromStartKey(startKey string) (time.Time, error) {
 		return time.Time{}, errors.New("createdAt is invalid")
 	}
 
-	return time.Unix(checkpoint.Iterator.CreatedAt, 0), nil
+	return time.Unix(checkpoint.Iterator.CreatedAt, 0).UTC(), nil
 }
 
 func getCheckpointFromStartKey(startKey string) (checkpointKey, error) {

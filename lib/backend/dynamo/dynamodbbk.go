@@ -42,12 +42,14 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/modules"
+	"github.com/gravitational/teleport/lib/observability/metrics"
 )
 
 func init() {
@@ -272,6 +274,9 @@ func New(ctx context.Context, params backend.Params) (*Backend, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	otelaws.AppendMiddlewares(&awsConfig.APIOptions, otelaws.WithAttributeSetter(otelaws.DynamoDBAttributeSetter))
+	awsConfig.APIOptions = append(awsConfig.APIOptions, metrics.AWSPrometheusMiddleware())
 
 	b := &Backend{
 		Entry:         l,
