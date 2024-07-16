@@ -795,7 +795,7 @@ func (b *Backend) createTable(ctx context.Context, tableName string, rangeKey st
 
 	err = waiter.Wait(ctx,
 		&dynamodb.DescribeTableInput{TableName: aws.String(tableName)},
-		time.Hour,
+		10*time.Minute,
 	)
 	if err == nil {
 		b.Infof("Table %q has been created.", tableName)

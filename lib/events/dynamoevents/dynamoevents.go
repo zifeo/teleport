@@ -998,7 +998,7 @@ func (l *Log) createTable(ctx context.Context, tableName string) error {
 	waiter := dynamodb.NewTableExistsWaiter(l.dbClient)
 	err = waiter.Wait(ctx,
 		&dynamodb.DescribeTableInput{TableName: aws.String(tableName)},
-		time.Hour,
+		10*time.Minute,
 	)
 	if err == nil {
 		log.Infof("Table %q has been created", tableName)
@@ -1067,7 +1067,7 @@ func (l *Log) deleteTable(ctx context.Context, tableName string, wait bool) erro
 
 	return trace.Wrap(waiter.Wait(ctx,
 		&dynamodb.DescribeTableInput{TableName: tn},
-		time.Hour,
+		10*time.Minute,
 	))
 }
 
