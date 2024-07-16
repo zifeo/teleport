@@ -541,7 +541,7 @@ type checkpointKey struct {
 	Date string `json:"date,omitempty" dynamodbav:",omitempty"`
 
 	// A DynamoDB query iterator. Allows us to resume a partial query.
-	Iterator map[string]dynamodbtypes.AttributeValue `json:"iterator,omitempty" dynamodbav:",omitempty"`
+	Iterator *event `json:"iterator,omitempty" dynamodbav:",omitempty"`
 
 	// EventKey is a derived identifier for an event used for resuming
 	// sub-page breaks due to size constraints.
@@ -765,17 +765,14 @@ func GetCreatedAtFromStartKey(startKey string) (time.Time, error) {
 	if checkpoint.Iterator == nil {
 		return time.Time{}, errors.New("missing iterator")
 	}
-	var e event
-	if err := attributevalue.UnmarshalMap(checkpoint.Iterator, &e); err != nil {
-		return time.Time{}, trace.Wrap(err)
-	}
-	if e.CreatedAt <= 0 {
+
+	if checkpoint.Iterator.CreatedAt <= 0 {
 		// Value <= 0 means that either createdAt was not returned or
 		// it has 0 values, either way, we can't use that value.
 		return time.Time{}, errors.New("createdAt is invalid")
 	}
 
-	return time.Unix(e.CreatedAt, 0), nil
+	return time.Unix(checkpoint.Iterator.CreatedAt, 0), nil
 }
 
 func getCheckpointFromStartKey(startKey string) (checkpointKey, error) {
@@ -1145,7 +1142,14 @@ type eventsFetcher struct {
 func (l *eventsFetcher) processQueryOutput(output *dynamodb.QueryOutput, hasLeftFun func() bool) ([]event, bool, error) {
 	var out []event
 	oldIterator := l.checkpoint.Iterator
-	l.checkpoint.Iterator = output.LastEvaluatedKey
+
+	if output.LastEvaluatedKey != nil {
+		var iter event
+		if err := attributevalue.UnmarshalMap(output.LastEvaluatedKey, &iter); err != nil {
+			return nil, false, trace.Wrap(err)
+		}
+		l.checkpoint.Iterator = &iter
+	}
 
 	for _, item := range output.Items {
 		var e event
@@ -1194,7 +1198,7 @@ func (l *eventsFetcher) processQueryOutput(output *dynamodb.QueryOutput, hasLeft
 			if hasLeftFun != nil {
 				hf = hasLeftFun()
 			}
-			l.hasLeft = hf || len(l.checkpoint.Iterator) != 0
+			l.hasLeft = hf || l.checkpoint.Iterator == nil
 			l.checkpoint.EventKey = ""
 			return out, true, nil
 		}
@@ -1222,6 +1226,7 @@ dateLoop:
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
+
 		for {
 			input := dynamodb.QueryInput{
 				KeyConditionExpression:    aws.String(query),
@@ -1229,11 +1234,18 @@ dateLoop:
 				ExpressionAttributeNames:  l.filter.condParams.attrNames,
 				ExpressionAttributeValues: attributeValues,
 				IndexName:                 aws.String(indexTimeSearchV2),
-				ExclusiveStartKey:         l.checkpoint.Iterator,
 				Limit:                     aws.Int32(l.left),
 				FilterExpression:          filterExpr,
 				ScanIndexForward:          aws.Bool(l.forward),
 			}
+
+			if l.checkpoint.Iterator != nil {
+				input.ExclusiveStartKey, err = attributevalue.MarshalMap(l.checkpoint.Iterator)
+				if err != nil {
+					return nil, trace.Wrap(err)
+				}
+			}
+
 			start := time.Now()
 			out, err := l.api.Query(ctx, &input)
 			if err != nil {
@@ -1264,12 +1276,12 @@ dateLoop:
 				// from the same date and the request's iterator to fetch the remainder of the page.
 				// If the input iterator is empty but the EventKey is not, we need to resume the query from the same date
 				// and we shouldn't move to the next date.
-				if i < len(l.dates)-1 && len(l.checkpoint.Iterator) == 0 && l.checkpoint.EventKey == "" {
+				if i < len(l.dates)-1 && l.checkpoint.Iterator == nil && l.checkpoint.EventKey == "" {
 					l.checkpoint.Date = l.dates[i+1]
 				}
 				return values, nil
 			}
-			if len(l.checkpoint.Iterator) == 0 {
+			if l.checkpoint.Iterator == nil {
 				continue dateLoop
 			}
 		}
@@ -1292,17 +1304,25 @@ func (l *eventsFetcher) QueryBySessionIDIndex(ctx context.Context, sessionID str
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
 	input := dynamodb.QueryInput{
 		KeyConditionExpression:    aws.String(query),
 		TableName:                 aws.String(l.tableName),
 		ExpressionAttributeNames:  l.filter.condParams.attrNames,
 		ExpressionAttributeValues: attributeValues,
 		IndexName:                 nil, // Use primary SessionID index.
-		ExclusiveStartKey:         l.checkpoint.Iterator,
 		Limit:                     aws.Int32(l.left),
 		FilterExpression:          filterExpr,
 		ScanIndexForward:          aws.Bool(l.forward),
 	}
+
+	if l.checkpoint.Iterator != nil {
+		input.ExclusiveStartKey, err = attributevalue.MarshalMap(l.checkpoint.Iterator)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+
 	start := time.Now()
 	out, err := l.api.Query(ctx, &input)
 	if err != nil {
