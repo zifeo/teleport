@@ -1117,7 +1117,7 @@ func convertError(err error) error {
 			// A ValidationException  type is missing from AWS SDK.
 			// Use errAWSValidation that for most cases will contain:
 			// "Item size has exceeded the maximum allowed size" AWS validation error.
-			return trace.Wrap(errAWSValidation, ae.ErrorMessage())
+			return trace.Wrap(errAWSValidation, ae.Error())
 		}
 	}
 
