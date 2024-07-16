@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math"
 	"net/http"
@@ -546,7 +547,7 @@ type checkpointKey struct {
 	Date string `json:"date,omitempty" dynamodbav:",omitempty"`
 
 	// A DynamoDB query iterator. Allows us to resume a partial query.
-	Iterator *event `json:"iterator,omitempty" dynamodbav:",omitempty"`
+	Iterator string `json:"iterator,omitempty" dynamodbav:",omitempty"`
 
 	// EventKey is a derived identifier for an event used for resuming
 	// sub-page breaks due to size constraints.
@@ -770,17 +771,22 @@ func GetCreatedAtFromStartKey(startKey string) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, trace.Wrap(err)
 	}
-	if checkpoint.Iterator == nil {
+	if checkpoint.Iterator == "" {
 		return time.Time{}, errors.New("missing iterator")
 	}
 
-	if checkpoint.Iterator.CreatedAt <= 0 {
+	var e event
+	if err := json.Unmarshal([]byte(checkpoint.Iterator), &e); err != nil {
+		return time.Time{}, trace.Wrap(err)
+	}
+
+	if e.CreatedAt <= 0 {
 		// Value <= 0 means that either createdAt was not returned or
 		// it has 0 values, either way, we can't use that value.
 		return time.Time{}, errors.New("createdAt is invalid")
 	}
 
-	return time.Unix(checkpoint.Iterator.CreatedAt, 0).UTC(), nil
+	return time.Unix(e.CreatedAt, 0).UTC(), nil
 }
 
 func getCheckpointFromStartKey(startKey string) (checkpointKey, error) {
@@ -1152,11 +1158,18 @@ func (l *eventsFetcher) processQueryOutput(output *dynamodb.QueryOutput, hasLeft
 	oldIterator := l.checkpoint.Iterator
 
 	if output.LastEvaluatedKey != nil {
-		var iter event
-		if err := attributevalue.UnmarshalMap(output.LastEvaluatedKey, &iter); err != nil {
+		m := make(map[string]any)
+		if err := attributevalue.UnmarshalMap(output.LastEvaluatedKey, &m); err != nil {
 			return nil, false, trace.Wrap(err)
 		}
-		l.checkpoint.Iterator = &iter
+
+		iter, err := json.Marshal(&m)
+		if err != nil {
+			return nil, false, err
+		}
+		l.checkpoint.Iterator = string(iter)
+	} else {
+		l.checkpoint.Iterator = ""
 	}
 
 	for _, item := range output.Items {
@@ -1206,7 +1219,7 @@ func (l *eventsFetcher) processQueryOutput(output *dynamodb.QueryOutput, hasLeft
 			if hasLeftFun != nil {
 				hf = hasLeftFun()
 			}
-			l.hasLeft = hf || l.checkpoint.Iterator == nil
+			l.hasLeft = hf || l.checkpoint.Iterator != ""
 			l.checkpoint.EventKey = ""
 			return out, true, nil
 		}
@@ -1247,8 +1260,14 @@ dateLoop:
 				ScanIndexForward:          aws.Bool(l.forward),
 			}
 
-			if l.checkpoint.Iterator != nil {
-				input.ExclusiveStartKey, err = attributevalue.MarshalMap(l.checkpoint.Iterator)
+			if l.checkpoint.Iterator != "" {
+				m := make(map[string]any)
+				err = json.Unmarshal([]byte(l.checkpoint.Iterator), &m)
+				if err != nil {
+					return nil, trace.Wrap(err)
+				}
+
+				input.ExclusiveStartKey, err = attributevalue.MarshalMap(&m)
 				if err != nil {
 					return nil, trace.Wrap(err)
 				}
@@ -1284,12 +1303,12 @@ dateLoop:
 				// from the same date and the request's iterator to fetch the remainder of the page.
 				// If the input iterator is empty but the EventKey is not, we need to resume the query from the same date
 				// and we shouldn't move to the next date.
-				if i < len(l.dates)-1 && l.checkpoint.Iterator == nil && l.checkpoint.EventKey == "" {
+				if i < len(l.dates)-1 && l.checkpoint.Iterator == "" && l.checkpoint.EventKey == "" {
 					l.checkpoint.Date = l.dates[i+1]
 				}
 				return values, nil
 			}
-			if l.checkpoint.Iterator == nil {
+			if l.checkpoint.Iterator == "" {
 				continue dateLoop
 			}
 		}
@@ -1324,11 +1343,17 @@ func (l *eventsFetcher) QueryBySessionIDIndex(ctx context.Context, sessionID str
 		ScanIndexForward:          aws.Bool(l.forward),
 	}
 
-	if l.checkpoint.Iterator != nil {
-		input.ExclusiveStartKey, err = attributevalue.MarshalMap(l.checkpoint.Iterator)
+	if l.checkpoint.Iterator != "" {
+		m := make(map[string]string)
+		if err = json.Unmarshal([]byte(l.checkpoint.Iterator), &m); err != nil {
+			return nil, trace.Wrap(err)
+		}
+
+		input.ExclusiveStartKey, err = attributevalue.MarshalMap(&m)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
+		slog.DebugContext(context.Background(), "---- SETTING START KEY", "key", input.ExclusiveStartKey)
 	}
 
 	start := time.Now()
