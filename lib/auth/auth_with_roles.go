@@ -5232,13 +5232,13 @@ func (a *ServerWithRoles) SignDatabaseCSR(ctx context.Context, req *proto.Databa
 
 // TODO
 func (a *ServerWithRoles) SignGitHubUserCert(ctx context.Context, req *proto.SignGitHubUserCertRequest) (*proto.SignGitHubUserCertResponse, error) {
-	if !a.hasBuiltinRole(types.RoleApp) {
+	if !a.hasBuiltinRole(types.RoleApp, types.RoleProxy) {
 		return nil, trace.AccessDenied("this request can only be executed by an app service")
 	}
 	return a.authServer.SignGitHubUserCert(ctx, req)
 }
 func (a *ServerWithRoles) GenerateGitServerCert(ctx context.Context, req *proto.GenerateGitServerCertRequest) (*proto.GenerateGitServerCertResponse, error) {
-	if !a.hasBuiltinRole(types.RoleApp) {
+	if !a.hasBuiltinRole(types.RoleApp, types.RoleProxy) {
 		return nil, trace.AccessDenied("this request can only be executed by an app service")
 	}
 	return a.authServer.GenerateGitServerCert(ctx, req)

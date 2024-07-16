@@ -86,6 +86,9 @@ type Application interface {
 	GetIntegration() string
 	// GetGitHubOrganization will return the organzation for GitHub apps.
 	GetGitHubOrganization() string
+
+	// TODO
+	ShouldRunOnProxy() bool
 }
 
 // NewAppV3 creates a new app resource.
@@ -405,6 +408,10 @@ func (a *AppV3) GetGitHubOrganization() string {
 	}
 	// TODO maybe do a proper url.Parse.
 	return strings.TrimPrefix(a.GetURI(), "github://")
+}
+
+func (a *AppV3) ShouldRunOnProxy() bool {
+	return a.IsGitHub() || a.GetIntegration() != ""
 }
 
 // IsEqual determines if two application resources are equivalent to one another.

@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -64,9 +65,11 @@ type transportConfig struct {
 	log          logrus.FieldLogger
 	clock        clockwork.Clock
 
-	// integrationAppHandler is used to handle App proxy requests for Apps that are configured to use an Integration.
-	// Instead of proxying the connection to an AppService, the app is immediately proxied from the Proxy.
-	integrationAppHandler ServerHandler
+	// proxyAppHandler is used handle Apps that can be handled on the Proxy
+	// without forwarding to an app agent:
+	// - apps that are configured to use an Integration.
+	// - GitHub apps
+	proxyAppHandler ServerHandler
 }
 
 // Check validates configuration.
@@ -92,7 +95,7 @@ func (c *transportConfig) Check() error {
 	if c.clusterName == "" {
 		return trace.BadParameter("cluster name missing")
 	}
-	if c.integrationAppHandler == nil {
+	if c.proxyAppHandler == nil {
 		return trace.BadParameter("integration app handler missing")
 	}
 	if c.log == nil {
@@ -364,10 +367,10 @@ func (t *transport) DialContext(ctx context.Context, _, _ string) (conn net.Conn
 	for ; i < len(servers); i++ {
 		appServer := servers[i]
 
-		appIntegration := appServer.GetApp().GetIntegration()
-		if appIntegration != "" {
+		slog.DebugContext(ctx, "=== ShouldRunOnProxy", "should", appServer.GetApp().ShouldRunOnProxy())
+		if appServer.GetApp().ShouldRunOnProxy() {
 			src, dst := net.Pipe()
-			go t.c.integrationAppHandler.HandleConnection(src)
+			go t.c.proxyAppHandler.HandleConnection(src)
 			return dst, nil
 		}
 
@@ -449,6 +452,8 @@ func dialAppServer(ctx context.Context, proxyClient reversetunnelclient.Tunnel, 
 // mutual authentication.
 func configureTLS(c *transportConfig) (*tls.Config, error) {
 	tlsConfig := utils.TLSConfig(c.cipherSuites)
+	// TODO
+	tlsConfig.ClientSessionCache = nil
 
 	// Configure the pool of certificates that will be used to verify the
 	// identity of the server. This allows the client to verify the identity of

@@ -320,6 +320,8 @@ func (c *ConnectionsHandler) expireSessions() {
 // be passed to http.Serve to process as a HTTP request.
 func (c *ConnectionsHandler) HandleConnection(conn net.Conn) {
 	ctx := context.Background()
+	c.log.WarnContext(ctx, "=== ConnectionsHandler.HandleConnection", "conn", conn)
+	defer c.log.WarnContext(ctx, "=== ConnectionsHandler.HandleConnection done", "conn", conn)
 
 	// Wrap conn in a CloserConn to detect when it is closed.
 	// Returning early will close conn before it has been serviced.
@@ -596,9 +598,11 @@ func (c *ConnectionsHandler) handleConnection(conn net.Conn) (func(), error) {
 		return nil, trace.Wrap(err)
 	}
 
+	c.log.WarnContext(ctx, "=== handleConnection", "conn", conn)
 	// Proxy sends a X.509 client certificate to pass identity information,
 	// extract it and run authorization checks on it.
 	tlsConn, user, app, err := c.getConnectionInfo(c.closeContext, tc)
+	c.log.WarnContext(ctx, "=== handleConnection.getconnectionInfo", "tlsConn", tlsConn, "user", user, "app", "err", err)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}

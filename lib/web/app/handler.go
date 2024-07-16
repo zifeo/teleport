@@ -63,6 +63,7 @@ type HandlerConfig struct {
 	CipherSuites []uint16
 	// WebPublicAddr
 	WebPublicAddr string
+	// TODO
 	// IntegrationAppHandler handles App Access requests directly - not requiring an AppService.
 	// Only available for AWS OIDC Integrations.
 	IntegrationAppHandler ServerHandler
@@ -151,8 +152,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleConnection handles connections from plain TCP applications.
-// TODO do we need to differentiate TCP vs GitHub applications?
 func (h *Handler) HandleConnection(ctx context.Context, clientConn net.Conn) error {
+	h.log.Debugf("=== incoming app connection")
 	defer clientConn.Close()
 
 	tlsConn, ok := clientConn.(utils.TLSConn)
@@ -204,14 +205,40 @@ func (h *Handler) HandleConnection(ctx context.Context, clientConn net.Conn) err
 		return trace.Wrap(err)
 	}
 
+	h.log.Debugf("=== HandleConnection.DialContext")
 	serverConn, err := session.tr.DialContext(ctx, "", "")
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	defer serverConn.Close()
 
+	/*
+		ca, err := session.tr.c.accessPoint.GetCertAuthority(context.TODO(), types.CertAuthID{
+			Type:       types.HostCA,
+			DomainName: session.tr.c.identity.RouteToApp.ClusterName,
+		}, false)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		certPool, err := services.CertPool(ca)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		certificate, err := tls.X509KeyPair(session.ws.GetTLSCert(), session.ws.GetPriv())
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		clone := utils.TLSConfig(session.tr.c.cipherSuites)
+		clone.Certificates = []tls.Certificate{certificate}
+		clone.ServerName = apiutils.EncodeClusterName(session.tr.c.clusterName)
+		clone.RootCAs = certPool
+		clone := session.tr.clientTLSConfig.Clone()
+		clone.ClientSessionCache = nil
+	*/
+
 	serverConn = tls.Client(serverConn, session.tr.clientTLSConfig)
 
+	h.log.Debugf("=== HandleConnection.ProxyConn")
 	err = utils.ProxyConn(ctx, clientConn, serverConn)
 	if err != nil {
 		return trace.Wrap(err)
@@ -480,6 +507,7 @@ func (h *Handler) getAppSessionFromCookie(r *http.Request) (types.WebSession, er
 // application service. Always checks if the session is valid first and if so,
 // will return a cached session, otherwise will create one.
 func (h *Handler) getSession(ctx context.Context, ws types.WebSession) (*session, error) {
+	h.log.Debugf("=== getting session %s", ws.GetName())
 	// If a cached session exists, return it right away.
 	session, err := h.cache.get(ws.GetName())
 	if err == nil {

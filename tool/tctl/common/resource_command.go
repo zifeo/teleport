@@ -879,7 +879,8 @@ func (rc *ResourceCommand) createAppServer(ctx context.Context, client *authclie
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if appServer.GetApp().GetIntegration() == "" {
+	// TODO
+	if appServer.GetApp().GetIntegration() == "" && !appServer.GetApp().IsGitHub() {
 		return trace.BadParameter("only applications that use an integration can be created")
 	}
 	if _, err := client.UpsertApplicationServer(ctx, appServer); err != nil {
