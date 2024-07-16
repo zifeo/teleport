@@ -1359,12 +1359,14 @@ func TestCopyCompleteLines(t *testing.T) {
 		"4321",
 		"8765",
 	}
+	// Create 4 readers, each of which will gradually write 2 lines.
 	readers := make([]io.Reader, 0, 4)
 	for i := 0; i < len(lines); i += 2 {
 		buf := bytes.NewBufferString(fmt.Sprintf("%s\n%s", lines[i], lines[i+1]))
 		readers = append(readers, &slowReader{Reader: buf})
 	}
 	require.NoError(t, copyCompleteLines(out, readers))
+	// Verify that none of the lines were interleaved.
 	receivedLines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	require.ElementsMatch(t, lines, receivedLines)
 }

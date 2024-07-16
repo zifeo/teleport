@@ -465,13 +465,13 @@ func (lw *lineLabeledWriter) Write(input []byte) (int, error) {
 	rest := input
 	var found bool
 	for {
-		orig := rest
-		line, rest, found = bytes.Cut(orig, []byte("\n"))
+		origLine := rest
+		line, rest, found = bytes.Cut(origLine, []byte("\n"))
 		// If we overflowed a line, cut a little earlier.
 		if lw.maxLineLength != 0 && lw.currentLineProgress+len(line) > lw.maxLineLength {
 			linePortion := lw.maxLineLength - lw.currentLineProgress
-			line = orig[:linePortion]
-			rest = orig[linePortion:]
+			line = origLine[:linePortion]
+			rest = origLine[linePortion:]
 			found = true
 		}
 		// Write the prefix unless we're either continuing a line from the last
@@ -520,6 +520,8 @@ func WithLabeledOutput(maxLineLength int) RunCommandOption {
 	}
 }
 
+// WithOutput sends command output to the given stdout and stderr instead of
+// the node client's.
 func WithOutput(stdout, stderr io.Writer) RunCommandOption {
 	return func(opts *RunCommandOptions) {
 		opts.stdout = stdout
