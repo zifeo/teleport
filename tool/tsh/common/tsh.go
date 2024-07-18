@@ -1200,9 +1200,15 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 	git := app.Command("git", "Git proxy TODO.")
 	gitClone := git.Command("clone", "Git clone.")
 	gitClone.Flag("app", "App name to retrieve credentials for.").Required().StringVar(&cf.AppName)
+	gitClone.Flag("username", "GitHub username.").Required().StringVar(&cf.GitHubUsername)
 	gitClone.Arg("git-url", "Git URL").Required().StringVar(&cf.GitURL)
-	gitSSHConfig := git.Command("ssh-config", "SSH config for git apps.")
-	gitSSHConfig.Flag("save", "Update your SSH config.").BoolVar(&cf.GitSaveSSHConfig)
+
+	gitSSH := git.Command("ssh", "Called by git as GIT_SSH_COMMAND").Interspersed(false).Hidden()
+	gitSSH.Flag("app", "GitHub app name.").Required().StringVar(&cf.AppName)
+	gitSSH.Flag("username", "GitHub username.").Required().StringVar(&cf.GitHubUsername)
+	gitSSH.Flag("option", "OpenSSH options in the format used in the configuration file").Short('o').AllowDuplicate().StringsVar(&cf.Options)
+	gitSSH.Arg("[user@]host", "Remote hostname and the login to use").Required().StringVar(&cf.UserHost)
+	gitSSH.Arg("command", "Command to execute on a remote host").StringsVar(&cf.RemoteCommand)
 
 	var err error
 
@@ -1570,6 +1576,8 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 		err = onGitClone(&cf)
 	case gitSSHConfig.FullCommand():
 		err = onGitSSHConfig(&cf)
+	case gitSSH.FullCommand():
+		err = onGitSSH(&cf)
 	default:
 		// Handle commands that might not be available.
 		switch {

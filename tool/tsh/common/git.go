@@ -19,25 +19,22 @@
 package common
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log/slog"
-	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/crypto/ssh"
 
 	apiclient "github.com/gravitational/teleport/api/client"
-	"github.com/gravitational/teleport/api/profile"
-	"github.com/gravitational/teleport/api/utils/keypaths"
+	tracessh "github.com/gravitational/teleport/api/observability/tracing/ssh"
 	"github.com/gravitational/teleport/api/utils/prompt"
-	"github.com/gravitational/teleport/lib/client"
-	"github.com/gravitational/teleport/lib/config/openssh"
 	alpncommon "github.com/gravitational/teleport/lib/srv/alpnproxy/common"
-	"github.com/gravitational/teleport/lib/utils"
 )
 
 func onGitClone(cf *CLIConf) error {
@@ -69,31 +66,49 @@ func onGitClone(cf *CLIConf) error {
 		return trace.Wrap(err)
 	}
 
-	localGitURL := fmt.Sprintf("git@%s.teleport-git-app.%s:%s/%s.git", app.GetName(), tc.WebProxyHost(), org, repo)
-	slog.DebugContext(cf.Context, "Calling git clone.", "url", localGitURL)
+	slog.DebugContext(cf.Context, "Calling git clone.", "url", cf.GitURL, "org", org, "repo", repo)
 
-	cmd := exec.Command("git", "clone", localGitURL)
+	gitSSHCommand := fmt.Sprintf("%s git ssh --app %s --username %s", cf.executablePath, cf.AppName, cf.GitHubUsername)
+	cmd := exec.Command("git", "clone", cf.GitURL, "-c", "core.sshCommand="+gitSSHCommand)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
+	cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND="+gitSSHCommand)
 	return trace.Wrap(cmd.Run())
 }
 
-func shouldProxyGitSSH(cf *CLIConf, tc *client.TeleportClient) bool {
-	if tc.HostLogin != "git" {
-		return false
+func parseGitURL(input string) (string, string, bool) {
+	if strings.HasSuffix(input, ".git") {
+		return parseGitURL(strings.TrimSuffix(input, ".git"))
 	}
 
-	targetHost, _, err := net.SplitHostPort(tc.Host)
-	if err != nil {
-		return false
+	switch {
+	case strings.HasPrefix(input, "https://"):
+		return "", "", false
+
+	case strings.Contains(input, "@") && strings.Contains(input, ":"):
+		_, orgAndRepo, ok := strings.Cut(input, ":")
+		if !ok {
+			return "", "", false
+		}
+		return parseGitURL(orgAndRepo)
+
+	case strings.Count(input, "/") == 1:
+		org, repo, ok := strings.Cut(input, "/")
+		if !ok {
+			return "", "", false
+		}
+		return org, repo, true
+
+	default:
+		return "", "", false
 	}
-	wantSuffix := fmt.Sprintf(".teleport-git-app.%s", tc.WebProxyHost())
-	return strings.HasSuffix(targetHost, wantSuffix)
 }
 
-func onProxyCommandGitSSH(cf *CLIConf, tc *client.TeleportClient) error {
-	var closeFunc func() error
+func onGitSSH(cf *CLIConf) error {
+	ctx := cf.Context
+	slog.DebugContext(cf.Context, "onGitSSH", "app", cf.AppName, "username", cf.GitHubUsername, "options", cf.Options, "user_host", cf.UserHost, "command", cf.RemoteCommand)
+
 	// TODO move this to prompt.Stdin?
 	if !prompt.Stdin().IsTerminal() {
 		tty, err := os.Open("/dev/tty")
@@ -107,22 +122,22 @@ func onProxyCommandGitSSH(cf *CLIConf, tc *client.TeleportClient) error {
 		go cr.HandleInterrupt()
 		prompt.SetStdin(cr)
 	}
-	password, err := tc.AskPassword(cf.Context)
+	/*
+		password, err := tc.AskPassword(cf.Context)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		if password != "abcdef" {
+			return trace.BadParameter("bad password")
+		}
+	*/
+
+	tc, err := makeClient(cf)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if password != "abcdef" {
-		return trace.BadParameter("bad password")
-	}
 
-	appName, _, ok := strings.Cut(tc.Host, ".teleport-git-app.")
-	if !ok {
-		return trace.BadParameter("bad host %s", tc.Host)
-	}
-	cf.AppName = appName
-
-	slog.DebugContext(cf.Context, "Proxy git SSH.", "app", cf.AppName, "host", cf.UserHost)
-
+	// TODO relogin, per-session MFA, verify username etc.
 	appCert, needLogin, err := loadAppCertificate(tc, cf.AppName)
 	if err != nil {
 		return trace.Wrap(err)
@@ -147,68 +162,100 @@ func onProxyCommandGitSSH(cf *CLIConf, tc *client.TeleportClient) error {
 		return trace.Wrap(err)
 	}
 
-	closeFunc()
-	return trace.Wrap(utils.ProxyConn(cf.Context, utils.NewCombinedStdioWithProperClose(cf.Context), serverConn))
-}
-
-func onGitSSHConfig(cf *CLIConf) error {
-	tc, err := makeClient(cf)
+	sshconn, chans, reqs, err := tracessh.NewClientConn(
+		cf.Context,
+		serverConn,
+		tc.Host+":22",
+		&ssh.ClientConfig{
+			User:            tc.HostLogin, // Should be "git".
+			HostKeyCallback: tc.HostKeyCallback,
+			Auth:            nil, // No auth.
+		},
+	)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	sshConf := openssh.NewSSHConfig(nil, log)
-	keysDir := profile.FullProfilePath(tc.Config.KeysDir)
-	knownHostsPath := keypaths.KnownHostsPath(keysDir)
-	params := &openssh.SSHConfigParameters{
-		AppName:        openssh.TshGitApp,
-		ClusterNames:   []string{tc.WebProxyHost()},
-		KnownHostsPath: knownHostsPath,
-		ProxyHost:      tc.WebProxyHost(),
-		ProxyPort:      fmt.Sprintf("%d", tc.WebProxyPort()),
-		ExecutablePath: cf.executablePath,
+	// TODO
+	emptyCh := make(chan *ssh.Request)
+	close(emptyCh)
+	client := tracessh.NewClient(sshconn, chans, emptyCh)
+	go handleGlobalRequests(cf.Context, reqs)
+
+	session, err := client.NewSession(cf.Context)
+	if err != nil {
+		return trace.Wrap(err)
 	}
-	if !cf.GitSaveSSHConfig {
-		var sb strings.Builder
-		if err := sshConf.GetSSHConfig(&sb, params); err != nil {
+
+	if gitProtocol := os.Getenv("GIT_PROTOCOL"); gitProtocol != "" {
+		slog.DebugContext(ctx, "=== send env", "git_protocol", gitProtocol)
+		if err := session.SetEnvs(ctx, map[string]string{"GIT_PROTOCOL": gitProtocol}); err != nil {
+			slog.WarnContext(ctx, "Failed to set remote server env", "error", err)
+		}
+	}
+
+	// TODO catch signal
+	stdinPipe, err := session.StdinPipe()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	stdoutPipe, err := session.StdoutPipe()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	stderrPipe, err := session.StderrPipe()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- session.Start(ctx, strings.Join(cf.RemoteCommand, " "))
+	}()
+	select {
+	// Run returned a result, return that back to the caller.
+	case err := <-errCh:
+		if err != nil {
 			return trace.Wrap(err)
 		}
-
-		fmt.Fprint(cf.Stdout(), sb.String())
+	// The passed in context timed out. This is often due to the user hitting
+	// Ctrl-C.
+	case <-ctx.Done():
 		return nil
 	}
 
-	return trace.Wrap(sshConf.SaveToUserConfig(params))
+	go func() {
+		defer stdinPipe.Close()
+		io.Copy(stdinPipe, os.Stdin)
+		slog.DebugContext(ctx, "=== stdin done")
+	}()
+	go func() {
+		io.Copy(os.Stdout, stdoutPipe)
+		slog.DebugContext(ctx, "=== stdout done")
+	}()
+	go func() {
+		io.Copy(os.Stderr, stderrPipe)
+		slog.DebugContext(ctx, "=== stderr done")
+	}()
+	return trace.Wrap(session.Wait())
 }
 
-func parseGitURL(input string) (string, string, bool) {
-	if strings.HasSuffix(input, ".git") {
-		return parseGitURL(strings.TrimSuffix(input, ".git"))
-	}
-
-	switch {
-	case strings.HasPrefix(input, "https://"):
-		httpURL, err := url.Parse(input)
-		if err != nil {
-			return "", "", false
+func handleGlobalRequests(ctx context.Context, requestCh <-chan *ssh.Request) {
+	for {
+		select {
+		case r := <-requestCh:
+			// When the channel is closing, nil is returned.
+			if r == nil {
+				return
+			}
+			slog.DebugContext(ctx, "=== global request", "type", r.Type)
+			err := r.Reply(false, nil)
+			if err != nil {
+				log.Warnf("Unable to reply to %v request.", r.Type)
+				continue
+			}
+		case <-ctx.Done():
+			return
 		}
-		return parseGitURL(strings.TrimPrefix(httpURL.Path, "/"))
-
-	case strings.Contains(input, "@") && strings.Contains(input, ":"):
-		_, orgAndRepo, ok := strings.Cut(input, ":")
-		if !ok {
-			return "", "", false
-		}
-		return parseGitURL(orgAndRepo)
-
-	case strings.Count(input, "/") == 1:
-		org, repo, ok := strings.Cut(input, "/")
-		if !ok {
-			return "", "", false
-		}
-		return org, repo, true
-
-	default:
-		return "", "", false
 	}
 }

@@ -21,7 +21,6 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -97,7 +96,7 @@ func (a *Server) GenerateGitServerCert(ctx context.Context, req *proto.GenerateG
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	hostID := fmt.Sprintf("%s.teleport-git-app", req.AppName)
+	hostID := req.AppName
 	slog.DebugContext(ctx, "Generating git server cert.", "id", hostID)
 
 	hostCASigner, err := a.getSSHCASigner(ctx, domainName, types.HostCA)
@@ -112,6 +111,7 @@ func (a *Server) GenerateGitServerCert(ctx context.Context, req *proto.GenerateG
 		Role:          types.RoleApp,
 		ClusterName:   clusterName.GetClusterName(),
 		TTL:           req.TTL.Get(),
+		Principals:    []string{"github.com"},
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
