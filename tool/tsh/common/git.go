@@ -33,6 +33,7 @@ import (
 	apiclient "github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/profile"
 	"github.com/gravitational/teleport/api/utils/keypaths"
+	"github.com/gravitational/teleport/api/utils/prompt"
 	"github.com/gravitational/teleport/lib/client"
 	"github.com/gravitational/teleport/lib/config/openssh"
 	alpncommon "github.com/gravitational/teleport/lib/srv/alpnproxy/common"
@@ -92,6 +93,28 @@ func shouldProxyGitSSH(cf *CLIConf, tc *client.TeleportClient) bool {
 }
 
 func onProxyCommandGitSSH(cf *CLIConf, tc *client.TeleportClient) error {
+	var closeFunc func() error
+	// TODO move this to prompt.Stdin?
+	if !prompt.Stdin().IsTerminal() {
+		tty, err := os.Open("/dev/tty")
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		closeFunc = tty.Close
+		defer tty.Close()
+
+		cr := prompt.NewContextReader(tty)
+		go cr.HandleInterrupt()
+		prompt.SetStdin(cr)
+	}
+	password, err := tc.AskPassword(cf.Context)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if password != "abcdef" {
+		return trace.BadParameter("bad password")
+	}
+
 	appName, _, ok := strings.Cut(tc.Host, ".teleport-git-app.")
 	if !ok {
 		return trace.BadParameter("bad host %s", tc.Host)
@@ -124,6 +147,7 @@ func onProxyCommandGitSSH(cf *CLIConf, tc *client.TeleportClient) error {
 		return trace.Wrap(err)
 	}
 
+	closeFunc()
 	return trace.Wrap(utils.ProxyConn(cf.Context, utils.NewCombinedStdioWithProperClose(cf.Context), serverConn))
 }
 

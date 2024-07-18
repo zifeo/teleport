@@ -17,6 +17,8 @@ limitations under the License.
 package prompt
 
 import (
+	"context"
+	"log/slog"
 	"os"
 	"sync"
 )
@@ -46,6 +48,22 @@ func Stdin() StdinReader {
 		stdin = cr
 	}
 	return stdin
+}
+
+func makeStdinContextReaderOrTTY() *ContextReader {
+	cr := NewContextReader(os.Stdin)
+	if cr.IsTerminal() {
+		return cr
+	}
+
+	// Give "/dev/tty" a try.
+	if tty, err := os.Open("/dev/tty"); err == nil {
+		if ttyReader := NewContextReader(tty); ttyReader.IsTerminal() {
+			slog.DebugContext(context.Background(), "os.Stdin is not a terminal. Opened /dev/tty instead.")
+			return ttyReader
+		}
+	}
+	return cr
 }
 
 // SetStdin allows callers to change the Stdin reader.

@@ -224,13 +224,13 @@ func printAppCommand(cf *CLIConf, tc *client.TeleportClient, app types.Applicati
 
 	case app.IsTCP():
 		return appLoginTCPTpl.Execute(output, map[string]string{
-			"appName":  app.GetName(),
-			"username": routeToApp.GitHubUsername,
+			"appName": app.GetName(),
 		})
 
 	case app.IsGitHub():
 		return gitAppTpl.Execute(output, map[string]string{
-			"appName": app.GetName(),
+			"appName":  app.GetName(),
+			"username": routeToApp.GitHubUsername,
 		})
 
 	case localProxyRequiredForApp(tc):
