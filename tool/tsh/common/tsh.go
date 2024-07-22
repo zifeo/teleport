@@ -544,8 +544,6 @@ type CLIConf struct {
 	GitHubUsername string
 	// GitURL
 	GitURL string
-	// GitSaveSSHConfig
-	GitSaveSSHConfig bool
 }
 
 // Stdout returns the stdout writer.
@@ -1574,8 +1572,6 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 		err = vnetAdminSetupCmd.run(&cf)
 	case gitClone.FullCommand():
 		err = onGitClone(&cf)
-	case gitSSHConfig.FullCommand():
-		err = onGitSSHConfig(&cf)
 	case gitSSH.FullCommand():
 		err = onGitSSH(&cf)
 	default:

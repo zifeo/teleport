@@ -34,6 +34,7 @@ import (
 	apiclient "github.com/gravitational/teleport/api/client"
 	tracessh "github.com/gravitational/teleport/api/observability/tracing/ssh"
 	"github.com/gravitational/teleport/api/utils/prompt"
+	"github.com/gravitational/teleport/lib/client"
 	alpncommon "github.com/gravitational/teleport/lib/srv/alpnproxy/common"
 )
 
@@ -59,11 +60,6 @@ func onGitClone(cf *CLIConf) error {
 
 	if app.GetGitHubOrganization() != org {
 		return trace.BadParameter("app %s is intended for organziation %s but got %s", app.GetName(), app.GetGitHubOrganization(), org)
-	}
-
-	cf.GitSaveSSHConfig = true
-	if err := onGitSSHConfig(cf); err != nil {
-		return trace.Wrap(err)
 	}
 
 	slog.DebugContext(cf.Context, "Calling git clone.", "url", cf.GitURL, "org", org, "repo", repo)
@@ -105,6 +101,60 @@ func parseGitURL(input string) (string, string, bool) {
 	}
 }
 
+func shouldAppLoginForGitSSH(cf *CLIConf) (bool, error) {
+	profile, err := cf.ProfileStatus()
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+	app, err := findApp(profile.Apps, cf.AppName)
+	if err != nil {
+		if trace.IsNotFound(err) {
+			return true, nil
+		}
+		return false, trace.Wrap(err)
+	}
+	slog.DebugContext(cf.Context, "=== found app", "app", app)
+	return app.GitHubUsername != cf.GitHubUsername, nil
+}
+
+// TODO simplify logic
+// TODO per-session MFA
+func loadGitAppCertificate(cf *CLIConf, tc *client.TeleportClient) (tls.Certificate, error) {
+	needLogin, err := shouldAppLoginForGitSSH(cf)
+	if err != nil {
+		return tls.Certificate{}, trace.Wrap(err)
+	}
+	if needLogin {
+		quiet := cf.Quiet
+		cf.Quiet = true
+		err = onAppLogin(cf)
+		cf.Quiet = quiet
+		if err != nil {
+			return tls.Certificate{}, trace.Wrap(err)
+		}
+	}
+
+	appCert, needLogin, err := loadAppCertificate(tc, cf.AppName)
+	if err != nil {
+		return appCert, trace.Wrap(err)
+	}
+	if needLogin {
+		quiet := cf.Quiet
+		cf.Quiet = true
+		err = onAppLogin(cf)
+		cf.Quiet = quiet
+		if err != nil {
+			return tls.Certificate{}, trace.Wrap(err)
+		}
+		appCert, _, err = loadAppCertificate(tc, cf.AppName)
+		if err != nil {
+			return appCert, trace.Wrap(err)
+		}
+	}
+
+	return appCert, nil
+}
+
 func onGitSSH(cf *CLIConf) error {
 	ctx := cf.Context
 	slog.DebugContext(cf.Context, "onGitSSH", "app", cf.AppName, "username", cf.GitHubUsername, "options", cf.Options, "user_host", cf.UserHost, "command", cf.RemoteCommand)
@@ -115,35 +165,20 @@ func onGitSSH(cf *CLIConf) error {
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		closeFunc = tty.Close
 		defer tty.Close()
 
 		cr := prompt.NewContextReader(tty)
 		go cr.HandleInterrupt()
 		prompt.SetStdin(cr)
 	}
-	/*
-		password, err := tc.AskPassword(cf.Context)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		if password != "abcdef" {
-			return trace.BadParameter("bad password")
-		}
-	*/
 
 	tc, err := makeClient(cf)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-
-	// TODO relogin, per-session MFA, verify username etc.
-	appCert, needLogin, err := loadAppCertificate(tc, cf.AppName)
+	appCert, err := loadGitAppCertificate(cf, tc)
 	if err != nil {
 		return trace.Wrap(err)
-	}
-	if needLogin {
-		return trace.AccessDenied("app session for %q is expired. Please login the app with `tsh apps login %v", cf.AppName, cf.AppName)
 	}
 
 	// TODO make this a helper?
