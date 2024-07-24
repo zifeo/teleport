@@ -21,7 +21,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/gravitational/trace"
 )
 
@@ -249,7 +248,7 @@ func (c *TrustedClusterV2) CanChangeStateTo(t TrustedCluster) error {
 	if !slices.Equal(c.GetRoles(), t.GetRoles()) {
 		return immutableFieldErr("roles")
 	}
-	roleMapUpdated := !cmp.Equal(c.GetRoleMap(), t.GetRoleMap())
+	roleMapUpdated := !c.GetRoleMap().Equal(t.GetRoleMap())
 
 	if c.GetEnabled() == t.GetEnabled() && !roleMapUpdated {
 		if t.GetEnabled() {
@@ -269,6 +268,28 @@ func (c *TrustedClusterV2) String() string {
 
 // RoleMap is a list of mappings
 type RoleMap []RoleMapping
+
+func (r RoleMap) Equal(other RoleMap) bool {
+	if len(r) != len(other) {
+		return false
+	}
+	for i, m := range r {
+		if !m.Equal(other[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m RoleMapping) Equal(other RoleMapping) bool {
+	if m.Remote != other.Remote {
+		return false
+	}
+	if !slices.Equal(m.Local, other.Local) {
+		return false
+	}
+	return true
+}
 
 // SortedTrustedCluster sorts clusters by name
 type SortedTrustedCluster []TrustedCluster

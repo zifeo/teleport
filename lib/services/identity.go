@@ -87,17 +87,6 @@ type Identity interface {
 	// called after successful login.
 	DeleteUserLoginAttempts(user string) error
 
-	// GetUserByOIDCIdentity returns a user by its specified OIDC Identity, returns first
-	// user specified with this identity
-	GetUserByOIDCIdentity(id types.ExternalIdentity) (types.User, error)
-
-	// GetUserBySAMLIdentity returns a user by its specified OIDC Identity, returns first
-	// user specified with this identity
-	GetUserBySAMLIdentity(id types.ExternalIdentity) (types.User, error)
-
-	// GetUserByGithubIdentity returns a user by its specified Github identity
-	GetUserByGithubIdentity(id types.ExternalIdentity) (types.User, error)
-
 	// GetPasswordHash returns the password hash for a given user
 	GetPasswordHash(user string) ([]byte, error)
 

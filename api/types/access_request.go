@@ -882,3 +882,10 @@ func ValidateAssumeStartTime(assumeStartTime time.Time, accessExpiry time.Time, 
 
 	return nil
 }
+
+func (a AccessReviewThreshold) Equal(other AccessReviewThreshold) bool {
+	return a.Name == other.Name &&
+		a.Filter == other.Filter &&
+		a.Approve == other.Approve &&
+		a.Deny == other.Deny
+}

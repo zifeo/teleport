@@ -1160,6 +1160,9 @@ message CAKeySet {
 // RoleMapping provides mapping of remote roles to local roles
 // for trusted clusters
 message RoleMapping {
+  // changes to this message should be reflected in the Equal method implemented
+  // in api/types/trustedcluster.go
+
   // Remote specifies remote role name to map from
   string Remote = 1 [(gogoproto.jsontag) = "remote"];
   // Local specifies local roles to map to
@@ -2260,6 +2263,9 @@ message AccessRequestV3 {
 // can be used to describe policies such as "can be approved by 2 admins"
 // or "can be denied by any non-contractor".
 message AccessReviewThreshold {
+  // changes to this message should be reflected in the Equal method implemented
+  // in api/types/access_request.go
+
   // Name is the optional human-readable name of the threshold.
   string Name = 1 [(gogoproto.jsontag) = "name,omitempty"];
   // Filter is an optional predicate used to determine which reviews

@@ -33,7 +33,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
@@ -192,7 +191,6 @@ func (s *IdentityService) streamUsersWithSecrets(itemStream stream.Stream[backen
 		}
 
 		return prev, true
-
 	})
 
 	// since a collector for a given user isn't yielded until the above stream reaches the *next*
@@ -609,56 +607,6 @@ func (s *IdentityService) upsertLocalAuthSecrets(ctx context.Context, user strin
 		}
 	}
 	return nil
-}
-
-// GetUserByOIDCIdentity returns a user by it's specified OIDC Identity, returns first
-// user specified with this identity
-func (s *IdentityService) GetUserByOIDCIdentity(id types.ExternalIdentity) (types.User, error) {
-	users, err := s.GetUsers(context.TODO(), false)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	for _, u := range users {
-		for _, uid := range u.GetOIDCIdentities() {
-			if cmp.Equal(uid, &id) {
-				return u, nil
-			}
-		}
-	}
-	return nil, trace.NotFound("user with identity %q not found", &id)
-}
-
-// GetUserBySAMLIdentity returns a user by it's specified OIDC Identity, returns
-// first user specified with this identity.
-func (s *IdentityService) GetUserBySAMLIdentity(id types.ExternalIdentity) (types.User, error) {
-	users, err := s.GetUsers(context.TODO(), false)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	for _, u := range users {
-		for _, uid := range u.GetSAMLIdentities() {
-			if cmp.Equal(uid, &id) {
-				return u, nil
-			}
-		}
-	}
-	return nil, trace.NotFound("user with identity %q not found", &id)
-}
-
-// GetUserByGithubIdentity returns the first found user with specified Github identity
-func (s *IdentityService) GetUserByGithubIdentity(id types.ExternalIdentity) (types.User, error) {
-	users, err := s.GetUsers(context.TODO(), false)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	for _, u := range users {
-		for _, uid := range u.GetGithubIdentities() {
-			if cmp.Equal(uid, &id) {
-				return u, nil
-			}
-		}
-	}
-	return nil, trace.NotFound("user with identity %v not found", &id)
 }
 
 // DeleteUser deletes a user with all the keys from the backend

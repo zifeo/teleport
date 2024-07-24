@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
@@ -1614,7 +1613,7 @@ func (c *thresholdCollector) pushThreshold(t types.AccessReviewThreshold) (uint3
 
 	// don't bother double-storing equivalent thresholds
 	for i, threshold := range c.Thresholds {
-		if cmp.Equal(t, threshold) {
+		if t.Equal(threshold) {
 			return uint32(i), nil
 		}
 	}
@@ -2155,9 +2154,7 @@ func mustNewReviewPermissionParser() *typical.Parser[reviewPermissionContext, bo
 	return parser
 }
 
-var (
-	reviewPermissionParser = mustNewReviewPermissionParser()
-)
+var reviewPermissionParser = mustNewReviewPermissionParser()
 
 func parseReviewPermissionExpression(expr string) (typical.Expression[reviewPermissionContext, bool], error) {
 	parsed, err := reviewPermissionParser.Parse(expr)
@@ -2205,9 +2202,7 @@ func mustNewThresholdFilterParser() *typical.Parser[thresholdFilterContext, bool
 	return parser
 }
 
-var (
-	thresholdFilterParser = mustNewThresholdFilterParser()
-)
+var thresholdFilterParser = mustNewThresholdFilterParser()
 
 func parseThresholdFilterExpression(expr string) (typical.Expression[thresholdFilterContext, bool], error) {
 	parsed, err := thresholdFilterParser.Parse(expr)

@@ -21,6 +21,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -118,7 +119,7 @@ func compareServers(a, b types.Server) int {
 		return Different
 	}
 
-	if !cmp.Equal(a.GetProxyIDs(), b.GetProxyIDs()) {
+	if !slices.Equal(a.GetProxyIDs(), b.GetProxyIDs()) {
 		return Different
 	}
 	// OnlyTimestampsDifferent check must be after all Different checks.

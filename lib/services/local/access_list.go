@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
@@ -368,7 +367,6 @@ func (a *AccessListService) DeleteAllAccessListMembersForAccessList(ctx context.
 
 // DeleteAllAccessListMembers hard deletes all access list members.
 func (a *AccessListService) DeleteAllAccessListMembers(ctx context.Context) error {
-
 	// Locks are not used here as this operation is more likely to be used by the cache.
 	return trace.Wrap(a.memberService.DeleteAllResources(ctx))
 }
@@ -423,7 +421,7 @@ func (a *AccessListService) UpsertAccessListWithMembers(ctx context.Context, acc
 						newMember.Spec.AddedBy = existingMember.Spec.AddedBy
 
 						// Compare members and update if necessary.
-						if !cmp.Equal(newMember, existingMember) {
+						if !newMember.IsEqual(existingMember) {
 							// Update the member.
 							upserted, err := a.memberService.WithPrefix(accessList.GetName()).UpsertResource(ctx, newMember)
 							if err != nil {
