@@ -56,10 +56,6 @@ func ValidateKubeProvision(b *kubeprovisionv1.KubeProvision) error {
 		return trace.BadParameter("spec is required")
 	}
 
-	if b.Spec.ResourcesData == "" {
-		return trace.BadParameter("spec.ResourcesData is required")
-	}
-
 	return nil
 }
 

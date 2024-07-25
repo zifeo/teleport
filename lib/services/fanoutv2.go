@@ -135,9 +135,18 @@ func (w *streamWatcher) run(ctx context.Context, stream stream.Stream[types.Even
 		close(w.done)
 	}()
 
+	fanoutStream, ok := stream.(*fanoutV2Stream)
+	if !ok {
+
+	}
+	_ = fanoutStream
+	x := 0
 	for stream.Next() {
 		select {
 		case w.events <- stream.Item():
+			tmp := stream.Item()
+			_ = tmp
+			x++
 		case <-ctx.Done():
 			return
 		}

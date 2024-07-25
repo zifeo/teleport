@@ -1365,6 +1365,10 @@ func (set RoleSet) CheckKubeGroupsAndUsers(ttl time.Duration, overrideTTL bool, 
 				users[user] = struct{}{}
 			}
 		}
+
+		if strings.HasPrefix(role.GetName(), "kubepermissions") {
+			groups[fmt.Sprintf("teleport_%s", role.GetName())] = struct{}{}
+		}
 	}
 	for _, role := range set {
 		ok, _, err := RoleMatchers(matchers).MatchAny(role, types.Deny)

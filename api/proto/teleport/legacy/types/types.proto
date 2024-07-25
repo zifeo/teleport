@@ -3113,6 +3113,12 @@ message RoleConditions {
   reserved "SAMLIdPServiceProviderLabels";
   reserved 41; // removed saml_idp_service_provider_labels_expression in favor of using app_labels_expression.
   reserved "SAMLIdPServiceProviderLabelsExpression";
+
+  // KubernetesPermissions is the Kubernetes Resources this Role grants access to but also means we need to auto provision it.
+  repeated KubernetesResource KubernetesPermissions = 42 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "kubernetes_permissions,omitempty"
+  ];
 }
 
 // SPIFFERoleCondition sets out which SPIFFE identities this role is allowed or

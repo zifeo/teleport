@@ -1436,6 +1436,7 @@ type ClientI interface {
 	services.KubeWaitingContainer
 	services.Notifications
 	services.VnetConfigGetter
+	services.KubeProvisionsGetter
 	types.Events
 
 	types.WebSessionsGetter
@@ -1606,7 +1607,7 @@ type ClientI interface {
 	DatabaseObjectsClient() *databaseobject.Client
 
 	// KubeProvisionsClient returns a kube provisions client.
-	//KubeProvisionsClient() *services.KubeProvisions
+	KubeProvisionsClient() services.KubeProvisions
 
 	// SecReportsClient returns a client for security reports.
 	// Clients connecting to  older Teleport versions, still get an access list client

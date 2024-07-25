@@ -1108,7 +1108,7 @@ func (r *RoleV6) CheckAndSetDefaults() error {
 		}
 	case V7:
 		// Kubernetes resources default to {kind:*, name:*, namespace:*} for v7 roles.
-		if len(r.Spec.Allow.KubernetesResources) == 0 && r.HasLabelMatchers(Allow, KindKubernetesCluster) {
+		if len(r.Spec.Allow.KubernetesResources) == 0 && r.HasLabelMatchers(Allow, KindKubernetesCluster) && len(r.Spec.Allow.KubernetesPermissions) == 0 {
 			r.Spec.Allow.KubernetesResources = []KubernetesResource{
 				{
 					Kind:      Wildcard,
@@ -1119,9 +1119,14 @@ func (r *RoleV6) CheckAndSetDefaults() error {
 			}
 		}
 
+		if len(r.Spec.Allow.KubernetesPermissions) > 0 {
+			r.Spec.Allow.KubernetesResources = r.Spec.Allow.KubernetesPermissions
+		}
+
 		if err := validateRoleSpecKubeResources(r.Version, r.Spec); err != nil {
 			return trace.Wrap(err)
 		}
+
 	default:
 		return trace.BadParameter("unrecognized role version: %v", r.Version)
 	}

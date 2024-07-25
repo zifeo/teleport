@@ -210,6 +210,7 @@ class Tty extends EventEmitterWebAuthnSender {
           }
           break;
         case MessageTypeEnum.ERROR:
+          logger.info("Received ERROR websocket message")
           this.emit(TermEvent.DATA, msg.payload + '\n');
           break;
         case MessageTypeEnum.LATENCY:

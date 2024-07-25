@@ -20,6 +20,12 @@ package proxy
 
 import (
 	"context"
+	"fmt"
+	kubeprovisionv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/kubeprovision/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"strings"
 	"sync"
 	"time"
 
@@ -83,6 +89,310 @@ func (s *TLSServer) startReconciler(ctx context.Context) (err error) {
 		}
 	}()
 	return nil
+}
+
+func (s *TLSServer) startKubeProvisionsReconciler(ctx context.Context) {
+	s.log.Debug("Starting Kube Provisions Reconciler.")
+	go func() {
+		reconcileTicker := time.NewTicker(5 * time.Minute)
+		defer reconcileTicker.Stop()
+
+		for {
+			select {
+			case <-reconcileTicker.C:
+				s.reconcileKubeProvisionsCh <- struct{}{}
+			case <-ctx.Done():
+				s.log.Debug("KubeProvisions reconciler ticker finished.")
+				return
+			}
+		}
+
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-s.reconcileKubeProvisionsCh:
+				err := s.reconcileKubeProvisions(ctx)
+				if err != nil {
+					s.log.WithError(err).Error("Failed to reconcile KubeProvisions.")
+				}
+			case <-ctx.Done():
+				s.log.Debug("KubeProvisions reconciliation processing finished.")
+				return
+			}
+		}
+	}()
+}
+
+func kubeProvisionToKubeResources() {
+
+}
+
+func kubeProvisionToKubeClusterRoles(kp *kubeprovisionv1.KubeProvision) ([]rbacv1.ClusterRole, error) {
+	kubeClusterRoles := []rbacv1.ClusterRole{}
+	for _, cr := range kp.Spec.ClusterRoles {
+		newClusterRole := rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   cr.Metadata.Name,
+				Labels: cr.Metadata.Labels,
+			},
+		}
+
+		for _, rule := range cr.Rules {
+			newClusterRole.Rules = append(newClusterRole.Rules,
+				rbacv1.PolicyRule{
+					APIGroups: []string{""},
+					Resources: rule.Resources,
+					Verbs:     rule.Verbs,
+				},
+			)
+		}
+		kubeClusterRoles = append(kubeClusterRoles, newClusterRole)
+	}
+
+	return kubeClusterRoles, nil
+}
+
+func teleportRoleToKubeClusterRole(role types.RoleV6) rbacv1.ClusterRole {
+	kubeClusterRole := rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: role.GetName(),
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "pods/exec"},
+				Verbs:     []string{"get", "create", "list", "watch"},
+			},
+		},
+	}
+
+	for _, r := range role.Spec.Allow.KubernetesResources {
+		kubeClusterRole.Rules = append(kubeClusterRole.Rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{r.Kind},
+				Verbs:     r.Verbs,
+			})
+	}
+	return kubeClusterRole
+}
+
+func (s *TLSServer) reconcileKubeProvisions(ctx context.Context) error {
+	s.log.Debug("Reconciling KubeProvisions.")
+	now := time.Now()
+	defer func() {
+		s.log.Debugf("KubeProvisions reconciliation process finished. Time took: %s.", time.Since(now))
+	}()
+
+	kubeProvisions, err := s.getAllKubeProvisions()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	_ = kubeProvisions
+
+	teleportRoles, err := s.AccessPoint.GetRoles(ctx)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	_ = teleportRoles
+
+	for _, cluster := range s.fwd.kubeClusters() {
+		clusterName := cluster.GetName()
+
+		s.fwd.rwMutexDetails.Lock()
+		details := s.fwd.clusterDetails[clusterName]
+		s.fwd.rwMutexDetails.Unlock()
+
+		//kubeClient := details.kubeCreds.getKubeClient()
+
+		config := details.kubeCreds.getKubeRestConfig()
+		config.Impersonate.Groups = []string{"system:masters"}
+		config.Impersonate.UserName = "teleport"
+
+		kubeClient, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		clusterRoles, err := kubeClient.RbacV1().ClusterRoles().List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		roles, err := kubeClient.RbacV1().Roles("").List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		clusterRoleBindings, err := kubeClient.RbacV1().ClusterRoleBindings().List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		roleBindings, err := kubeClient.RbacV1().RoleBindings("").List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		for _, provision := range kubeProvisions {
+			provisionClusterRoles, err := kubeProvisionToKubeClusterRoles(provision)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+
+			for _, pcr := range provisionClusterRoles {
+				foundRole := findClusterRole(clusterRoles.Items, pcr.Name)
+
+				// Create new cluster role.
+				if foundRole == nil {
+					s.log.Debugf("Provisioning is creating cluster role %q from kube provision %q.", pcr.Name, provision.Metadata.Name)
+					role, err := kubeClient.RbacV1().ClusterRoles().Create(ctx, &pcr, metav1.CreateOptions{})
+					if err != nil {
+						return trace.Wrap(err)
+					}
+					_ = role
+				} else { // Update existing role
+					foundRole.Rules = pcr.Rules
+
+					s.log.Debugf("Provisioning is updating cluster role %q from kube provision %q.", pcr.Name, provision.Metadata.Name)
+					role, err := kubeClient.RbacV1().ClusterRoles().Update(ctx, foundRole, metav1.UpdateOptions{})
+					if err != nil {
+						return trace.Wrap(err)
+					}
+					_ = role
+				}
+
+			}
+		}
+
+		for _, teleportRole := range teleportRoles {
+			curRole, ok := teleportRole.(*types.RoleV6)
+			if !ok {
+				continue
+			}
+
+			if !strings.HasPrefix(teleportRole.GetName(), "kubepermissions") {
+				continue
+			}
+
+			newRole := teleportRoleToKubeClusterRole(*curRole)
+			newRole.Name = fmt.Sprintf("teleport_%s", teleportRole.GetName())
+			foundClusterRole := findClusterRole(clusterRoles.Items, newRole.Name)
+			if foundClusterRole == nil {
+				s.log.Debugf("Provisioning is creating cluster role %q from teleport role %q.", newRole.Name, teleportRole.GetName())
+				role, err := kubeClient.RbacV1().ClusterRoles().Create(ctx, &newRole, metav1.CreateOptions{})
+				if err != nil {
+					return trace.Wrap(err)
+				}
+				_ = role
+
+				s.log.Debugf("Provisioning is creating cluster role binding %q for teleport role %q.", newRole.Name, teleportRole.GetName())
+				binding := getClusterRoleBindingForClusterRole(newRole)
+				newBinding, err := kubeClient.RbacV1().ClusterRoleBindings().Create(ctx, &binding, metav1.CreateOptions{})
+				if err != nil {
+					return trace.Wrap(err)
+				}
+				_ = newBinding
+
+			} else {
+				s.log.Debugf("Provisioning is updating cluster role %q from teleport role %q.", newRole.Name, teleportRole.GetName())
+				role, err := kubeClient.RbacV1().ClusterRoles().Update(ctx, foundClusterRole, metav1.UpdateOptions{})
+				if err != nil {
+					return trace.Wrap(err)
+				}
+				_ = role
+			}
+		}
+
+		_, _, _, _ = clusterRoles, roles, clusterRoleBindings, roleBindings
+	}
+
+	return nil
+}
+
+func getClusterRoleBindingForClusterRole(clusterRole rbacv1.ClusterRole) rbacv1.ClusterRoleBinding {
+	binding := rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clusterRole.GetName(),
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "ClusterRole",
+			Name:     clusterRole.GetName(),
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "Group",
+				APIGroup:  rbacv1.GroupName,
+				Name:      clusterRole.GetName(),
+				Namespace: clusterRole.GetNamespace(),
+			},
+		},
+	}
+
+	return binding
+}
+
+func findClusterRole(clusterRoles []rbacv1.ClusterRole, name string) *rbacv1.ClusterRole {
+	for _, clusterRole := range clusterRoles {
+		if clusterRole.GetName() == name {
+			return &clusterRole
+		}
+	}
+	return nil
+}
+
+func (s *TLSServer) getAllKubeProvisions() ([]*kubeprovisionv1.KubeProvision, error) {
+	var resources []*kubeprovisionv1.KubeProvision
+	var nextToken string
+	for {
+		var page []*kubeprovisionv1.KubeProvision
+		var err error
+		page, nextToken, err = s.AccessPoint.ListKubeProvisions(s.closeContext, 0 /* page size */, nextToken)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		resources = append(resources, page...)
+
+		if nextToken == "" {
+			break
+		}
+	}
+	return resources, nil
+}
+
+func (s *TLSServer) startKubeProvisionWatcher(ctx context.Context) (types.Watcher, error) {
+	watcher, err := s.AccessPoint.NewWatcher(ctx, types.Watch{
+		Name: "kube-provision-watcher",
+		Kinds: []types.WatchKind{
+			{Kind: types.KindKubeProvision},
+			{Kind: types.KindRole},
+		},
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	go func() {
+		defer watcher.Close()
+
+		for {
+			select {
+			case event := <-watcher.Events():
+				s.log.Debug("DBGG. Got an event: %s", event.String())
+				go func() {
+					s.reconcileKubeProvisionsCh <- struct{}{}
+				}()
+			case <-ctx.Done():
+				s.log.Debug("kube_provisions resource watcher done.")
+				return
+			}
+		}
+	}()
+
+	return watcher, nil
 }
 
 // startKubeClusterResourceWatcher starts watching changes to Kube Clusters resources and

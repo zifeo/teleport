@@ -40,16 +40,13 @@ message KubeProvision {
 
 // KubeProvisionSpec is the spec for the kube provision message.
 message KubeProvisionSpec {
-  // resources_data is base64 encoded YAML definitions of the Kubernetes resources.
-  string resources_data = 1;
+  repeated ClusterRole cluster_roles = 1;
 
-  repeated ClusterRole cluster_roles = 2;
+  repeated ClusterRoleBinding cluster_role_bindings = 2;
 
-  repeated ClusterRoleBinding cluster_role_bindings = 3;
+  repeated Role roles = 3;
 
-  repeated Role roles = 4;
-
-  repeated RoleBinding role_bindings = 5;
+  repeated RoleBinding role_bindings = 4;
 }
 
 // KubeRbacResources is Kubernetes RBAC resources.
@@ -65,9 +62,13 @@ message KubeRbacResources {
 
 // KubeRbacMeta is metadata for Kubernetes RBAC resources.
 message KubeRbacMeta {
-  string kind = 1;
+  string name = 1;
 
-  string api_version = 2;
+  map<string, string> labels = 2;
+
+  string namespace = 3;
+
+  map<string, string> annotations = 4;
 }
 
 // LabelSelector is labels selector.

@@ -175,6 +175,7 @@ type TLSServer struct {
 	heartbeats   map[string]*srv.Heartbeat
 	closeContext context.Context
 	closeFunc    context.CancelFunc
+
 	// kubeClusterWatcher monitors changes to kube cluster resources.
 	kubeClusterWatcher *services.KubeClusterWatcher
 	// reconciler reconciles proxied kube clusters with kube_clusters resources.
@@ -184,7 +185,12 @@ type TLSServer struct {
 	monitoredKubeClusters monitoredKubeClusters
 	// reconcileCh triggers reconciliation of proxied kube_clusters.
 	reconcileCh chan struct{}
-	log         *logrus.Entry
+
+	// kubeProvisionWatcher monitors changes to kube cluster resources.
+	kubeProvisionWatcher types.Watcher
+	// reconcileKubeProvisionsCh triggers reconciliation of kube_provisions.
+	reconcileKubeProvisionsCh chan struct{}
+	log                       *logrus.Entry
 }
 
 // NewTLSServer returns new unstarted TLS server
@@ -259,8 +265,9 @@ func NewTLSServer(cfg TLSServerConfig) (*TLSServer, error) {
 		monitoredKubeClusters: monitoredKubeClusters{
 			static: fwd.kubeClusters(),
 		},
-		reconcileCh: make(chan struct{}),
-		log:         log,
+		reconcileCh:               make(chan struct{}),
+		reconcileKubeProvisionsCh: make(chan struct{}),
+		log:                       log,
 	}
 	server.TLS.GetConfigForClient = server.GetConfigForClient
 	server.closeContext, server.closeFunc = context.WithCancel(cfg.Context)
@@ -358,6 +365,22 @@ func (t *TLSServer) Serve(listener net.Listener, options ...ServeOption) error {
 	t.kubeClusterWatcher = kubeClusterWatcher
 	t.mu.Unlock()
 
+	if t.KubeServiceType == KubeService {
+		t.startKubeProvisionsReconciler(t.closeContext)
+
+		// Initialize watcher that will be dynamically (un-)registering
+		// proxied clusters based on the kube_cluster resources.
+		// This watcher is only started for the kube_service if a resource watcher
+		// is configured.
+		kubeProvisionWatcher, err := t.startKubeProvisionWatcher(t.closeContext)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		t.mu.Lock()
+		t.kubeProvisionWatcher = kubeProvisionWatcher
+		t.mu.Unlock()
+	}
+
 	// kubeServerWatcher is used by the kube proxy to watch for changes in the
 	// kubernetes servers of a cluster. Proxy requires it to update the kubeServersMap
 	// which holds the list of kubernetes_services connected to the proxy for a given
@@ -408,6 +431,15 @@ func (t *TLSServer) close(ctx context.Context) error {
 		kubeClusterWatcher.Close()
 	}
 
+	t.mu.Lock()
+	kubeProvisionWatcher := t.kubeProvisionWatcher
+	t.mu.Unlock()
+	var kubeProvisionErr error
+	// Stop the KubeProvision resource watcher
+	if kubeProvisionWatcher != nil {
+		kubeProvisionErr = kubeProvisionWatcher.Close()
+	}
+
 	// Stop the kube_server resource watcher.
 	if t.KubernetesServersWatcher != nil {
 		t.KubernetesServersWatcher.Close()
@@ -419,7 +451,7 @@ func (t *TLSServer) close(ctx context.Context) error {
 		listClose = t.listener.Close()
 	}
 	t.mu.Unlock()
-	return trace.NewAggregate(append(errs, listClose)...)
+	return trace.NewAggregate(append(errs, listClose, kubeProvisionErr)...)
 }
 
 // GetConfigForClient is getting called on every connection
