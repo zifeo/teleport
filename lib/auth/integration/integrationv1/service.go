@@ -33,6 +33,7 @@ import (
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/authz"
+	"github.com/gravitational/teleport/lib/cryptosuites"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/services"
 )
@@ -57,6 +58,8 @@ type Cache interface {
 type KeyStoreManager interface {
 	// GetJWTSigner selects a usable JWT keypair from the given keySet and returns a [crypto.Signer].
 	GetJWTSigner(ctx context.Context, ca types.CertAuthority) (crypto.Signer, error)
+	// generates a new SSH keypair in the keystore backend and returns it.
+	NewSSHKeyPair(ctx context.Context, purpose cryptosuites.KeyPurpose) (*types.SSHKeyPair, error)
 }
 
 // ServiceConfig holds configuration options for
@@ -202,7 +205,20 @@ func (s *Service) CreateIntegration(ctx context.Context, req *integrationpb.Crea
 		return nil, trace.Wrap(err)
 	}
 
-	ig, err := s.backend.CreateIntegration(ctx, req.GetIntegration())
+	// TODO move to a helper?
+	reqIg := req.GetIntegration()
+	if reqIg.GetSubKind() == types.IntegrationSubKindGitHub {
+		// TODO make your own purpose?
+		ca, err := s.keyStoreManager.NewSSHKeyPair(ctx, cryptosuites.UserCASSH)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		if err := reqIg.SetGitHubSSHCertAuthority(ca); err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+
+	ig, err := s.backend.CreateIntegration(ctx, reqIg)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -338,6 +354,10 @@ func getIntegrationMetadata(ig types.Integration) (apievents.IntegrationMetadata
 		igMeta.AzureOIDC = &apievents.AzureOIDCIntegrationMetadata{
 			TenantID: ig.GetAzureOIDCIntegrationSpec().TenantID,
 			ClientID: ig.GetAzureOIDCIntegrationSpec().ClientID,
+		}
+	case types.IntegrationSubKindGitHub:
+		igMeta.GitHub = &apievents.GitHubIntegrationMetadata{
+			Organization: ig.GetGitHubIntegrationSpec().Organization,
 		}
 	default:
 		return apievents.IntegrationMetadata{}, fmt.Errorf("unknown integration subkind: %s", igMeta.SubKind)

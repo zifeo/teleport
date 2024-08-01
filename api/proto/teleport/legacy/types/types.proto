@@ -6819,6 +6819,8 @@ message IntegrationSpecV1 {
     AWSOIDCIntegrationSpecV1 AWSOIDC = 1 [(gogoproto.jsontag) = "aws_oidc,omitempty"];
     // AzureOIDC contains the specific fields to handle the Azure OIDC Integration subkind
     AzureOIDCIntegrationSpecV1 AzureOIDC = 2 [(gogoproto.jsontag) = "azure_oidc,omitempty"];
+    // GitHub contains the specific fields to handle the GitHub integration subkind.
+    GitHubIntegrationSpecV1 GitHub = 3 [(gogoproto.jsontag) = "github,omitempty"];
   }
 }
 
@@ -6854,6 +6856,18 @@ message AzureOIDCIntegrationSpecV1 {
   // ClientID specifies the ID of Azure enterprise application (client)
   // that corresponds to this plugin.
   string ClientID = 2 [(gogoproto.jsontag) = "client_id,omitempty"];
+}
+
+// GitHubIntegrationSpecV1 contains the specific fields to handle the GitHub integration subkind.
+message GitHubIntegrationSpecV1 {
+  // Organization specifies the name of the organization for the GitHub integration.
+  string Organization = 1 [(gogoproto.jsontag) = "organization,omitempty"];
+
+  // CertAuthority is the SSH CA used between Teleport and GitHub.
+  // GitHub does not allow the same CA to be used for a different organization
+  // so the CA is defined per integration.
+  // TODO(greedy52) support rotation, hardware/kms encryption.
+  SSHKeyPair CertAuthority = 2 [(gogoproto.jsontag) = "cert_authority,omitempty"];
 }
 
 // HeadlessAuthentication holds data for an ongoing headless authentication attempt.
