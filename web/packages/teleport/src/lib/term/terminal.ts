@@ -65,7 +65,7 @@ export default class TtyTerminal {
     // Passing scrollback will overwrite the default config. This is to support ttyplayer.
     // Default to the config when not passed anything, which is the normal usecase
     this._scrollBack = scrollBack || cfg.ui.scrollbackLines;
-    this._convertEol = convertEol || false;
+    this._convertEol = true;
     this.tty = tty;
     this.term = null;
 

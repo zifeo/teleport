@@ -223,19 +223,19 @@ func (k *KubeProvisionService) DeleteKubeProvision(
 }
 
 // DeleteAllKubeProvisions removes all KubeProvision resources.
-func (k *KubeProvisionService) DeleteAllKubeProvisions(ctx context.Context, _ *pb.DeleteAllKubeProvisionsRequest) (*emptypb.Empty, error) {
-	authCtx, err := k.authorizer.Authorize(ctx)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	if err := authCtx.CheckAccessToKind(types.KindKubeProvision, types.VerbDelete); err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	if err := k.backend.DeleteAllKubeProvisions(ctx); err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return &emptypb.Empty{}, nil
-}
+//func (k *KubeProvisionService) DeleteAllKubeProvisions(ctx context.Context, _ *pb.DeleteAllKubeProvisionsRequest) (*emptypb.Empty, error) {
+//	authCtx, err := k.authorizer.Authorize(ctx)
+//	if err != nil {
+//		return nil, trace.Wrap(err)
+//	}
+//
+//	if err := authCtx.CheckAccessToKind(types.KindKubeProvision, types.VerbDelete); err != nil {
+//		return nil, trace.Wrap(err)
+//	}
+//
+//	if err := k.backend.DeleteAllKubeProvisions(ctx); err != nil {
+//		return nil, trace.Wrap(err)
+//	}
+//
+//	return &emptypb.Empty{}, nil
+//}

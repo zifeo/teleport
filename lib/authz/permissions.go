@@ -854,6 +854,7 @@ func roleSpecForProxy(clusterName string) types.RoleSpecV6 {
 				types.NewRule(types.KindWebSession, services.RW()),
 				types.NewRule(types.KindWebToken, services.RW()),
 				types.NewRule(types.KindKubeServer, services.RW()),
+				types.NewRule(types.KindKubeProvision, services.RO()),
 				types.NewRule(types.KindKubeWaitingContainer, services.RW()),
 				types.NewRule(types.KindDatabaseServer, services.RO()),
 				types.NewRule(types.KindLock, services.RO()),
@@ -1101,6 +1102,7 @@ func definitionForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 						types.NewRule(types.KindLock, services.RO()),
 						types.NewRule(types.KindKubernetesCluster, services.RO()),
 						types.NewRule(types.KindSemaphore, services.RW()),
+						types.NewRule(types.KindKubeProvision, services.RO()),
 					},
 				},
 			})

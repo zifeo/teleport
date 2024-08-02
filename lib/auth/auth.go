@@ -667,6 +667,11 @@ func (r *Services) CrownJewelClient() services.CrownJewels {
 	return r
 }
 
+// KubeProvisionsClient returns the KubeProvisions client.
+func (r *Services) KubeProvisionsClient() services.KubeProvisions {
+	return r
+}
+
 // UserLoginStateClient returns the user login state client.
 func (r *Services) UserLoginStateClient() services.UserLoginStates {
 	return r

@@ -968,6 +968,14 @@ func (f *Forwarder) getKubeAccessDetails(
 		if err != nil {
 			return kubeAccessDetails{}, trace.Wrap(err)
 		}
+
+		//roles := accessChecker.Roles()
+		//for _, role := range roles {
+		//	if strings.HasPrefix(role.GetName(), "kubepermissions") {
+		//		groups = append(groups, fmt.Sprintf("teleport_%s", role.GetName()))
+		//	}
+		//}
+
 		return kubeAccessDetails{
 			kubeGroups:    groups,
 			kubeUsers:     users,
@@ -975,6 +983,7 @@ func (f *Forwarder) getKubeAccessDetails(
 		}, nil
 
 	}
+
 	// kubeClusterName not found. Empty list of allowed kube users/groups is returned.
 	return kubeAccessDetails{
 		kubeGroups:    []string{},
@@ -2100,6 +2109,7 @@ func (f *Forwarder) getExecutor(sess *clusterSession, req *http.Request) (remote
 		f.rwMutexDetails.RUnlock()
 	}
 
+	isWSSupported = false
 	if isWSSupported {
 		wsExec, err := f.getWebsocketExecutor(sess, req)
 		return wsExec, trace.Wrap(err)

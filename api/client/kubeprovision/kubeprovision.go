@@ -78,7 +78,7 @@ func (c *Client) DeleteKubeProvision(ctx context.Context, name string) error {
 }
 
 // DeleteAllKubeProvisions deletes all Kube Provisions.
-func (c *Client) DeleteAllKubeProvisions(ctx context.Context) error {
-	_, err := c.grpcClient.DeleteAllKubeProvisions(ctx, &kubeprovisionv1.DeleteAllKubeProvisionsRequest{})
-	return trace.Wrap(err)
-}
+//func (c *Client) DeleteAllKubeProvisions(ctx context.Context) error {
+//	_, err := c.grpcClient.DeleteAllKubeProvisions(ctx, &kubeprovisionv1.DeleteAllKubeProvisionsRequest{})
+//	return trace.Wrap(err)
+//}

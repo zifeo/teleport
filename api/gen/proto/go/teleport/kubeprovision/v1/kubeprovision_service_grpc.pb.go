@@ -34,13 +34,12 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	KubeProvisionService_CreateKubeProvision_FullMethodName     = "/teleport.kubeprovision.v1.KubeProvisionService/CreateKubeProvision"
-	KubeProvisionService_GetKubeProvision_FullMethodName        = "/teleport.kubeprovision.v1.KubeProvisionService/GetKubeProvision"
-	KubeProvisionService_ListKubeProvisions_FullMethodName      = "/teleport.kubeprovision.v1.KubeProvisionService/ListKubeProvisions"
-	KubeProvisionService_UpdateKubeProvision_FullMethodName     = "/teleport.kubeprovision.v1.KubeProvisionService/UpdateKubeProvision"
-	KubeProvisionService_UpsertKubeProvision_FullMethodName     = "/teleport.kubeprovision.v1.KubeProvisionService/UpsertKubeProvision"
-	KubeProvisionService_DeleteKubeProvision_FullMethodName     = "/teleport.kubeprovision.v1.KubeProvisionService/DeleteKubeProvision"
-	KubeProvisionService_DeleteAllKubeProvisions_FullMethodName = "/teleport.kubeprovision.v1.KubeProvisionService/DeleteAllKubeProvisions"
+	KubeProvisionService_CreateKubeProvision_FullMethodName = "/teleport.kubeprovision.v1.KubeProvisionService/CreateKubeProvision"
+	KubeProvisionService_GetKubeProvision_FullMethodName    = "/teleport.kubeprovision.v1.KubeProvisionService/GetKubeProvision"
+	KubeProvisionService_ListKubeProvisions_FullMethodName  = "/teleport.kubeprovision.v1.KubeProvisionService/ListKubeProvisions"
+	KubeProvisionService_UpdateKubeProvision_FullMethodName = "/teleport.kubeprovision.v1.KubeProvisionService/UpdateKubeProvision"
+	KubeProvisionService_UpsertKubeProvision_FullMethodName = "/teleport.kubeprovision.v1.KubeProvisionService/UpsertKubeProvision"
+	KubeProvisionService_DeleteKubeProvision_FullMethodName = "/teleport.kubeprovision.v1.KubeProvisionService/DeleteKubeProvision"
 )
 
 // KubeProvisionServiceClient is the client API for KubeProvisionService service.
@@ -61,8 +60,6 @@ type KubeProvisionServiceClient interface {
 	UpsertKubeProvision(ctx context.Context, in *UpsertKubeProvisionRequest, opts ...grpc.CallOption) (*KubeProvision, error)
 	// DeleteKubeProvision deletes a KubeProvision.
 	DeleteKubeProvision(ctx context.Context, in *DeleteKubeProvisionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// DeleteAllKubeProvisions removes all KubeProvisions.
-	DeleteAllKubeProvisions(ctx context.Context, in *DeleteAllKubeProvisionsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type kubeProvisionServiceClient struct {
@@ -133,16 +130,6 @@ func (c *kubeProvisionServiceClient) DeleteKubeProvision(ctx context.Context, in
 	return out, nil
 }
 
-func (c *kubeProvisionServiceClient) DeleteAllKubeProvisions(ctx context.Context, in *DeleteAllKubeProvisionsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, KubeProvisionService_DeleteAllKubeProvisions_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // KubeProvisionServiceServer is the server API for KubeProvisionService service.
 // All implementations must embed UnimplementedKubeProvisionServiceServer
 // for forward compatibility
@@ -161,8 +148,6 @@ type KubeProvisionServiceServer interface {
 	UpsertKubeProvision(context.Context, *UpsertKubeProvisionRequest) (*KubeProvision, error)
 	// DeleteKubeProvision deletes a KubeProvision.
 	DeleteKubeProvision(context.Context, *DeleteKubeProvisionRequest) (*emptypb.Empty, error)
-	// DeleteAllKubeProvisions removes all KubeProvisions.
-	DeleteAllKubeProvisions(context.Context, *DeleteAllKubeProvisionsRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedKubeProvisionServiceServer()
 }
 
@@ -187,9 +172,6 @@ func (UnimplementedKubeProvisionServiceServer) UpsertKubeProvision(context.Conte
 }
 func (UnimplementedKubeProvisionServiceServer) DeleteKubeProvision(context.Context, *DeleteKubeProvisionRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteKubeProvision not implemented")
-}
-func (UnimplementedKubeProvisionServiceServer) DeleteAllKubeProvisions(context.Context, *DeleteAllKubeProvisionsRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DeleteAllKubeProvisions not implemented")
 }
 func (UnimplementedKubeProvisionServiceServer) mustEmbedUnimplementedKubeProvisionServiceServer() {}
 
@@ -312,24 +294,6 @@ func _KubeProvisionService_DeleteKubeProvision_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
-func _KubeProvisionService_DeleteAllKubeProvisions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteAllKubeProvisionsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KubeProvisionServiceServer).DeleteAllKubeProvisions(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KubeProvisionService_DeleteAllKubeProvisions_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KubeProvisionServiceServer).DeleteAllKubeProvisions(ctx, req.(*DeleteAllKubeProvisionsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // KubeProvisionService_ServiceDesc is the grpc.ServiceDesc for KubeProvisionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -360,10 +324,6 @@ var KubeProvisionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteKubeProvision",
 			Handler:    _KubeProvisionService_DeleteKubeProvision_Handler,
-		},
-		{
-			MethodName: "DeleteAllKubeProvisions",
-			Handler:    _KubeProvisionService_DeleteAllKubeProvisions_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -3133,6 +3133,16 @@ func (c *Client) DeleteAllKubernetesClusters(ctx context.Context) error {
 	return trace.Wrap(err)
 }
 
+// GetKubeProvision returns the requested KubeProvision resource.
+func (c *Client) GetKubeProvision(ctx context.Context, name string) (*kubeprovisionv1.KubeProvision, error) {
+	return c.KubeProvisionServiceClient().GetKubeProvision(ctx, name)
+}
+
+// ListKubeProvisions lists KubeProvisions resources
+func (c *Client) ListKubeProvisions(ctx context.Context, pageSize int, pageToken string) ([]*kubeprovisionv1.KubeProvision, string, error) {
+	return c.KubeProvisionServiceClient().ListKubeProvisions(ctx, pageSize, pageToken)
+}
+
 // GetKubernetesWaitingContainerClient an unadorned KubeWaitingContainers
 // client, using the underlying Auth gRPC connection.
 func (c *Client) GetKubernetesWaitingContainerClient() *kubewaitingcontainerclient.Client {

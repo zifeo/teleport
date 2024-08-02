@@ -218,6 +218,7 @@ func NewPresetAccessRole() types.Role {
 				DatabaseNames:         []string{teleport.TraitInternalDBNamesVariable},
 				DatabaseUsers:         []string{teleport.TraitInternalDBUsersVariable},
 				DatabaseRoles:         []string{teleport.TraitInternalDBRolesVariable},
+
 				KubernetesResources: []types.KubernetesResource{
 					{
 						Kind:      types.Wildcard,

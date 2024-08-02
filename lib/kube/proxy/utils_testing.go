@@ -208,7 +208,6 @@ func SetupTestContext(ctx context.Context, t *testing.T, cfg TestConfig) *TestCo
 	// heartbeatsWaitChannel waits for clusters heartbeats to start.
 	heartbeatsWaitChannel := make(chan struct{}, len(cfg.Clusters)+1)
 	client := newAuthClientWithStreamer(testCtx, cfg.CreateAuditStreamErr)
-
 	features := func() proto.Features { return proto.Features{Kubernetes: true} }
 	if cfg.ClusterFeatures != nil {
 		features = cfg.ClusterFeatures

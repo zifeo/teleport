@@ -39,7 +39,7 @@ type KubeProvisions interface {
 	// DeleteKubeProvision removes the specified KubeProvision resource.
 	DeleteKubeProvision(ctx context.Context, name string) error
 	// DeleteAllKubeProvisions removes all KubeProvisions.
-	DeleteAllKubeProvisions(context.Context) error
+	//DeleteAllKubeProvisions(context.Context) error
 }
 
 // KubeProvisionsGetter defines methods for List/Read operations on KubeProvision Resources.
@@ -54,10 +54,6 @@ type KubeProvisionsGetter interface {
 func ValidateKubeProvision(b *kubeprovisionv1.KubeProvision) error {
 	if b.Spec == nil {
 		return trace.BadParameter("spec is required")
-	}
-
-	if b.Spec.ResourcesData == "" {
-		return trace.BadParameter("spec.ResourcesData is required")
 	}
 
 	return nil
