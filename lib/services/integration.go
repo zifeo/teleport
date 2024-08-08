@@ -23,6 +23,7 @@ import (
 
 	"github.com/gravitational/trace"
 
+	integrationv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/integration/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/utils"
 )
@@ -52,6 +53,9 @@ type IntegrationsGetter interface {
 type IntegrationsTokenGenerator interface {
 	// GenerateAWSOIDCToken generates a token to be used to execute an AWS OIDC Integration action.
 	GenerateAWSOIDCToken(ctx context.Context, integration string) (string, error)
+
+	// TODO move to its own interface?
+	SignGitHubUserCert(ctx context.Context, in *integrationv1.SignGitHubUserCertRequest) (*integrationv1.SignGitHubUserCertResponse, error)
 }
 
 // MarshalIntegration marshals the Integration resource to JSON.

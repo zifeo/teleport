@@ -4542,6 +4542,12 @@ func (c *Client) GenerateAWSOIDCToken(ctx context.Context, integration string) (
 	return resp.GetToken(), nil
 }
 
+// SignGitHubUserCert signs a SSH certificate for GitHub integration.
+func (c *Client) SignGitHubUserCert(ctx context.Context, in *integrationpb.SignGitHubUserCertRequest) (*integrationpb.SignGitHubUserCertResponse, error) {
+	resp, err := c.integrationsClient().SignGitHubUserCert(ctx, in)
+	return resp, trace.Wrap(err)
+}
+
 // PluginsClient returns an unadorned Plugins client, using the underlying
 // Auth gRPC connection.
 // Clients connecting to non-Enterprise clusters, or older Teleport versions,

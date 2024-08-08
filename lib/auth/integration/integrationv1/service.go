@@ -21,11 +21,14 @@ package integrationv1
 import (
 	"context"
 	"crypto"
+	"crypto/rand"
 	"fmt"
+	"time"
 
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ssh"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/gravitational/teleport"
@@ -58,8 +61,10 @@ type Cache interface {
 type KeyStoreManager interface {
 	// GetJWTSigner selects a usable JWT keypair from the given keySet and returns a [crypto.Signer].
 	GetJWTSigner(ctx context.Context, ca types.CertAuthority) (crypto.Signer, error)
-	// generates a new SSH keypair in the keystore backend and returns it.
+	// NewSSHKeyPair generates a new SSH keypair in the keystore backend and returns it.
 	NewSSHKeyPair(ctx context.Context, purpose cryptosuites.KeyPurpose) (*types.SSHKeyPair, error)
+	// TODO
+	GetSSHSignerForKeySet(ctx context.Context, keySet types.CAKeySet) (ssh.Signer, error)
 }
 
 // ServiceConfig holds configuration options for
@@ -370,4 +375,51 @@ func getIntegrationMetadata(ig types.Integration) (apievents.IntegrationMetadata
 // DEPRECATED: can't delete all integrations over gRPC.
 func (s *Service) DeleteAllIntegrations(ctx context.Context, _ *integrationpb.DeleteAllIntegrationsRequest) (*emptypb.Empty, error) {
 	return nil, trace.BadParameter("DeleteAllIntegrations is deprecated")
+}
+
+func (s *Service) SignGitHubUserCert(ctx context.Context, in *integrationpb.SignGitHubUserCertRequest) (*integrationpb.SignGitHubUserCertResponse, error) {
+	authCtx, err := s.authorizer.Authorize(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	if !authz.HasBuiltinRole(*authCtx, string(types.RoleProxy)) {
+		return nil, trace.AccessDenied("SignGitHubUserCert is only available to proxy services")
+	}
+
+	key, _, _, _, err := ssh.ParseAuthorizedKey(in.PublicKey)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// TODO load secrets
+	integration, err := s.cache.GetIntegration(ctx, in.Integration)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	caSigner, err := s.keyStoreManager.GetSSHSignerForKeySet(ctx, types.CAKeySet{
+		SSH: []*types.SSHKeyPair{integration.GetGitHubIntegrationSpec().CertAuthority},
+	})
+
+	// TODO clockwork?
+	now := time.Now()
+	validAfter := now.Add(-time.Minute)
+	expires := now.Add(in.Ttl.AsDuration())
+	newSSHCert := &ssh.Certificate{
+		Key:         key,
+		CertType:    ssh.UserCert,
+		KeyId:       in.KeyId,
+		ValidAfter:  uint64(validAfter.Unix()),
+		ValidBefore: uint64(expires.Unix()),
+	}
+	newSSHCert.Extensions = map[string]string{
+		"login@github.com": in.Login,
+	}
+	if err := newSSHCert.SignCert(rand.Reader, caSigner); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &integrationpb.SignGitHubUserCertResponse{
+		AuthorizedKey: ssh.MarshalAuthorizedKey(newSSHCert),
+	}, nil
 }

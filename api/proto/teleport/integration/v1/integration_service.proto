@@ -122,14 +122,16 @@ message GenerateAWSOIDCTokenResponse {
 // SignGitHubUserCertRequest is a request to sign a client certificate used by
 // GitHub integration to authenticate with GitHub enterprise.
 message SignGitHubUserCertRequest {
+  // Integration is the name of the integration;
+  string integration = 1;
   // PublicKey is the public key to be signed.
-  bytes public_key = 1;
+  bytes public_key = 2;
   // Login is the GitHub username.
-  string login = 2;
+  string login = 3;
   // KeyId is the certficate ID.
-  string key_id = 3;
+  string key_id = 4;
   // Ttl is the duration the certificate will be valid for.
-  google.protobuf.Duration ttl = 4;
+  google.protobuf.Duration ttl = 5;
 }
 
 // SignGitHubUserCertResponse contains a signed certificate.

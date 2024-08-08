@@ -101,6 +101,8 @@ type Server interface {
 	GetAWSInstanceID() string
 	// GetAWSAccountID returns the AWS Account ID if this node comes from an EC2 instance.
 	GetAWSAccountID() string
+	// GetIntegration returns the associated integration.
+	GetIntegration() string
 }
 
 // NewServer creates an instance of Server.
@@ -404,7 +406,7 @@ func (s *ServerV2) IsOpenSSHNode() bool {
 // IsOpenSSHNodeSubKind returns whether the Node SubKind is from a server which accepts connections over the
 // OpenSSH daemon (instead of a Teleport Node).
 func IsOpenSSHNodeSubKind(subkind string) bool {
-	return subkind == SubKindOpenSSHNode || subkind == SubKindOpenSSHEICENode
+	return subkind == SubKindOpenSSHNode || subkind == SubKindOpenSSHEICENode || subkind == SubKindOpenSSHGitHub
 }
 
 // GetAWSAccountID returns the AWS Account ID if this node comes from an EC2 instance.
@@ -427,6 +429,11 @@ func (s *ServerV2) GetAWSInstanceID() string {
 		awsInstanceID = awsMetadata.InstanceID
 	}
 	return awsInstanceID
+}
+
+// GetIntegration returns the associated integration.
+func (s *ServerV2) GetIntegration() string {
+	return s.Spec.Integration
 }
 
 // IsEICE returns whether the Node is an EICE instance.
@@ -529,6 +536,8 @@ func (s *ServerV2) CheckAndSetDefaults() error {
 			// if the server is a registered OpenSSH node, allow the name to be
 			// randomly generated
 			s.Metadata.Name = uuid.NewString()
+		case SubKindOpenSSHGitHub:
+			s.Metadata.Name = uuid.NewString()
 		}
 	}
 
@@ -553,6 +562,11 @@ func (s *ServerV2) CheckAndSetDefaults() error {
 
 	case SubKindOpenSSHEICENode:
 		if err := s.openSSHEC2InstanceConnectEndpointNodeCheckAndSetDefaults(); err != nil {
+			return trace.Wrap(err)
+		}
+
+	case SubKindOpenSSHGitHub:
+		if err := s.openSSHNodeCheckAndSetDefaults(); err != nil {
 			return trace.Wrap(err)
 		}
 
