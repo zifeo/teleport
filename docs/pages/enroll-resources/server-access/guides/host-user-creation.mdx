@@ -103,6 +103,19 @@ the groups listed in `host_groups`, and gives it the sudoer permissions
 specified in the `host_sudoers` field. In this case, the new user receives
 permission to restart the Nginx service as root.
 
+### Sudoers Configuration
+
+For CentOS builds, ensure that the following line is present in your `sudoers` file:
+
+```bash
+#includedir /etc/sudoers.d
+Note: In the sudoers file, the # symbol is typically used to indicate comments. However, in this context, 
+#includedir is a directive and not a comment.
+
+For Debian-based systems, you might encounter @includedir /etc/sudoers.d, which serves a similar purpose. 
+Ensure that the correct directive is used based on your operating system.
+
+
 {/*TODO (ptgott): We should move the information below into a reference guide*/}
 <Details title="Customizing host user creation">
 
