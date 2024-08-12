@@ -29,7 +29,6 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 
@@ -267,10 +266,6 @@ func (s *localSite) Dial(params reversetunnelclient.DialParams) (net.Conn, error
 		return nil, trace.Wrap(err)
 	}
 
-	logrus.Debugf("=== params.TargetServer %v", params.TargetServer)
-	if params.TargetServer != nil {
-		logrus.Debugf("=== params.TargetServer.IsOpenSSHNode %v", params.TargetServer.IsOpenSSHNode())
-	}
 	// If the proxy is in recording mode and a SSH connection is being
 	// requested or the target server is a registered OpenSSH node, build
 	// an in-memory forwarding server.
