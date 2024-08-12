@@ -60,7 +60,7 @@ export default function EventList(props: Props) {
         ]}
         emptyText={'No Events Found'}
         isSearchable
-        searchableProps={['code', 'codeDesc', 'time', 'user', 'message', 'id']}
+        searchableProps={['code', 'codeDesc', 'time', 'user', 'message', 'id', 'aws_role_session_name']}
         customSearchMatchers={[dateTimeMatcher(['time'])]}
         initialSort={{ key: 'time', dir: 'DESC' }}
         pagination={{ pageSize }}
