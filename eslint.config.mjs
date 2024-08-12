@@ -16,24 +16,45 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import globals from 'globals';
 import eslintImport from 'eslint-plugin-import';
 import eslintReactHooks from 'eslint-plugin-react-hooks';
-import eslintBabel from 'eslint-plugin-babel';
+import eslintBabel from '@babel/eslint-plugin';
+import eslintTestingLibrary from 'eslint-plugin-testing-library';
+import eslintJsDom from 'eslint-plugin-jest-dom';
+import eslintJest from 'eslint-plugin-jest';
 import eslintReact from 'eslint-plugin-react';
+import tsEstlintPlugin from '@typescript-eslint/eslint-plugin';
+import tsParser from '@typescript-eslint/parser';
 
 export default [
   {
+    ignores: [
+      '**/dist/**',
+      '**/*_pb.*',
+      'web/packages/teleport/src/ironrdp/pkg',
+      'web/packages/teleterm/build',
+    ],
+  },
+  {
+    plugins: {
+      '@typescript-eslint': tsEstlintPlugin,
+      import: eslintImport,
+      babel: eslintBabel,
+      react: eslintReact,
+      ['react-hooks']: eslintReactHooks,
+    },
     languageOptions: {
+      // after eslint v9, we have to import global envs like this
+      // https://eslint.org/docs/latest/use/configure/migration-guide#configuring-language-options
       globals: {
-        expect: true,
-        jest: true,
-        env: {
-          es6: true,
-          browser: true,
-          node: true,
-        },
+        ...globals.es6,
+        ...globals.browser,
+        ...globals.node,
+        expect: 'readonly',
+        jest: 'readonly',
       },
-      parser: '@typescript-eslint/parser',
+      parser: tsParser,
       parserOptions: {
         ecmaVersion: 6,
         ecmaFeatures: {
@@ -42,12 +63,6 @@ export default [
         },
       },
     },
-    ignores: [
-      '**/dist/**',
-      '**/*_pb.*',
-      'web/packages/teleport/src/ironrdp/pkg',
-      'web/packages/teleterm/build',
-    ],
     // extends: [
     //   'eslint:recommended',
     //   'plugin:@typescript-eslint/recommended',
@@ -55,35 +70,6 @@ export default [
     //   'plugin:import/warnings',
     //   'plugin:import/typescript',
     // ],
-    plugins: {
-      import: eslintImport,
-      babel: eslintBabel,
-      react: eslintReact,
-      ['react-hooks']: eslintReactHooks,
-    },
-    overrides: [
-      {
-        files: ['**/*.test.{ts,tsx,js,jsx}'],
-        plugins: ['jest'],
-        extends: [
-          'plugin:jest/recommended',
-          'plugin:testing-library/react',
-          'plugin:jest-dom/recommended',
-        ],
-        rules: {
-          'jest/prefer-called-with': 0,
-          'jest/prefer-expect-assertions': 0,
-          'jest/consistent-test-it': 0,
-          'jest/no-try-expect': 0,
-          'jest/no-hooks': 0,
-          'jest/no-disabled-tests': 0,
-          'jest/prefer-strict-equal': 0,
-          'jest/prefer-inline-snapshots': 0,
-          'jest/require-top-level-describe': 0,
-          'jest/no-large-snapshots': ['warn', { maxSize: 200 }],
-        },
-      },
-    ],
     rules: {
       'import/order': [
         'error',
@@ -169,6 +155,26 @@ export default [
       'import/resolver': {
         typescript: {},
       },
+    },
+  },
+  {
+    files: ['**/*.test.{ts,tsx,js,jsx}'],
+    ...eslintTestingLibrary.configs['flat/react'],
+    plugins: {
+      jest: eslintJest,
+      'jest-dom': eslintJsDom,
+    },
+    rules: {
+      'jest/prefer-called-with': 0,
+      'jest/prefer-expect-assertions': 0,
+      'jest/consistent-test-it': 0,
+      'jest/no-try-expect': 0,
+      'jest/no-hooks': 0,
+      'jest/no-disabled-tests': 0,
+      'jest/prefer-strict-equal': 0,
+      'jest/prefer-inline-snapshots': 0,
+      'jest/require-top-level-describe': 0,
+      'jest/no-large-snapshots': ['warn', { maxSize: 200 }],
     },
   },
 ];
