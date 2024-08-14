@@ -22,10 +22,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/protoadapt"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/runtime/protoiface"
 
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/utils"
@@ -968,7 +973,7 @@ func TestJSON(t *testing.T) {
 }
 
 // TestEvents tests that all events can be converted and processed correctly.
-func TestEvents(t *testing.T) {
+func TestConvertingEvents(t *testing.T) {
 	t.Parallel()
 
 	for eventName, eventType := range eventsMap {
@@ -986,4 +991,188 @@ func TestEvents(t *testing.T) {
 			require.IsType(t, eventType, auditEvent, "FromEventFields did not convert the event type correctly")
 		})
 	}
+}
+
+func TestTrimN(t *testing.T) {
+	tests := []struct {
+		have string
+		want string
+	}{
+		{strings.Repeat("A", 17) + `\n`, strings.Repeat("A", 17) + `\`},
+		{strings.Repeat(`A\n`, 200), `A\nA\nA\nA\nA\`},
+		{strings.Repeat(`A\a`, 200), `A\aA\aA\aA\aA\`},
+		{strings.Repeat(`A\t`, 200), `A\tA\tA\tA\tA\`},
+		{`{` + strings.Repeat(`"a": "b",`, 100) + "}", `{"a": "b","a"`},
+	}
+
+	const maxLen = 20
+	for _, test := range tests {
+		require.Equal(t, test.want, trimN(test.have, maxLen))
+	}
+}
+
+var newString = strings.Repeat("umai", 42)
+
+func TestTrimToMaxSize(t *testing.T) {
+	t.Parallel()
+
+	for eventName, eventMsg := range eventsMap {
+		t.Run(eventName, func(t *testing.T) {
+			if eventName == "print" || eventName == "okta.access_list.sync" {
+				t.Skip("skipping trimming test for event with no string fields")
+			}
+
+			// clone the message to avoid modifying the original in the global map
+			event := proto.Clone(toV2Proto(t, eventMsg))
+			setProtoFields(event)
+
+			auditEvent := protoadapt.MessageV1Of(event).(apievents.AuditEvent)
+			size := auditEvent.Size()
+			maxSize := int(float32(size) / 1.5)
+
+			trimmedAuditEvent, err := TrimToMaxSize(auditEvent, maxSize)
+			require.NoError(t, err)
+			trimmedEvent := toV2Proto(t, trimmedAuditEvent)
+
+			require.NotEqual(t, event, trimmedEvent)
+			require.LessOrEqual(t, proto.Size(trimmedEvent), maxSize)
+		})
+	}
+}
+
+type trimmableEvent interface {
+	TrimToMaxSize(int) apievents.AuditEvent
+}
+
+type testingVal interface {
+	Helper()
+	require.TestingT
+}
+
+func BenchmarkTrimToMaxSize(b *testing.B) {
+	for eventName, eventMsg := range eventsMap {
+		if _, ok := eventMsg.(trimmableEvent); !ok {
+			continue
+		}
+
+		b.Run(fmt.Sprintf("%s static method", eventName), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+
+				// clone the message to avoid modifying the original in the global map
+				event := proto.Clone(toV2Proto(b, eventMsg))
+				setProtoFields(event)
+				maxSize := proto.Size(event) / 2
+				trimmable := protoadapt.MessageV1Of(event).(trimmableEvent)
+
+				b.StartTimer()
+				trimmable.TrimToMaxSize(maxSize)
+			}
+		})
+
+		b.Run(fmt.Sprintf("%s dynamic reflection", eventName), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+
+				// clone the message to avoid modifying the original in the global map
+				event := proto.Clone(toV2Proto(b, eventMsg))
+				setProtoFields(event)
+				maxSize := proto.Size(event) / 2
+				auditEvent := protoadapt.MessageV1Of(event).(apievents.AuditEvent)
+
+				b.StartTimer()
+				TrimToMaxSize(auditEvent, maxSize)
+			}
+		})
+	}
+}
+
+func setProtoFields(msg proto.Message) {
+	m := msg.ProtoReflect()
+	fields := m.Descriptor().Fields()
+
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		if m.Has(fd) {
+			continue
+		}
+
+		if fd.IsList() {
+			// Handle repeated fields
+			listValue := m.Mutable(fd).List()
+			if fd.Kind() == protoreflect.MessageKind {
+				listMsg := listValue.AppendMutable().Message()
+				setProtoFields(listMsg.Interface())
+			} else {
+				listValue.Append(getDefaultValue(m, fd))
+			}
+			continue
+		}
+
+		switch fd.Kind() {
+		case protoreflect.MessageKind:
+			if fd.IsMap() {
+				// Handle map fields
+				mapValue := m.Mutable(fd).Map()
+				keyDesc := fd.MapKey()
+				valueDesc := fd.MapValue()
+
+				// TODO: handle message keys
+				keyVal := getDefaultValue(m, keyDesc).MapKey()
+				var valueVal protoreflect.Value
+
+				if valueDesc.Kind() == protoreflect.MessageKind {
+					valueMsg := mapValue.NewValue().Message()
+					setProtoFields(valueMsg.Interface())
+					valueVal = protoreflect.ValueOfMessage(valueMsg)
+				} else {
+					valueVal = getDefaultValue(m, valueDesc)
+				}
+
+				mapValue.Set(keyVal, valueVal)
+			} else {
+				// Handle singular message fields
+				nestedMsg := m.Mutable(fd).Message()
+				setProtoFields(nestedMsg.Interface())
+			}
+		default:
+			m.Set(fd, getDefaultValue(m, fd))
+		}
+	}
+}
+
+func getDefaultValue(m protoreflect.Message, fd protoreflect.FieldDescriptor) protoreflect.Value {
+	switch fd.Kind() {
+	case protoreflect.BoolKind:
+		return protoreflect.ValueOfBool(true)
+	case protoreflect.Int32Kind, protoreflect.Int64Kind:
+		return protoreflect.ValueOfInt64(42)
+	case protoreflect.Uint32Kind, protoreflect.Uint64Kind:
+		return protoreflect.ValueOfUint64(42)
+	case protoreflect.FloatKind, protoreflect.DoubleKind:
+		return protoreflect.ValueOfFloat64(3.14)
+	case protoreflect.StringKind:
+		return protoreflect.ValueOfString(newString)
+	case protoreflect.BytesKind:
+		return protoreflect.ValueOfBytes([]byte("default bytes"))
+	case protoreflect.EnumKind:
+		enumValues := fd.Enum().Values()
+		if enumValues.Len() > 0 {
+			return protoreflect.ValueOfEnum(enumValues.Get(0).Number())
+		}
+	case protoreflect.MessageKind:
+		// Handle singular message fields
+		nestedMsg := m.NewField(fd).Message()
+		setProtoFields(nestedMsg.Interface())
+		return protoreflect.ValueOfMessage(nestedMsg)
+	}
+	return protoreflect.Value{} // This should never happen
+}
+
+func toV2Proto(t testingVal, e apievents.AuditEvent) protoreflect.ProtoMessage {
+	t.Helper()
+
+	pm, ok := e.(protoiface.MessageV1)
+	require.True(t, ok)
+	return protoadapt.MessageV2Of(pm)
 }

@@ -138,21 +138,3 @@ func TestTrimToMaxSize(t *testing.T) {
 		})
 	}
 }
-
-func TestTrimN(t *testing.T) {
-	tests := []struct {
-		have string
-		want string
-	}{
-		{strings.Repeat("A", 17) + `\n`, strings.Repeat("A", 17) + `\`},
-		{strings.Repeat(`A\n`, 200), `A\nA\nA\nA\nA\`},
-		{strings.Repeat(`A\a`, 200), `A\aA\aA\aA\aA\`},
-		{strings.Repeat(`A\t`, 200), `A\tA\tA\tA\tA\`},
-		{`{` + strings.Repeat(`"a": "b",`, 100) + "}", `{"a": "b","a"`},
-	}
-
-	const maxLen = 20
-	for _, test := range tests {
-		require.Equal(t, test.want, trimN(test.have, maxLen))
-	}
-}
