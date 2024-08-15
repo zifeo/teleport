@@ -183,10 +183,23 @@ func (s *Service) GetIntegration(ctx context.Context, req *integrationpb.GetInte
 		return nil, trace.Wrap(err)
 	}
 
-	if err := authCtx.CheckAccessToKind(types.KindIntegration, types.VerbRead); err != nil {
+	readVerb := types.VerbReadNoSecrets
+	if req.WithSecrets {
+		readVerb = types.VerbRead
+	}
+
+	if err := authCtx.CheckAccessToKind(types.KindIntegration, readVerb); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	integration, err := s.cache.GetIntegration(ctx, req.GetName())
+
+	// Require admin MFA to read secrets.
+	if req.WithSecrets {
+		if err := authCtx.AuthorizeAdminActionAllowReusedMFA(); err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+
+	integration, err := s.cache.GetIntegration(ctx, req.GetName(), req.WithSecrets)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -218,7 +231,8 @@ func (s *Service) CreateIntegration(ctx context.Context, req *integrationpb.Crea
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
-		if err := reqIg.SetGitHubSSHCertAuthority(ca); err != nil {
+		// TODO(greedy52) support per auth CA like HSM.
+		if err := reqIg.SetGitHubSSHCertAuthority([]*types.SSHKeyPair{ca}); err != nil {
 			return nil, trace.Wrap(err)
 		}
 	}
@@ -313,7 +327,7 @@ func (s *Service) DeleteIntegration(ctx context.Context, req *integrationpb.Dele
 		return nil, trace.Wrap(err)
 	}
 
-	ig, err := s.cache.GetIntegration(ctx, req.GetName())
+	ig, err := s.cache.GetIntegration(ctx, req.GetName(), false)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -377,14 +391,14 @@ func (s *Service) DeleteAllIntegrations(ctx context.Context, _ *integrationpb.De
 	return nil, trace.BadParameter("DeleteAllIntegrations is deprecated")
 }
 
-func (s *Service) SignGitHubUserCert(ctx context.Context, in *integrationpb.SignGitHubUserCertRequest) (*integrationpb.SignGitHubUserCertResponse, error) {
+func (s *Service) GenerateGitHubUserCert(ctx context.Context, in *integrationpb.GenerateGitHubUserCertRequest) (*integrationpb.GenerateGitHubUserCertResponse, error) {
 	authCtx, err := s.authorizer.Authorize(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	if !authz.HasBuiltinRole(*authCtx, string(types.RoleProxy)) {
-		return nil, trace.AccessDenied("SignGitHubUserCert is only available to proxy services")
+		return nil, trace.AccessDenied("GenerateGitHubUserCert is only available to proxy services")
 	}
 
 	key, _, _, _, err := ssh.ParseAuthorizedKey(in.PublicKey)
@@ -392,15 +406,22 @@ func (s *Service) SignGitHubUserCert(ctx context.Context, in *integrationpb.Sign
 		return nil, trace.Wrap(err)
 	}
 
-	// TODO load secrets
-	integration, err := s.cache.GetIntegration(ctx, in.Integration)
+	integration, err := s.cache.GetIntegration(ctx, in.Integration, true)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
+	spec := integration.GetGitHubIntegrationSpec()
+	if !spec.Proxy.Enabled {
+		return nil, trace.BadParameter("GitHub Proxy for integration %s is disabled", in.Integration)
+	}
+
 	caSigner, err := s.keyStoreManager.GetSSHSignerForKeySet(ctx, types.CAKeySet{
-		SSH: []*types.SSHKeyPair{integration.GetGitHubIntegrationSpec().CertAuthority},
+		SSH: spec.Proxy.CertAuthority,
 	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 
 	// TODO clockwork?
 	now := time.Now()
@@ -419,7 +440,7 @@ func (s *Service) SignGitHubUserCert(ctx context.Context, in *integrationpb.Sign
 	if err := newSSHCert.SignCert(rand.Reader, caSigner); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return &integrationpb.SignGitHubUserCertResponse{
+	return &integrationpb.GenerateGitHubUserCertResponse{
 		AuthorizedKey: ssh.MarshalAuthorizedKey(newSSHCert),
 	}, nil
 }

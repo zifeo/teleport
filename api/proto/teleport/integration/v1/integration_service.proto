@@ -46,8 +46,8 @@ service IntegrationService {
   // GenerateAWSOIDCToken generates a token to be used when executing an AWS OIDC Integration action.
   rpc GenerateAWSOIDCToken(GenerateAWSOIDCTokenRequest) returns (GenerateAWSOIDCTokenResponse);
 
-  // SignGitHubUserCert signs a SSH certificate for GitHub integration.
-  rpc SignGitHubUserCert(SignGitHubUserCertRequest) returns (SignGitHubUserCertResponse);
+  // GenerateGitHubUserCert signs a SSH certificate for GitHub integration.
+  rpc GenerateGitHubUserCert(GenerateGitHubUserCertRequest) returns (GenerateGitHubUserCertResponse);
 }
 
 // ListIntegrationsRequest is a request for a paginated list of Integrations.
@@ -119,23 +119,23 @@ message GenerateAWSOIDCTokenResponse {
   string token = 1;
 }
 
-// SignGitHubUserCertRequest is a request to sign a client certificate used by
+// GenerateGitHubUserCertRequest is a request to sign a client certificate used by
 // GitHub integration to authenticate with GitHub enterprise.
-message SignGitHubUserCertRequest {
+message GenerateGitHubUserCertRequest {
   // Integration is the name of the integration;
   string integration = 1;
   // PublicKey is the public key to be signed.
   bytes public_key = 2;
   // Login is the GitHub username.
   string login = 3;
-  // KeyId is the certficate ID.
+  // KeyId is the certficate ID, usually the Teleport username.
   string key_id = 4;
   // Ttl is the duration the certificate will be valid for.
   google.protobuf.Duration ttl = 5;
 }
 
-// SignGitHubUserCertResponse contains a signed certificate.
-message SignGitHubUserCertResponse {
+// GenerateGitHubUserCertResponse contains a signed certificate.
+message GenerateGitHubUserCertResponse {
   // AuthorizedKey is the signed certificate.
   bytes authorized_key = 1;
 }

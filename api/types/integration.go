@@ -57,9 +57,11 @@ type Integration interface {
 	// GetAzureOIDCIntegrationSpec returns the `azure-oidc` spec fields.
 	GetAzureOIDCIntegrationSpec() *AzureOIDCIntegrationSpecV1
 
+	// GetGitHubIntegrationSpec returns the GitHub spec.
 	GetGitHubIntegrationSpec() *GitHubIntegrationSpecV1
 
-	SetGitHubSSHCertAuthority(ca *SSHKeyPair) error
+	// SetGitHubSSHCertAuthority configures CA for GitHub integraion.
+	SetGitHubSSHCertAuthority(ca []*SSHKeyPair) error
 }
 
 var _ ResourceWithLabels = (*IntegrationV1)(nil)
@@ -262,13 +264,13 @@ func (ig *IntegrationV1) SetAWSOIDCIntegrationSpec(awsOIDCSpec *AWSOIDCIntegrati
 	}
 }
 
-func (ig *IntegrationV1) SetGitHubSSHCertAuthority(ca *SSHKeyPair) error {
+func (ig *IntegrationV1) SetGitHubSSHCertAuthority(cas []*SSHKeyPair) error {
 	if ig.GetSubKind() != IntegrationSubKindGitHub {
 		return trace.BadParameter("integration is not %q subkind", IntegrationSubKindGitHub)
 	}
 
 	spec := ig.Spec.GetGitHub()
-	spec.CertAuthority = ca
+	spec.Proxy.CertAuthority = cas
 	ig.Spec.SubKindSpec = &IntegrationSpecV1_GitHub{
 		GitHub: spec,
 	}

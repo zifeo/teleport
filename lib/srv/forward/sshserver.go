@@ -683,8 +683,8 @@ func (s *Server) Serve() {
 
 // TODO how to keep a cache for this
 func (s *Server) getSSHSignerForGitHub(ctx context.Context) (ssh.Signer, error) {
-	integration := s.targetServer.GetIntegration()
-	if integration == "" {
+	spec := s.targetServer.GetGitHub()
+	if spec == nil || spec.Integration == "" {
 		return nil, trace.BadParameter("GitHub server %s missing integration", s.targetServer)
 	}
 
@@ -693,8 +693,8 @@ func (s *Server) getSSHSignerForGitHub(ctx context.Context) (ssh.Signer, error) 
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	resp, err := s.authClient.SignGitHubUserCert(ctx, &integrationv1.SignGitHubUserCertRequest{
-		Integration: integration,
+	resp, err := s.authClient.GenerateGitHubUserCert(ctx, &integrationv1.GenerateGitHubUserCertRequest{
+		Integration: spec.Integration,
 		PublicKey:   priv.MarshalSSHPublicKey(),
 		Login:       s.identityContext.Login,
 		KeyId:       s.identityContext.TeleportUser,
@@ -718,7 +718,7 @@ func (s *Server) sendSSHPublicKeyToTarget(ctx context.Context) (ssh.Signer, erro
 		return nil, trace.BadParameter("failed to generate aws token: %v", err)
 	}
 
-	integration, err := s.authClient.GetIntegration(ctx, awsInfo.Integration)
+	integration, err := s.authClient.GetIntegration(ctx, awsInfo.Integration, false)
 	if err != nil {
 		return nil, trace.BadParameter("failed to fetch integration details: %v", err)
 	}

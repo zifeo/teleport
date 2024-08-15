@@ -645,8 +645,8 @@ func (r *Services) GenerateAWSOIDCToken(ctx context.Context, integration string)
 }
 
 // TODO
-func (r *Services) SignGitHubUserCert(ctx context.Context, in *integrationv1.SignGitHubUserCertRequest) (*integrationv1.SignGitHubUserCertResponse, error) {
-	return r.IntegrationsTokenGenerator.SignGitHubUserCert(ctx, in)
+func (r *Services) GenerateGitHubUserCert(ctx context.Context, in *integrationv1.GenerateGitHubUserCertRequest) (*integrationv1.GenerateGitHubUserCertResponse, error) {
+	return r.IntegrationsTokenGenerator.GenerateGitHubUserCert(ctx, in)
 }
 
 // OktaClient returns the okta client.

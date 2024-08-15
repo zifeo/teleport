@@ -4475,9 +4475,10 @@ func (c *Client) ListAllIntegrations(ctx context.Context) ([]types.Integration, 
 }
 
 // GetIntegration returns an Integration by its name.
-func (c *Client) GetIntegration(ctx context.Context, name string) (types.Integration, error) {
+func (c *Client) GetIntegration(ctx context.Context, name string, withSecrets bool) (types.Integration, error) {
 	ig, err := c.integrationsClient().GetIntegration(ctx, &integrationpb.GetIntegrationRequest{
-		Name: name,
+		Name:        name,
+		WithSecrets: withSecrets,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -4542,9 +4543,11 @@ func (c *Client) GenerateAWSOIDCToken(ctx context.Context, integration string) (
 	return resp.GetToken(), nil
 }
 
-// SignGitHubUserCert signs a SSH certificate for GitHub integration.
-func (c *Client) SignGitHubUserCert(ctx context.Context, in *integrationpb.SignGitHubUserCertRequest) (*integrationpb.SignGitHubUserCertResponse, error) {
-	resp, err := c.integrationsClient().SignGitHubUserCert(ctx, in)
+// GenerateGitHubUserCert generates a SSH user certificate for GitHub
+// integration.
+// TODO maybe just expose c.integrationsClient()
+func (c *Client) GenerateGitHubUserCert(ctx context.Context, in *integrationpb.GenerateGitHubUserCertRequest) (*integrationpb.GenerateGitHubUserCertResponse, error) {
+	resp, err := c.integrationsClient().GenerateGitHubUserCert(ctx, in)
 	return resp, trace.Wrap(err)
 }
 

@@ -1741,7 +1741,7 @@ type ClientI interface {
 	GenerateAppToken(ctx context.Context, req types.GenerateAppTokenRequest) (string, error)
 
 	// TODO is there a better place for this?
-	SignGitHubUserCert(ctx context.Context, in *integrationv1.SignGitHubUserCertRequest) (*integrationv1.SignGitHubUserCertResponse, error)
+	GenerateGitHubUserCert(ctx context.Context, in *integrationv1.GenerateGitHubUserCertRequest) (*integrationv1.GenerateGitHubUserCertResponse, error)
 }
 
 type CreateAppSessionForV15Client interface {

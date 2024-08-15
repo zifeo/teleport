@@ -17,7 +17,9 @@ limitations under the License.
 package types
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"sort"
 	"strings"
@@ -101,8 +103,8 @@ type Server interface {
 	GetAWSInstanceID() string
 	// GetAWSAccountID returns the AWS Account ID if this node comes from an EC2 instance.
 	GetAWSAccountID() string
-	// GetIntegration returns the associated integration.
-	GetIntegration() string
+	// GetGitHub returns the GitHub server spec.
+	GetGitHub() *GitHubServerMetadata
 }
 
 // NewServer creates an instance of Server.
@@ -431,9 +433,9 @@ func (s *ServerV2) GetAWSInstanceID() string {
 	return awsInstanceID
 }
 
-// GetIntegration returns the associated integration.
-func (s *ServerV2) GetIntegration() string {
-	return s.Spec.Integration
+// GetGitHub returns the GitHub server spec.
+func (s *ServerV2) GetGitHub() *GitHubServerMetadata {
+	return s.Spec.GitHub
 }
 
 // IsEICE returns whether the Node is an EICE instance.
@@ -496,6 +498,23 @@ func (s *ServerV2) openSSHEC2InstanceConnectEndpointNodeCheckAndSetDefaults() er
 		return trace.BadParameter("missing AWS Subnet ID (required for %q SubKind)", s.SubKind)
 	}
 
+	return nil
+}
+
+const gitHubAddress = "github.com:22"
+
+func (s *ServerV2) githubCheckAndSetDefaults() error {
+	switch s.Spec.Addr {
+	case gitHubAddress:
+	case "":
+		s.Spec.Addr = gitHubAddress
+	default:
+		slog.WarnContext(context.Background(), "invalid address for GitHub server. Address will be replaced with %q", gitHubAddress)
+		s.Spec.Addr = gitHubAddress
+	}
+	if err := s.openSSHNodeCheckAndSetDefaults(); err != nil {
+		return trace.Wrap(err)
+	}
 	return nil
 }
 
@@ -566,7 +585,7 @@ func (s *ServerV2) CheckAndSetDefaults() error {
 		}
 
 	case SubKindOpenSSHGitHub:
-		if err := s.openSSHNodeCheckAndSetDefaults(); err != nil {
+		if err := s.githubCheckAndSetDefaults(); err != nil {
 			return trace.Wrap(err)
 		}
 
