@@ -41,8 +41,7 @@ func maxSizePerField(maxLength, customFields int) int {
 }
 
 func TrimToMaxSize(e apievents.AuditEvent, maxSize int) (apievents.AuditEvent, error) {
-	size := e.Size()
-	if size <= maxSize {
+	if e.Size() <= maxSize {
 		return e, nil
 	}
 
@@ -59,8 +58,14 @@ func TrimToMaxSize(e apievents.AuditEvent, maxSize int) (apievents.AuditEvent, e
 		totalStrLen += strLen
 	}
 
-	// Use 10% max size ballast + message size without custom fields.
-	sizeBallast := maxSize/10 + (proto.Size(cloned) - totalStrLen)
+	// this is safe as protoadapt.MessageV2Of will simply wrap the message
+	// with a type that implements the protobuf v2 API, and
+	// protoadapt.MessageV1Of will return the unwrapped message
+	clonedAuditEvent := protoadapt.MessageV1Of(cloned).(apievents.AuditEvent)
+	//Use 10% max size ballast + message size without custom fields.
+	// clonedAuditEvent.Size is used instead of proto.Size(cloned) because
+	// proto.Size uses reflection and is much slower.
+	sizeBallast := maxSize/10 + (clonedAuditEvent.Size() - totalStrLen)
 	maxSize -= sizeBallast
 
 	maxFieldSize := maxSizePerField(maxSize, len(stringFieldLengths))
@@ -77,12 +82,7 @@ func TrimToMaxSize(e apievents.AuditEvent, maxSize int) (apievents.AuditEvent, e
 	}
 	trimStrings(cloned, maxFieldSize)
 
-	// this is safe as protoadapt.MessageV2Of will simply wrap the message
-	// with a type that implements the protobuf v2 API, and
-	// protoadapt.MessageV1Of will return the unwrapped message
-	trimmedEvent := protoadapt.MessageV1Of(cloned).(apievents.AuditEvent)
-
-	return trimmedEvent, nil
+	return clonedAuditEvent, nil
 }
 
 func findStringLengths(m protoreflect.ProtoMessage) []int {
@@ -97,8 +97,12 @@ func processStrings(m protoreflect.ProtoMessage, trimSize int) []int {
 	trim := trimSize != 0
 	var strLens []int
 
-	protorange.Range(m.ProtoReflect(), func(v protopath.Values) error {
+	var rangeOptions protorange.Options
+	rangeOptions.Range(m.ProtoReflect(), nil, func(v protopath.Values) error {
 		last := v.Index(-1)
+		if last.Step.Kind() == protopath.RootStep {
+			return nil
+		}
 
 		// skip *Metadata messages
 		if shouldSkipParentMessage(last) {
