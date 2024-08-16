@@ -1034,8 +1034,13 @@ func TestTrimToMaxSize(t *testing.T) {
 			require.NoError(t, err)
 			trimmedEvent := toV2Proto(t, trimmedAuditEvent)
 
-			require.NotEqual(t, event, trimmedEvent)
-			require.LessOrEqual(t, proto.Size(trimmedEvent), maxSize)
+			require.NotEqual(t, auditEvent, trimmedEvent)
+			require.LessOrEqual(t, trimmedAuditEvent.Size(), maxSize)
+			// ensure Metadata hasn't been trimmed
+			require.Equal(t, auditEvent.GetID(), trimmedAuditEvent.GetID())
+			require.Equal(t, auditEvent.GetCode(), trimmedAuditEvent.GetCode())
+			require.Equal(t, auditEvent.GetType(), trimmedAuditEvent.GetType())
+			require.Equal(t, auditEvent.GetClusterName(), trimmedAuditEvent.GetClusterName())
 		})
 	}
 }
