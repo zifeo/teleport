@@ -232,6 +232,9 @@ export function UnifiedResources(props: {
       canUseConnectMyComputer={canUseConnectMyComputer}
       openConnectMyComputerDocument={openConnectMyComputerDocument}
       onResourcesRefreshRequest={onResourcesRefreshRequest}
+      bulkAddResources={accessRequestsService.addOrRemoveResource.bind(
+        accessRequestsService
+      )}
       discoverUrl={discoverUrl}
       integratedAccessRequests={integratedAccessRequests}
       // Reset the component state when query params object change.
@@ -255,6 +258,7 @@ const Resources = memo(
     onResourcesRefreshRequest: ResourcesContext['onResourcesRefreshRequest'];
     discoverUrl: string;
     getAccessRequestButton?: (resource: UnifiedResourceResponse) => JSX.Element;
+    bulkAddResources?: (resources: UnifiedResourceResponse[]) => void;
     integratedAccessRequests: IntegratedAccessRequests;
   }) => {
     const appContext = useAppContext();
@@ -321,6 +325,44 @@ const Resources = memo(
       return cleanup;
     }, [onResourcesRefreshRequest, fetch]);
 
+    const { getAccessRequestButton } = props;
+
+    /**
+     * Keeps the list of `SharedUnifiedResource`, but also allows to return
+     * the original `UnifiedResourceResponse` object by the
+     * `SharedUnifiedResource['resource']`;
+     */
+    const mappedResources = useMemo(() => {
+      // It is unfortunate that in the bulk action callback we get only
+      // `SharedUnifiedResource['resource']`, not `SharedUnifiedResource`.
+      // Because of that, we need to store SharedUnifiedResource list separately.
+      const list: SharedUnifiedResource[] = [];
+      const reverseMap = new Map<
+        SharedUnifiedResource['resource'],
+        UnifiedResourceResponse
+      >();
+
+      resources.forEach(originalResource => {
+        const { resource, ui } = mapToSharedResource(originalResource);
+
+        const sharedUnifiedResource: SharedUnifiedResource = {
+          resource,
+          ui: {
+            ActionButton:
+              getAccessRequestButton(originalResource) || ui.ActionButton,
+          },
+        };
+        list.push(sharedUnifiedResource);
+        reverseMap.set(sharedUnifiedResource.resource, originalResource);
+      });
+      return {
+        list,
+        getOriginalResource: (
+          r: SharedUnifiedResource['resource']
+        ): UnifiedResourceResponse => reverseMap.get(r),
+      };
+    }, [resources, getAccessRequestButton]);
+
     const resourceIds =
       props.userPreferences.clusterPreferences?.pinnedResources?.resourceIds;
     const { updateUserPreferences } = props;
@@ -340,6 +382,26 @@ const Resources = memo(
         params={props.queryParams}
         setParams={props.onParamsChange}
         unifiedResourcePreferencesAttempt={props.userPreferencesAttempt}
+        bulkActions={
+          props.integratedAccessRequests.supported === 'yes'
+            ? [
+                {
+                  key: 'requestAccess',
+                  Icon: icons.AddCircle,
+                  text: 'Request Access',
+                  disabled: false,
+                  action: sharedResources =>
+                    props.bulkAddResources(
+                      sharedResources.map(sharedResource =>
+                        mappedResources.getOriginalResource(
+                          sharedResource.resource
+                        )
+                      )
+                    ),
+                },
+              ]
+            : []
+        }
         unifiedResourcePreferences={
           props.userPreferences.unifiedResourcePreferences
         }
@@ -352,15 +414,7 @@ const Resources = memo(
             ? props.integratedAccessRequests.availabilityFilter
             : undefined
         }
-        resources={resources.map(r => {
-          const { resource, ui } = mapToSharedResource(r);
-          return {
-            resource,
-            ui: {
-              ActionButton: props.getAccessRequestButton(r) || ui.ActionButton,
-            },
-          };
-        })}
+        resources={mappedResources.list}
         resourcesFetchAttempt={attempt}
         fetchResources={fetch}
         availableKinds={[

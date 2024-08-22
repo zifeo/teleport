@@ -76,7 +76,9 @@ export class AccessRequestsService {
     }
   }
 
-  async addOrRemoveResource(request: ResourceRequest): Promise<void> {
+  async addOrRemoveResource(
+    requestedResources: ResourceRequest[] | ResourceRequest
+  ) {
     if (!(await this.canUpdateRequest('resource'))) {
       return;
     }
@@ -88,13 +90,20 @@ export class AccessRequestsService {
         };
       }
 
-      const { resources } = draftState.pending;
+      const requestsArray = Array.isArray(requestedResources)
+        ? requestedResources
+        : [requestedResources];
 
-      if (resources.has(request.resource.uri)) {
-        resources.delete(request.resource.uri);
-      } else {
-        resources.set(request.resource.uri, getRequiredProperties(request));
-      }
+      const { resources } = draftState.pending;
+      const allAdded = requestsArray.every(r => resources.has(r.resource.uri));
+
+      requestsArray.forEach(request => {
+        if (allAdded) {
+          resources.delete(request.resource.uri);
+        } else {
+          resources.set(request.resource.uri, getRequiredProperties(request));
+        }
+      });
     });
   }
 
