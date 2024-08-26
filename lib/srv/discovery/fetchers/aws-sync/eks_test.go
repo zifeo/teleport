@@ -143,7 +143,7 @@ func TestPollAWSEKSClusters(t *testing.T) {
 				},
 			}
 			result := &Resources{}
-			execFunc := a.pollAWSEKSClusters(context.Background(), result, collectErr)
+			execFunc := a.pollAWSEKSClusters(context.Background(), result, &Resources{}, collectErr)
 			require.NoError(t, execFunc())
 			require.Empty(t, cmp.Diff(
 				tt.want,
@@ -155,6 +155,9 @@ func TestPollAWSEKSClusters(t *testing.T) {
 						return a.Key < b.Key
 					},
 				),
+				protocmp.IgnoreFields(&accessgraphv1alpha.AWSEKSClusterV1{}, "last_sync_time"),
+				protocmp.IgnoreFields(&accessgraphv1alpha.AWSEKSAssociatedAccessPolicyV1{}, "last_sync_time"),
+				protocmp.IgnoreFields(&accessgraphv1alpha.AWSEKSClusterAccessEntryV1{}, "last_sync_time"),
 			),
 			)
 

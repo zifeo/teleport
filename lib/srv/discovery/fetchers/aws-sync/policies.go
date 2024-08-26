@@ -26,16 +26,17 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/gravitational/trace"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	accessgraphv1alpha "github.com/gravitational/teleport/gen/proto/go/accessgraph/v1alpha"
 )
 
 // pollAWSPolicies is a function that returns a function that fetches
 // AWS policies and returns an error if any.
-func (a *awsFetcher) pollAWSPolicies(ctx context.Context, result *Resources, collectErr func(error)) func() error {
+func (a *awsFetcher) pollAWSPolicies(ctx context.Context, result, existing *Resources, collectErr func(error)) func() error {
 	return func() error {
 		var err error
-		result.Policies, err = a.fetchPolicies(ctx)
+		result.Policies, err = a.fetchPolicies(ctx, existing)
 		if err != nil {
 			collectErr(trace.Wrap(err, "failed to fetch policies"))
 		}
@@ -47,7 +48,7 @@ func (a *awsFetcher) pollAWSPolicies(ctx context.Context, result *Resources, col
 // accessgraphv1alpha.AWSPolicyV1.
 // It uses iam.ListPoliciesPagesWithContext to iterate over all policies
 // and iam.GetPolicyVersionWithContext to fetch policy documents.
-func (a *awsFetcher) fetchPolicies(ctx context.Context) ([]*accessgraphv1alpha.AWSPolicyV1, error) {
+func (a *awsFetcher) fetchPolicies(ctx context.Context, existing *Resources) ([]*accessgraphv1alpha.AWSPolicyV1, error) {
 	var policies []*accessgraphv1alpha.AWSPolicyV1
 	var errs []error
 	var mu sync.Mutex
@@ -82,12 +83,15 @@ func (a *awsFetcher) fetchPolicies(ctx context.Context) ([]*accessgraphv1alpha.A
 			pp := page.Policies
 			eGroup.Go(func() error {
 				for _, policy := range pp {
+					oldPolicy := sliceFilterPickFirst(existing.Policies, func(p *accessgraphv1alpha.AWSPolicyV1) bool {
+						return p.Arn == aws.ToString(policy.Arn) && p.AccountId == a.AccountID
+					})
 					out, err := iamClient.GetPolicyVersionWithContext(ctx, &iam.GetPolicyVersionInput{
 						PolicyArn: policy.Arn,
 						VersionId: policy.DefaultVersionId,
 					})
 					if err != nil {
-						collect(nil, trace.Wrap(err, "failed to fetch policy %q", *policy.Arn))
+						collect(oldPolicy, trace.Wrap(err, "failed to fetch policy %q", *policy.Arn))
 						continue
 					}
 					collect(
@@ -129,5 +133,6 @@ func awsPolicyToProtoPolicy(policy *iam.Policy, policyDoc []byte, accountID stri
 		Tags:             tags,
 		PolicyDocument:   policyDoc,
 		AccountId:        accountID,
+		LastSyncTime:     timestamppb.Now(),
 	}
 }

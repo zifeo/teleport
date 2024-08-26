@@ -28,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gravitational/trace"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	accessgraphv1alpha "github.com/gravitational/teleport/gen/proto/go/accessgraph/v1alpha"
 	awsutil "github.com/gravitational/teleport/lib/utils/aws"
@@ -35,10 +36,10 @@ import (
 
 // pollAWSS3Buckets is a function that returns a function that fetches
 // AWS s3 buckets and their inline and attached policies.
-func (a *awsFetcher) pollAWSS3Buckets(ctx context.Context, result *Resources, collectErr func(error)) func() error {
+func (a *awsFetcher) pollAWSS3Buckets(ctx context.Context, result, existing *Resources, collectErr func(error)) func() error {
 	return func() error {
 		var err error
-		result.S3Buckets, err = a.fetchS3Buckets(ctx)
+		result.S3Buckets, err = a.fetchS3Buckets(ctx, existing)
 		if err != nil {
 			collectErr(trace.Wrap(err, "failed to fetch s3 buckets"))
 		}
@@ -48,7 +49,7 @@ func (a *awsFetcher) pollAWSS3Buckets(ctx context.Context, result *Resources, co
 
 // fetchS3Buckets fetches AWS s3 buckets and returns them as a slice of
 // accessgraphv1alpha.AWSS3BucketV1.
-func (a *awsFetcher) fetchS3Buckets(ctx context.Context) ([]*accessgraphv1alpha.AWSS3BucketV1, error) {
+func (a *awsFetcher) fetchS3Buckets(ctx context.Context, existing *Resources) ([]*accessgraphv1alpha.AWSS3BucketV1, error) {
 	var s3s []*accessgraphv1alpha.AWSS3BucketV1
 	var errs []error
 	var mu sync.Mutex
@@ -86,30 +87,38 @@ func (a *awsFetcher) fetchS3Buckets(ctx context.Context) ([]*accessgraphv1alpha.
 		&s3.ListBucketsInput{},
 	)
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return existing.S3Buckets, trace.Wrap(err)
 	}
+
 	for _, bucket := range rsp.Buckets {
 		bucket := bucket
 		eG.Go(func() error {
+			existingBucket := sliceFilterPickFirst(existing.S3Buckets, func(b *accessgraphv1alpha.AWSS3BucketV1) bool {
+				return b.Name == aws.ToString(bucket.Name) && b.AccountId == a.AccountID
+			},
+			)
 			policy, err := s3Client.GetBucketPolicyWithContext(ctx, &s3.GetBucketPolicyInput{
 				Bucket: bucket.Name,
 			})
 			if err != nil {
-				collect(nil, trace.Wrap(err, "failed to fetch bucket %q inline policy", aws.ToString(bucket.Name)))
+				collect(existingBucket, trace.Wrap(err, "failed to fetch bucket %q inline policy", aws.ToString(bucket.Name)))
+				return nil
 			}
 
 			policyStatus, err := s3Client.GetBucketPolicyStatusWithContext(ctx, &s3.GetBucketPolicyStatusInput{
 				Bucket: bucket.Name,
 			})
 			if err != nil {
-				collect(nil, trace.Wrap(err, "failed to fetch bucket %q policy status", aws.ToString(bucket.Name)))
+				collect(existingBucket, trace.Wrap(err, "failed to fetch bucket %q policy status", aws.ToString(bucket.Name)))
+				return nil
 			}
 
 			acls, err := s3Client.GetBucketAclWithContext(ctx, &s3.GetBucketAclInput{
 				Bucket: bucket.Name,
 			})
 			if err != nil {
-				collect(nil, trace.Wrap(err, "failed to fetch bucket %q acls policies", aws.ToString(bucket.Name)))
+				collect(existingBucket, trace.Wrap(err, "failed to fetch bucket %q acls policies", aws.ToString(bucket.Name)))
+				return nil
 			}
 
 			tagsOutput, err := s3Client.GetBucketTaggingWithContext(ctx, &s3.GetBucketTaggingInput{
@@ -122,7 +131,8 @@ func (a *awsFetcher) fetchS3Buckets(ctx context.Context) ([]*accessgraphv1alpha.
 				err = nil
 			}
 			if err != nil {
-				collect(nil, trace.Wrap(err, "failed to fetch bucket %q tags", aws.ToString(bucket.Name)))
+				collect(existingBucket, trace.Wrap(err, "failed to fetch bucket %q tags", aws.ToString(bucket.Name)))
+				return nil
 			}
 
 			collect(
@@ -137,10 +147,17 @@ func (a *awsFetcher) fetchS3Buckets(ctx context.Context) ([]*accessgraphv1alpha.
 	return s3s, trace.Wrap(err)
 }
 
-func awsS3Bucket(name string, policy *s3.GetBucketPolicyOutput, policyStatus *s3.GetBucketPolicyStatusOutput, acls *s3.GetBucketAclOutput, tags *s3.GetBucketTaggingOutput, accountID string) *accessgraphv1alpha.AWSS3BucketV1 {
+func awsS3Bucket(name string,
+	policy *s3.GetBucketPolicyOutput,
+	policyStatus *s3.GetBucketPolicyStatusOutput,
+	acls *s3.GetBucketAclOutput,
+	tags *s3.GetBucketTaggingOutput,
+	accountID string,
+) *accessgraphv1alpha.AWSS3BucketV1 {
 	s3 := &accessgraphv1alpha.AWSS3BucketV1{
-		Name:      name,
-		AccountId: accountID,
+		Name:         name,
+		AccountId:    accountID,
+		LastSyncTime: timestamppb.Now(),
 	}
 	if policy != nil {
 		s3.PolicyDocument = []byte(aws.ToString(policy.Policy))

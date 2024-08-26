@@ -164,7 +164,7 @@ func TestPollAWSS3(t *testing.T) {
 				},
 			}
 			result := &Resources{}
-			execFunc := a.pollAWSS3Buckets(context.Background(), result, collectErr)
+			execFunc := a.pollAWSS3Buckets(context.Background(), result, &Resources{}, collectErr)
 			require.NoError(t, execFunc())
 			require.NoError(t, trace.NewAggregate(errs...))
 
@@ -180,6 +180,7 @@ func TestPollAWSS3(t *testing.T) {
 						return a.Key < b.Key
 					},
 				),
+				protocmp.IgnoreFields(&accessgraphv1alpha.AWSS3BucketV1{}, "last_sync_time"),
 			),
 			)
 

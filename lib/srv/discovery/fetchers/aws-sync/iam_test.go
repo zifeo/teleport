@@ -93,7 +93,7 @@ func TestAWSIAMPollSAMLProviders(t *testing.T) {
 		},
 	}
 	result := &Resources{}
-	execFunc := a.pollAWSSAMLProviders(context.Background(), result, collectErr)
+	execFunc := a.pollAWSSAMLProviders(context.Background(), result, &Resources{}, collectErr)
 	require.NoError(t, execFunc())
 	require.Empty(t, errs)
 	sortByARN(result.SAMLProviders)
@@ -101,6 +101,7 @@ func TestAWSIAMPollSAMLProviders(t *testing.T) {
 		expected,
 		result.SAMLProviders,
 		protocmp.Transform(),
+		protocmp.IgnoreFields(&accessgraphv1alpha.AWSSAMLProviderV1{}, "last_sync_time"),
 	))
 }
 
@@ -230,7 +231,7 @@ func TestAWSIAMPollOIDCProviders(t *testing.T) {
 		},
 	}
 	result := &Resources{}
-	execFunc := a.pollAWSOIDCProviders(context.Background(), result, collectErr)
+	execFunc := a.pollAWSOIDCProviders(context.Background(), result, &Resources{}, collectErr)
 	require.NoError(t, execFunc())
 	require.Empty(t, errs)
 	sortByARN(result.OIDCProviders)
@@ -238,6 +239,7 @@ func TestAWSIAMPollOIDCProviders(t *testing.T) {
 		expected,
 		result.OIDCProviders,
 		protocmp.Transform(),
+		protocmp.IgnoreFields(&accessgraphv1alpha.AWSOIDCProviderV1{}, "last_sync_time"),
 	))
 }
 

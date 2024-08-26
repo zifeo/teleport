@@ -67,6 +67,7 @@ type awsFetcher struct {
 	Config
 	lastError               error
 	lastDiscoveredResources uint64
+	lastResult              *Resources
 }
 
 // AWSSync is the interface for fetching AWS resources.
@@ -151,7 +152,8 @@ func (r *Resources) count() int {
 // NewAWSFetcher creates a new AWS fetcher.
 func NewAWSFetcher(ctx context.Context, cfg Config) (AWSSync, error) {
 	a := &awsFetcher{
-		Config: cfg,
+		Config:     cfg,
+		lastResult: &Resources{},
 	}
 	accountID, err := a.getAccountId(context.Background())
 	if err != nil {
@@ -167,6 +169,7 @@ func NewAWSFetcher(ctx context.Context, cfg Config) (AWSSync, error) {
 // if some resources were fetched successfully and some were not.
 func (a *awsFetcher) Poll(ctx context.Context, features Features) (*Resources, error) {
 	result, err := a.poll(ctx, features)
+	deduplicateResources(result)
 	a.storeReport(result, err)
 	return result, trace.Wrap(err)
 }
@@ -176,6 +179,7 @@ func (a *awsFetcher) storeReport(rec *Resources, err error) {
 	if rec == nil {
 		return
 	}
+	a.lastResult = rec
 	a.lastDiscoveredResources = uint64(rec.count())
 }
 
@@ -204,42 +208,42 @@ func (a *awsFetcher) poll(ctx context.Context, features Features) (*Resources, e
 	// - attached policies
 	// - user groups they are members of
 	if features.Users {
-		eGroup.Go(a.pollAWSUsers(ctx, result, collectErr))
+		eGroup.Go(a.pollAWSUsers(ctx, result, a.lastResult, collectErr))
 	}
 
 	// fetch AWS groups and their associated resources.
 	// - inline policies
 	// - attached policies
 	if features.Roles {
-		eGroup.Go(a.pollAWSRoles(ctx, result, collectErr))
+		eGroup.Go(a.pollAWSRoles(ctx, result, a.lastResult, collectErr))
 	}
 
 	// fetch AWS groups and their associated resources.
 	// - inline policies
 	// - attached policies
 	if features.Groups {
-		eGroup.Go(a.pollAWSGroups(ctx, result, collectErr))
+		eGroup.Go(a.pollAWSGroups(ctx, result, a.lastResult, collectErr))
 	}
 
 	// fetch AWS EC2 instances and their associated resources.
 	// - instance profiles
 	if features.EC2 {
-		eGroup.Go(a.pollAWSEC2Instances(ctx, result, collectErr))
+		eGroup.Go(a.pollAWSEC2Instances(ctx, result, a.lastResult, collectErr))
 	}
 
 	// fetch AWS IAM policies and their policy documents.
 	if features.Users || features.Roles {
-		eGroup.Go(a.pollAWSPolicies(ctx, result, collectErr))
+		eGroup.Go(a.pollAWSPolicies(ctx, result, a.lastResult, collectErr))
 	}
 
 	// fetch AWS S3 buckets.
 	if features.S3 {
-		eGroup.Go(a.pollAWSS3Buckets(ctx, result, collectErr))
+		eGroup.Go(a.pollAWSS3Buckets(ctx, result, a.lastResult, collectErr))
 	}
 
 	// fetch AWS EKS clusters
 	if features.EKS {
-		eGroup.Go(a.pollAWSEKSClusters(ctx, result, collectErr))
+		eGroup.Go(a.pollAWSEKSClusters(ctx, result, a.lastResult, collectErr))
 	}
 
 	// fetch AWS RDS instances and clusters
@@ -248,8 +252,8 @@ func (a *awsFetcher) poll(ctx context.Context, features Features) (*Resources, e
 	}
 
 	if features.IDP {
-		eGroup.Go(a.pollAWSSAMLProviders(ctx, result, collectErr))
-		eGroup.Go(a.pollAWSOIDCProviders(ctx, result, collectErr))
+		eGroup.Go(a.pollAWSSAMLProviders(ctx, result, a.lastResult, collectErr))
+		eGroup.Go(a.pollAWSOIDCProviders(ctx, result, a.lastResult, collectErr))
 	}
 
 	if err := eGroup.Wait(); err != nil {

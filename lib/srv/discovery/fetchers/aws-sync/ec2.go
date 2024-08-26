@@ -28,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/gravitational/trace"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	accessgraphv1alpha "github.com/gravitational/teleport/gen/proto/go/accessgraph/v1alpha"
@@ -35,14 +36,14 @@ import (
 
 // pollAWSEC2Instances is a function that returns a function that fetches
 // ec2 instances and instance profiles and returns an error if any.
-func (a *awsFetcher) pollAWSEC2Instances(ctx context.Context, result *Resources, collectErr func(error)) func() error {
+func (a *awsFetcher) pollAWSEC2Instances(ctx context.Context, result, existing *Resources, collectErr func(error)) func() error {
 	return func() error {
 		var err error
-		result.Instances, err = a.fetchAWSEC2Instances(ctx)
+		result.Instances, err = a.fetchAWSEC2Instances(ctx, existing.Instances)
 		if err != nil {
 			collectErr(trace.Wrap(err, "failed to fetch instances"))
 		}
-		result.InstanceProfiles, err = a.fetchInstanceProfiles(ctx)
+		result.InstanceProfiles, err = a.fetchInstanceProfiles(ctx, existing.InstanceProfiles)
 		if err != nil {
 			collectErr(trace.Wrap(err, "failed to fetch instance profiles"))
 		}
@@ -54,7 +55,7 @@ func (a *awsFetcher) pollAWSEC2Instances(ctx context.Context, result *Resources,
 // as a slice of accessgraphv1alpha.AWSInstanceV1.
 // It uses ec2.DescribeInstancesPagesWithContext to iterate over all instances
 // in all regions.
-func (a *awsFetcher) fetchAWSEC2Instances(ctx context.Context) ([]*accessgraphv1alpha.AWSInstanceV1, error) {
+func (a *awsFetcher) fetchAWSEC2Instances(ctx context.Context, existing []*accessgraphv1alpha.AWSInstanceV1) ([]*accessgraphv1alpha.AWSInstanceV1, error) {
 	var (
 		hosts   []*accessgraphv1alpha.AWSInstanceV1
 		hostsMu sync.Mutex
@@ -77,9 +78,15 @@ func (a *awsFetcher) fetchAWSEC2Instances(ctx context.Context) ([]*accessgraphv1
 	for _, region := range a.Regions {
 		region := region
 		eG.Go(func() error {
+			prevIterationEc2 := sliceFilter(
+				existing,
+				func(h *accessgraphv1alpha.AWSInstanceV1) bool {
+					return h.Region == region && h.AccountId == a.AccountID
+				},
+			)
 			ec2Client, err := a.CloudClients.GetAWSEC2Client(ctx, region, a.getAWSOptions()...)
 			if err != nil {
-				collectHosts(nil, trace.Wrap(err))
+				collectHosts(prevIterationEc2, trace.Wrap(err))
 				return nil
 			}
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -98,7 +105,7 @@ func (a *awsFetcher) fetchAWSEC2Instances(ctx context.Context) ([]*accessgraphv1
 			})
 
 			if err != nil {
-				collectHosts(hosts, trace.Wrap(err))
+				collectHosts(prevIterationEc2, trace.Wrap(err))
 			}
 			return nil
 		})
@@ -132,12 +139,13 @@ func awsInstanceToProtoInstance(instance *ec2.Instance, region string, accountID
 		AccountId:             accountID,
 		Tags:                  tags,
 		LaunchTime:            awsTimeToProtoTime(instance.LaunchTime),
+		LastSyncTime:          timestamppb.Now(),
 	}
 }
 
 // fetchInstanceProfiles fetches instance profiles from all regions and returns them
 // as a slice of accessgraphv1alpha.AWSInstanceProfileV1.
-func (a *awsFetcher) fetchInstanceProfiles(ctx context.Context) ([]*accessgraphv1alpha.AWSInstanceProfileV1, error) {
+func (a *awsFetcher) fetchInstanceProfiles(ctx context.Context, existing []*accessgraphv1alpha.AWSInstanceProfileV1) ([]*accessgraphv1alpha.AWSInstanceProfileV1, error) {
 	var profiles []*accessgraphv1alpha.AWSInstanceProfileV1
 	iamClient, err := a.CloudClients.GetAWSIAMClient(
 		ctx,
@@ -145,7 +153,7 @@ func (a *awsFetcher) fetchInstanceProfiles(ctx context.Context) ([]*accessgraphv
 		a.getAWSOptions()...,
 	)
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return existing, trace.Wrap(err)
 	}
 
 	err = iamClient.ListInstanceProfilesPagesWithContext(
@@ -163,6 +171,9 @@ func (a *awsFetcher) fetchInstanceProfiles(ctx context.Context) ([]*accessgraphv
 			return !lastPage
 		},
 	)
+	if err != nil {
+		profiles = append(profiles, existing...)
+	}
 
 	return profiles, trace.Wrap(err)
 }
@@ -185,6 +196,7 @@ func awsInstanceProfileToProtoInstanceProfile(profile *iam.InstanceProfile, acco
 		AccountId:           accountID,
 		Tags:                tags,
 		CreatedAt:           awsTimeToProtoTime(profile.CreateDate),
+		LastSyncTime:        timestamppb.Now(),
 	}
 	for _, role := range profile.Roles {
 		if role == nil {
@@ -193,4 +205,24 @@ func awsInstanceProfileToProtoInstanceProfile(profile *iam.InstanceProfile, acco
 		out.Roles = append(out.Roles, awsRoleToProtoRole(role, accountID))
 	}
 	return out
+}
+
+func sliceFilter[T any](s []T, f func(T) bool) []T {
+	var out []T
+	for _, v := range s {
+		if f(v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func sliceFilterPickFirst[T any](s []T, f func(T) bool) T {
+	for _, v := range s {
+		if f(v) {
+			return v
+		}
+	}
+	var v T
+	return v
 }
