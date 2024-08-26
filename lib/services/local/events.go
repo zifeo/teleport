@@ -19,7 +19,6 @@
 package local
 
 import (
-	"bytes"
 	"context"
 	"strings"
 
@@ -382,7 +381,7 @@ func (p baseParser) prefixes() []backend.Key {
 
 func (p baseParser) match(key backend.Key) bool {
 	for _, prefix := range p.matchPrefixes {
-		if bytes.HasPrefix(key, prefix) {
+		if key.HasPrefix(prefix) {
 			return true
 		}
 	}
@@ -721,8 +720,8 @@ func (p *namespaceParser) match(key backend.Key) bool {
 	// namespaces are stored under key '/namespaces/<namespace-name>/params'
 	// and this code matches similar pattern
 	return p.baseParser.match(key) &&
-		bytes.HasSuffix(key, []byte(paramsPrefix)) &&
-		bytes.Count(key, []byte{backend.Separator}) == 3
+		key.HasSuffix(backend.Key(paramsPrefix)) &&
+		len(key.Components()) == 3
 }
 
 func (p *namespaceParser) parse(event backend.Event) (types.Resource, error) {
@@ -794,10 +793,10 @@ func (p *accessRequestParser) prefixes() []backend.Key {
 }
 
 func (p *accessRequestParser) match(key backend.Key) bool {
-	if !bytes.HasPrefix(key, p.matchPrefix) {
+	if !key.HasPrefix(p.matchPrefix) {
 		return false
 	}
-	if !bytes.HasSuffix(key, p.matchSuffix) {
+	if !key.HasSuffix(p.matchSuffix) {
 		return false
 	}
 	return true
@@ -835,8 +834,8 @@ func (p *userParser) match(key backend.Key) bool {
 	// users are stored under key '/web/users/<username>/params'
 	// and this code matches similar pattern
 	return p.baseParser.match(key) &&
-		bytes.HasSuffix(key, []byte(paramsPrefix)) &&
-		bytes.Count(key, []byte{backend.Separator}) == 4
+		key.HasSuffix(backend.Key(paramsPrefix)) &&
+		len(key.Components()) == 4
 }
 
 func (p *userParser) parse(event backend.Event) (types.Resource, error) {
@@ -1368,7 +1367,7 @@ func (p *remoteClusterParser) prefixes() []backend.Key {
 }
 
 func (p *remoteClusterParser) match(key backend.Key) bool {
-	return bytes.HasPrefix(key, p.matchPrefix)
+	return key.HasPrefix(p.matchPrefix)
 }
 
 func (p *remoteClusterParser) parse(event backend.Event) (types.Resource, error) {
@@ -1429,7 +1428,7 @@ func (p *networkRestrictionsParser) prefixes() []backend.Key {
 }
 
 func (p *networkRestrictionsParser) match(key backend.Key) bool {
-	return bytes.HasPrefix(key, p.matchPrefix)
+	return key.HasPrefix(p.matchPrefix)
 }
 
 func (p *networkRestrictionsParser) parse(event backend.Event) (types.Resource, error) {
@@ -2452,7 +2451,7 @@ type EventMatcher interface {
 // base returns last element delimited by separator, index is
 // is an index of the key part to get counting from the end
 func base(key backend.Key, offset int) ([]byte, error) {
-	parts := bytes.Split(key, []byte{backend.Separator})
+	parts := key.Components()
 	if len(parts) < offset+1 {
 		return nil, trace.NotFound("failed parsing %v", string(key))
 	}
@@ -2461,7 +2460,7 @@ func base(key backend.Key, offset int) ([]byte, error) {
 
 // baseTwoKeys returns two last keys
 func baseTwoKeys(key backend.Key) (string, string, error) {
-	parts := bytes.Split(key, []byte{backend.Separator})
+	parts := key.Components()
 	if len(parts) < 2 {
 		return "", "", trace.NotFound("failed parsing %v", string(key))
 	}

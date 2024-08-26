@@ -78,6 +78,23 @@ func (k Key) TrimSuffix(suffix Key) Key {
 	return bytes.TrimSuffix(k, suffix)
 }
 
+func (k Key) Components() [][]byte {
+	if len(k) == 0 {
+		return nil
+	}
+
+	components := bytes.Split(k, []byte{Separator})
+	if len(components) > 0 && len(components[0]) == 0 {
+		return components[1:]
+	}
+
+	return components
+}
+
+func (k Key) Compare(o Key) int {
+	return bytes.Compare(k, o)
+}
+
 // Scan implement sql.Scanner, allowing a [Key] to
 // be directly retrieved from sql backends without
 // an intermediary object.

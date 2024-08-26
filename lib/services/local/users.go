@@ -223,7 +223,7 @@ func (s *IdentityService) streamUsersWithSecrets(itemStream stream.Stream[backen
 func (s *IdentityService) streamUsersWithoutSecrets(itemStream stream.Stream[backend.Item]) stream.Stream[*types.UserV2] {
 	suffix := backend.Key(paramsPrefix)
 	userStream := stream.FilterMap(itemStream, func(item backend.Item) (*types.UserV2, bool) {
-		if !bytes.HasSuffix(item.Key, suffix) {
+		if !item.Key.HasSuffix(suffix) {
 			return nil, false
 		}
 
@@ -251,7 +251,7 @@ func (s *IdentityService) GetUsers(ctx context.Context, withSecrets bool) ([]typ
 	}
 	var out []types.User
 	for _, item := range result.Items {
-		if !bytes.HasSuffix(item.Key, backend.Key(paramsPrefix)) {
+		if !item.Key.HasSuffix(backend.Key(paramsPrefix)) {
 			continue
 		}
 		u, err := services.UnmarshalUser(
@@ -584,7 +584,7 @@ func (s *IdentityService) getUserWithSecrets(ctx context.Context, user string) (
 
 	var items userItems
 	for _, item := range result.Items {
-		suffix := bytes.TrimPrefix(item.Key, startKey)
+		suffix := item.Key.TrimPrefix(startKey)
 		items.Set(string(suffix), item) // Result of Set i
 	}
 

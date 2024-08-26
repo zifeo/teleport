@@ -19,7 +19,6 @@
 package pgbk
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -298,7 +297,7 @@ func (b *Backend) Put(ctx context.Context, i backend.Item) (*backend.Lease, erro
 
 // CompareAndSwap implements [backend.Backend].
 func (b *Backend) CompareAndSwap(ctx context.Context, expected, replaceWith backend.Item) (*backend.Lease, error) {
-	if !bytes.Equal(expected.Key, replaceWith.Key) {
+	if expected.Key.Compare(replaceWith.Key) != 0 {
 		return nil, trace.BadParameter("expected and replaceWith keys should match")
 	}
 

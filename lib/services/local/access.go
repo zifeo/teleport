@@ -19,7 +19,6 @@
 package local
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"time"
@@ -113,7 +112,7 @@ func (s *AccessService) ListRoles(ctx context.Context, req *proto.ListRolesReque
 				return true, nil
 			}
 
-			if !bytes.HasSuffix(item.Key, []byte(paramsPrefix)) {
+			if !item.Key.HasSuffix(backend.Key(paramsPrefix)) {
 				// Item represents a different resource type in the
 				// same namespace.
 				continue

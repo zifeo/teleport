@@ -64,7 +64,7 @@ func TestKeyString(t *testing.T) {
 			expected: "/foo/bar/baz/quux/",
 		},
 		{
-			name:     "noendm key",
+			name:     "noend key",
 			key:      backend.Key{0},
 			expected: "\x00",
 		},
@@ -74,6 +74,48 @@ func TestKeyString(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			assert.Equal(t, test.expected, test.key.String())
 
+		})
+	}
+}
+
+func TestKeyComponents(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      backend.Key
+		expected [][]byte
+	}{
+		{
+			name: "default value has zero components",
+		},
+		{
+			name: "empty key has zero components",
+			key:  backend.NewKey(),
+		},
+		{
+			name:     "empty exact key has empty component",
+			key:      backend.ExactKey(),
+			expected: [][]byte{{}},
+		},
+		{
+			name:     "single value key has a component",
+			key:      backend.NewKey("alpha"),
+			expected: [][]byte{[]byte("alpha")},
+		},
+		{
+			name:     "multiple components",
+			key:      backend.NewKey("foo", "bar", "baz"),
+			expected: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")},
+		},
+		{
+			name:     "key without separator",
+			key:      backend.Key("testing"),
+			expected: [][]byte{[]byte("testing")},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expected, test.key.Components())
 		})
 	}
 }
@@ -127,6 +169,292 @@ func TestKeyScan(t *testing.T) {
 				assert.EqualError(t, err, test.expectedError)
 			}
 			assert.Equal(t, test.expectedKey, *k)
+		})
+	}
+}
+
+func TestKeyHasSuffix(t *testing.T) {
+	tests := []struct {
+		name      string
+		key       backend.Key
+		suffix    backend.Key
+		assertion assert.BoolAssertionFunc
+	}{
+		{
+			name:      "default key has no suffixes",
+			suffix:    backend.NewKey("test"),
+			assertion: assert.False,
+		},
+		{
+			name:      "default key is suffix",
+			assertion: assert.True,
+		},
+		{
+			name:      "prefix is not a suffix",
+			key:       backend.NewKey("a", "b", "c"),
+			suffix:    backend.NewKey("a", "b"),
+			assertion: assert.False,
+		},
+		{
+			name:      "empty suffix",
+			key:       backend.NewKey("a", "b", "c"),
+			assertion: assert.True,
+		},
+		{
+			name:      "valid multi component suffix",
+			key:       backend.NewKey("a", "b", "c"),
+			suffix:    backend.NewKey("b", "c"),
+			assertion: assert.True,
+		},
+		{
+			name:      "valid single component suffix",
+			key:       backend.NewKey("a", "b", "c"),
+			suffix:    backend.NewKey("c"),
+			assertion: assert.True,
+		},
+		{
+			name:      "equivalent keys are suffix",
+			key:       backend.NewKey("a", "b", "c"),
+			suffix:    backend.NewKey("a", "b", "c"),
+			assertion: assert.True,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.assertion(t, test.key.HasSuffix(test.suffix))
+		})
+	}
+}
+func TestKeyHasPrefix(t *testing.T) {
+	tests := []struct {
+		name      string
+		key       backend.Key
+		prefix    backend.Key
+		assertion assert.BoolAssertionFunc
+	}{
+		{
+			name:      "default key has no prexies",
+			prefix:    backend.NewKey("test"),
+			assertion: assert.False,
+		},
+		{
+			name:      "default key is prefix",
+			assertion: assert.True,
+		},
+		{
+			name:      "suffix is not a prefix",
+			key:       backend.NewKey("a", "b", "c"),
+			prefix:    backend.NewKey("b", "c"),
+			assertion: assert.False,
+		},
+		{
+			name:      "empty prefix",
+			key:       backend.NewKey("a", "b", "c"),
+			assertion: assert.True,
+		},
+		{
+			name:      "valid multi component prefix",
+			key:       backend.NewKey("a", "b", "c"),
+			prefix:    backend.NewKey("a", "b"),
+			assertion: assert.True,
+		},
+		{
+			name:      "valid single component prefix",
+			key:       backend.NewKey("a", "b", "c"),
+			prefix:    backend.NewKey("a"),
+			assertion: assert.True,
+		},
+		{
+			name:      "equivalent keys are prefix",
+			key:       backend.NewKey("a", "b", "c"),
+			prefix:    backend.NewKey("a", "b", "c"),
+			assertion: assert.True,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.assertion(t, test.key.HasPrefix(test.prefix))
+		})
+	}
+}
+
+func TestKeyTrimSuffix(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      backend.Key
+		trim     backend.Key
+		expected backend.Key
+	}{
+		{
+			name: "empty key trims nothing",
+			trim: backend.NewKey("a", "b"),
+		},
+		{
+			name:     "empty trim trims nothing",
+			key:      backend.NewKey("a", "b"),
+			expected: backend.NewKey("a", "b"),
+		},
+		{
+			name:     "non-matching trim trims nothing",
+			key:      backend.NewKey("a", "b"),
+			trim:     backend.NewKey("c", "d"),
+			expected: backend.NewKey("a", "b"),
+		},
+		{
+			name:     "prefix trim trims nothing",
+			key:      backend.NewKey("a", "b", "c"),
+			trim:     backend.NewKey("a", "b"),
+			expected: backend.NewKey("a", "b", "c"),
+		},
+		{
+			name:     "all trimmed on exact match",
+			key:      backend.NewKey("a", "b", "c"),
+			trim:     backend.NewKey("a", "b", "c"),
+			expected: backend.NewKey(),
+		},
+		{
+			name:     "partial trim",
+			key:      backend.NewKey("a", "b", "c"),
+			trim:     backend.NewKey("b", "c"),
+			expected: backend.NewKey("a"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			trimmed := test.key.TrimSuffix(test.trim)
+			assert.Equal(t, test.expected, trimmed)
+		})
+	}
+}
+
+func TestKeyTrimPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      backend.Key
+		trim     backend.Key
+		expected backend.Key
+	}{
+		{
+			name: "empty key trims nothing",
+			trim: backend.NewKey("a", "b"),
+		},
+		{
+			name:     "empty trim trims nothing",
+			key:      backend.NewKey("a", "b"),
+			expected: backend.NewKey("a", "b"),
+		},
+		{
+			name:     "non-matching trim trims nothing",
+			key:      backend.NewKey("a", "b"),
+			trim:     backend.NewKey("c", "d"),
+			expected: backend.NewKey("a", "b"),
+		},
+		{
+			name:     "suffix trim trims nothing",
+			key:      backend.NewKey("a", "b", "c"),
+			trim:     backend.NewKey("b", "c"),
+			expected: backend.NewKey("a", "b", "c"),
+		},
+		{
+			name:     "all trimmed on exact match",
+			key:      backend.NewKey("a", "b", "c"),
+			trim:     backend.NewKey("a", "b", "c"),
+			expected: backend.NewKey(),
+		},
+		{
+			name:     "partial trim",
+			key:      backend.NewKey("a", "b", "c"),
+			trim:     backend.NewKey("a", "b"),
+			expected: backend.NewKey("c"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			trimmed := test.key.TrimPrefix(test.trim)
+			assert.Equal(t, test.expected, trimmed)
+		})
+	}
+}
+
+func TestKeyPrependPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      backend.Key
+		prefix   backend.Key
+		expected backend.Key
+	}{
+		{
+			name:     "empty prefix is noop",
+			key:      backend.NewKey("a", "b"),
+			expected: backend.NewKey("a", "b"),
+		},
+		{
+			name:     "empty key is prefixed",
+			prefix:   backend.NewKey("a", "b"),
+			expected: backend.NewKey("a", "b"),
+		},
+		{
+			name:     "prefix applied",
+			key:      backend.NewKey("a", "b"),
+			prefix:   backend.NewKey("1", "2"),
+			expected: backend.NewKey("1", "2", "a", "b"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			prefixed := test.key.PrependPrefix(test.prefix)
+			assert.Equal(t, test.expected, prefixed)
+		})
+	}
+}
+
+func TestKeyCompare(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      backend.Key
+		other    backend.Key
+		expected int
+	}{
+		{
+			name:     "equal keys",
+			key:      backend.NewKey("a", "b", "c"),
+			other:    backend.NewKey("a", "b", "c"),
+			expected: 0,
+		},
+		{
+			name:     "less",
+			key:      backend.NewKey("a", "b", "c"),
+			other:    backend.NewKey("a", "b", "d"),
+			expected: -1,
+		},
+		{
+			name:     "greater",
+			key:      backend.NewKey("d", "b", "c"),
+			other:    backend.NewKey("a", "b"),
+			expected: 1,
+		},
+		{
+			name:     "empty key is always less",
+			other:    backend.NewKey("a", "b"),
+			expected: -1,
+		},
+		{
+			name:     "key is always greater than empty",
+			key:      backend.NewKey("a", "b"),
+			expected: 1,
+		},
+		{
+			name:     "empty keys are equal",
+			expected: 0,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expected, test.key.Compare(test.other))
 		})
 	}
 }

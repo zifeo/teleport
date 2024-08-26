@@ -20,7 +20,6 @@
 package backend
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -379,7 +378,7 @@ func (it Items) Swap(i, j int) {
 
 // Less is part of sort.Interface.
 func (it Items) Less(i, j int) bool {
-	return bytes.Compare(it[i].Key, it[j].Key) < 0
+	return it[i].Key.Compare(it[j].Key) < 0
 }
 
 // TTL returns TTL in duration units, rounds up to one second

@@ -19,7 +19,6 @@
 package services
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"sync"
@@ -699,7 +698,7 @@ func (c *UnifiedResourceCache) defineCollectorAsInitialized() {
 func (i *item) Less(iother btree.Item) bool {
 	switch other := iother.(type) {
 	case *item:
-		return bytes.Compare(i.Key, other.Key) < 0
+		return i.Key.Compare(other.Key) < 0
 	case *prefixItem:
 		return !iother.Less(i)
 	default:
@@ -716,7 +715,7 @@ type prefixItem struct {
 // Less is used for Btree operations
 func (p *prefixItem) Less(iother btree.Item) bool {
 	other := iother.(*item)
-	return !bytes.HasPrefix(other.Key, p.prefix)
+	return !other.Key.HasPrefix(p.prefix)
 }
 
 type resource interface {
