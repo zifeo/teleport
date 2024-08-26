@@ -1787,6 +1787,59 @@ func (o *output) String() string {
 	return o.buf.String()
 }
 
+func TestNoRelogin(t *testing.T) {
+	t.Parallel()
+	tmpHomePath := t.TempDir()
+	connector := mockConnector(t)
+	alice, err := types.NewUser("alice@example.com")
+	require.NoError(t, err)
+	alice.SetRoles([]string{"access"})
+
+	authProcess, proxyProcess := makeTestServers(t,
+		withBootstrap(connector, alice),
+	)
+	authServer := authProcess.GetAuthServer()
+	require.NotNil(t, authServer)
+	proxyAddr, err := proxyProcess.ProxyWebAddr()
+	require.NoError(t, err)
+
+	// i want to be logged in
+	err = Run(context.Background(), []string{
+		"login",
+		"--insecure",
+		"--proxy", proxyAddr.String(),
+		"--user", "alice",
+	}, setHomePath(tmpHomePath), setMockSSOLogin(authProcess.GetAuthServer(), alice, connector.GetName()))
+	require.NoError(t, err)
+
+	// i want to run this command without no-relogin and check that IT DOES ask me to log in
+	err = Run(context.Background(), []string{
+		"ssh",
+		"--no-relogin",
+		"--insecure",
+		"--user", "alice",
+		"--proxy", proxyAddr.String(),
+		"12.12.12.12:8080",
+		"uptime",
+	}, setHomePath(tmpHomePath), setMockSSOLogin(authProcess.GetAuthServer(), alice, connector.GetName()))
+	fmt.Println("------------err")
+	fmt.Printf("%+v\n", err)
+	fmt.Println("------------err")
+	require.Error(t, err)
+
+	// i want to run this command WITH no-relogin and check that IT DOES NOT ask me to log in
+	// err = Run(context.Background(), []string{
+	// 	"ssh",
+	// 	// "--no-relogin",
+	// 	"--insecure",
+	// 	"--user", "alice",
+	// 	"--proxy", proxyAddr.String(),
+	// 	"12.12.12.12:8080",
+	// 	"uptime",
+	// }, setHomePath(tmpHomePath), setMockSSOLogin(authProcess.GetAuthServer(), alice, connector.GetName()))
+	// require.Error(t, err)
+}
+
 // TestSSHAccessRequest tests that a user can automatically request access to a
 // ssh server using a resource access request when "tsh ssh" fails with
 // AccessDenied.
