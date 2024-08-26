@@ -1812,7 +1812,37 @@ func TestNoRelogin(t *testing.T) {
 	}, setHomePath(tmpHomePath), setMockSSOLogin(authProcess.GetAuthServer(), alice, connector.GetName()))
 	require.NoError(t, err)
 
+	var loginAttempts atomic.Int32
+	trackingLoginFunc := func(ctx context.Context, connectorID string, priv *keys.PrivateKey, protocol string) (*authclient.SSHLoginResponse, error) {
+		loginAttempts.Add(1)
+		return mockSSOLogin(authServer, alice)(ctx, connectorID, priv, protocol)
+	}
+
 	// i want to run this command without no-relogin and check that IT DOES ask me to log in
+	err = Run(context.Background(), []string{
+		"ssh",
+		"--insecure",
+		"--user", "alice",
+		"--proxy", proxyAddr.String(),
+		"12.12.12.12:8080",
+		"uptime",
+	}, setHomePath(tmpHomePath), setMockSSOLoginCustom(trackingLoginFunc, connector.GetName()))
+	require.Error(t, err)
+	require.Equal(t, int32(1), loginAttempts.Load())
+
+	err = Run(context.Background(), []string{
+		"ssh",
+		"--relogin",
+		"--insecure",
+		"--user", "alice",
+		"--proxy", proxyAddr.String(),
+		"12.12.12.12:8080",
+		"uptime",
+	}, setHomePath(tmpHomePath), setMockSSOLoginCustom(trackingLoginFunc, connector.GetName()))
+	require.Error(t, err)
+	require.Equal(t, int32(2), loginAttempts.Load())
+
+	// i want to run this command WITH no-relogin and check that IT DOES NOT ask me to log in
 	err = Run(context.Background(), []string{
 		"ssh",
 		"--no-relogin",
@@ -1821,23 +1851,9 @@ func TestNoRelogin(t *testing.T) {
 		"--proxy", proxyAddr.String(),
 		"12.12.12.12:8080",
 		"uptime",
-	}, setHomePath(tmpHomePath), setMockSSOLogin(authProcess.GetAuthServer(), alice, connector.GetName()))
-	fmt.Println("------------err")
-	fmt.Printf("%+v\n", err)
-	fmt.Println("------------err")
+	}, setHomePath(tmpHomePath), setMockSSOLoginCustom(trackingLoginFunc, connector.GetName()))
 	require.Error(t, err)
-
-	// i want to run this command WITH no-relogin and check that IT DOES NOT ask me to log in
-	// err = Run(context.Background(), []string{
-	// 	"ssh",
-	// 	// "--no-relogin",
-	// 	"--insecure",
-	// 	"--user", "alice",
-	// 	"--proxy", proxyAddr.String(),
-	// 	"12.12.12.12:8080",
-	// 	"uptime",
-	// }, setHomePath(tmpHomePath), setMockSSOLogin(authProcess.GetAuthServer(), alice, connector.GetName()))
-	// require.Error(t, err)
+	require.Equal(t, int32(2), loginAttempts.Load())
 }
 
 // TestSSHAccessRequest tests that a user can automatically request access to a
