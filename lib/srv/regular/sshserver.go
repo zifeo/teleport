@@ -791,7 +791,7 @@ func New(
 	})
 
 	if s.GetCreateHostUser() {
-		s.users = srv.NewHostUsers(ctx, s.storage, s.ID())
+		s.users = srv.NewHostUsers(ctx, s.storage)
 		s.sudoers = srv.NewHostSudoers(s.ID())
 	}
 

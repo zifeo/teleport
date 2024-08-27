@@ -2971,3 +2971,184 @@ func newSigner(t testing.TB, ctx context.Context, testServer *auth.TestServer) s
 //	https://github.com/afborchert/pipebuf
 //	https://unix.stackexchange.com/questions/11946/how-big-is-the-pipe-buffer
 const maxPipeSize = 65536 + 1
+
+func TestHostUserCreationProxy(t *testing.T) {
+	f := newFixtureWithoutDiskBasedLogging(t)
+	ctx := context.Background()
+
+	proxyClient, _ := newProxyClient(t, f.testSrv)
+	nodeClient, _ := newNodeClient(t, f.testSrv)
+
+	logger := logrus.WithField("test", "TestProxyRoundRobin")
+	listener, reverseTunnelAddress := mustListen(t)
+	defer listener.Close()
+	lockWatcher := newLockWatcher(ctx, t, proxyClient)
+	nodeWatcher := newNodeWatcher(ctx, t, proxyClient)
+	caWatcher := newCertAuthorityWatcher(ctx, t, proxyClient)
+
+	reverseTunnelServer, err := reversetunnel.NewServer(reversetunnel.Config{
+		GetClientTLSCertificate: func() (*tls.Certificate, error) {
+			return &proxyClient.TLSConfig().Certificates[0], nil
+		},
+		ClusterName:           f.testSrv.ClusterName(),
+		ID:                    hostID,
+		Listener:              listener,
+		GetHostSigners:        sshutils.StaticHostSigners(f.signer),
+		LocalAuthClient:       proxyClient,
+		LocalAccessPoint:      proxyClient,
+		NewCachingAccessPoint: noCache,
+		DataDir:               t.TempDir(),
+		Emitter:               proxyClient,
+		Log:                   logger,
+		LockWatcher:           lockWatcher,
+		NodeWatcher:           nodeWatcher,
+		CertAuthorityWatcher:  caWatcher,
+		CircuitBreakerConfig:  breaker.NoopBreakerConfig(),
+	})
+	require.NoError(t, err)
+	logger.WithField("tun-addr", reverseTunnelAddress.String()).Info("Created reverse tunnel server.")
+
+	require.NoError(t, reverseTunnelServer.Start())
+	defer reverseTunnelServer.Close()
+
+	router, err := libproxy.NewRouter(libproxy.RouterConfig{
+		ClusterName:         f.testSrv.ClusterName(),
+		Log:                 utils.NewLoggerForTests().WithField(teleport.ComponentKey, "test"),
+		RemoteClusterGetter: proxyClient,
+		SiteGetter:          reverseTunnelServer,
+		TracerProvider:      tracing.NoopProvider(),
+	})
+	require.NoError(t, err)
+
+	sessionController, err := srv.NewSessionController(srv.SessionControllerConfig{
+		Semaphores:   proxyClient,
+		AccessPoint:  proxyClient,
+		LockEnforcer: lockWatcher,
+		Emitter:      proxyClient,
+		Component:    teleport.ComponentNode,
+		ServerID:     hostID,
+	})
+	require.NoError(t, err)
+
+	proxy, err := New(
+		ctx,
+		utils.NetAddr{AddrNetwork: "tcp", Addr: "localhost:0"},
+		f.testSrv.ClusterName(),
+		sshutils.StaticHostSigners(f.signer),
+		proxyClient,
+		t.TempDir(),
+		"",
+		utils.NetAddr{},
+		proxyClient,
+		SetProxyMode("", reverseTunnelServer, proxyClient, router),
+		SetEmitter(nodeClient),
+		SetNamespace(apidefaults.Namespace),
+		SetPAMConfig(&servicecfg.PAMConfig{Enabled: false}),
+		SetBPF(&bpf.NOP{}),
+		SetClock(f.clock),
+		SetLockWatcher(lockWatcher),
+		SetSessionController(sessionController),
+	)
+	require.NoError(t, err)
+
+	sudoers := &fakeHostSudoers{}
+	proxy.sudoers = sudoers
+
+	usersBackend := &fakeHostUsersBackend{}
+	proxy.users = srv.NewHostUsers(ctx, nil, srv.WithHostUsersBackend(usersBackend))
+
+	// Explicitly enabled host user creation on the proxy, even though this
+	// should never happen, to test that the proxy will not honor this setting.
+	proxy.createHostUser = true
+
+	reg, err := srv.NewSessionRegistry(srv.SessionRegistryConfig{Srv: proxy, SessionTrackerService: proxyClient})
+	require.NoError(t, err)
+
+	_, err = reg.TryWriteSudoersFile(srv.IdentityContext{})
+	assert.NoError(t, err)
+	assert.Equal(t, 0, sudoers.writeAttempts)
+
+	_, err = reg.TryWriteSudoersFile(srv.IdentityContext{})
+	assert.NoError(t, err)
+	assert.Len(t, usersBackend.calls, 0)
+}
+
+type fakeHostSudoers struct {
+	writeAttempts int
+}
+
+func (f *fakeHostSudoers) WriteSudoers(name string, sudoers []string) error {
+	f.writeAttempts++
+	return nil
+}
+
+func (f *fakeHostSudoers) RemoveSudoers(name string) error {
+	return nil
+}
+
+type fakeHostUsersBackend struct {
+	calls map[string]int
+}
+
+func (f *fakeHostUsersBackend) functionCalled(name string) {
+	if f.calls == nil {
+		f.calls = make(map[string]int)
+	}
+
+	f.calls[name]++
+}
+
+func (f *fakeHostUsersBackend) GetAllUsers() ([]string, error) {
+	f.functionCalled("GetAllUsers")
+	return nil, trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) UserGIDs(u *user.User) ([]string, error) {
+	f.functionCalled("UserGIDs")
+	return nil, trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) Lookup(name string) (*user.User, error) {
+	f.functionCalled("Lookup")
+	return nil, trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) LookupGroup(group string) (*user.Group, error) {
+	f.functionCalled("LookupGroup")
+	return nil, trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) LookupGroupByID(gid string) (*user.Group, error) {
+	f.functionCalled("LookupGroupByID")
+	return nil, trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) SetUserGroups(name string, groups []string) error {
+	f.functionCalled("SetUserGroups")
+	return trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) CreateGroup(group string, gid string) error {
+	f.functionCalled("CreateGroup")
+	return trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) CreateUser(name string, groups []string, home, uid, gid string) error {
+	f.functionCalled("CreateUser")
+	return trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) DeleteUser(name string) error {
+	f.functionCalled("DeleteUser")
+	return trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) CreateHomeDirectory(userHome string, uid, gid string) error {
+	f.functionCalled("CreateHomeDirectory")
+	return trace.NotImplemented("")
+}
+
+func (f *fakeHostUsersBackend) GetDefaultHomeDirectory(user string) (string, error) {
+	f.functionCalled("GetDefaultHomeDirectory")
+	return "", trace.NotImplemented("")
+}

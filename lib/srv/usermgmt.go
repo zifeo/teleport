@@ -39,19 +39,40 @@ import (
 	"github.com/gravitational/teleport/lib/services"
 )
 
+type HostUsersOptions struct {
+	Backend HostUsersBackend
+}
+
+func WithHostUsersBackend(b HostUsersBackend) func(*HostUsersOptions) {
+	return func(o *HostUsersOptions) {
+		o.Backend = b
+	}
+}
+
 // NewHostUsers initialize a new HostUsers object
-func NewHostUsers(ctx context.Context, storage services.PresenceInternal, uuid string) HostUsers {
+func NewHostUsers(ctx context.Context, storage services.PresenceInternal, opts ...func(*HostUsersOptions)) HostUsers {
+	cancelCtx, cancelFunc := context.WithCancel(ctx)
+
+	var options HostUsersOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	//nolint:staticcheck // SA4023. False positive on macOS.
 	backend, err := newHostUsersBackend()
 	switch {
-	case trace.IsNotImplemented(err), trace.IsNotFound(err):
+	case trace.IsNotImplemented(err), trace.IsNotFound(err) && options.Backend == nil:
 		log.Debugf("Skipping host user management: %v", err)
 		return nil
 	case err != nil: //nolint:staticcheck // linter fails on non-linux system as only linux implementation returns useful values.
 		log.Warnf("Error making new HostUsersBackend: %s", err)
 		return nil
 	}
-	cancelCtx, cancelFunc := context.WithCancel(ctx)
+
+	if options.Backend != nil {
+		backend = options.Backend
+	}
+
 	return &HostUserManagement{
 		backend:   backend,
 		ctx:       cancelCtx,
