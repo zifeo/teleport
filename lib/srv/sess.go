@@ -239,7 +239,7 @@ func (sc *sudoersCloser) Close() error {
 // file, if any. If the returned closer is not nil, it must be called at the
 // end of the session to cleanup the sudoers file.
 func (s *SessionRegistry) TryWriteSudoersFile(identityContext IdentityContext) (io.Closer, error) {
-	if s.sudoers == nil {
+	if !s.Srv.GetCreateHostUser() || s.sudoers == nil {
 		return nil, nil
 	}
 
@@ -269,7 +269,7 @@ func (s *SessionRegistry) TryWriteSudoersFile(identityContext IdentityContext) (
 // session to clean up the local user.
 func (s *SessionRegistry) TryCreateHostUser(identityContext IdentityContext) (created bool, closer io.Closer, err error) {
 	if !s.Srv.GetCreateHostUser() || s.users == nil {
-		s.log.Debug("Not creating host user: node has disabled host user creation.")
+		s.log.Debug("Not creating host user: host user creation disabled.")
 		return false, nil, nil // not an error to not be able to create host users
 	}
 

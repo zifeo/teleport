@@ -298,9 +298,9 @@ func (s *Server) GetLockWatcher() *services.LockWatcher {
 }
 
 // GetCreateHostUser determines whether users should be created on the
-// host automatically
+// host automatically.
 func (s *Server) GetCreateHostUser() bool {
-	return s.createHostUser
+	return !s.proxyMode && s.createHostUser
 }
 
 // GetHostUsers returns the HostUsers instance being used to manage
@@ -792,8 +792,8 @@ func New(
 
 	if s.GetCreateHostUser() {
 		s.users = srv.NewHostUsers(ctx, s.storage, s.ID())
+		s.sudoers = srv.NewHostSudoers(s.ID())
 	}
-	s.sudoers = srv.NewHostSudoers(s.ID())
 
 	s.reg, err = srv.NewSessionRegistry(srv.SessionRegistryConfig{
 		Srv:                   s,
