@@ -43,6 +43,7 @@ import (
 	"github.com/gravitational/teleport/lib/auth/authclient"
 	"github.com/gravitational/teleport/lib/auth/testauthority"
 	"github.com/gravitational/teleport/lib/client"
+	"github.com/gravitational/teleport/lib/cryptosuites"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/kube/kubeconfig"
 	"github.com/gravitational/teleport/lib/services"
@@ -74,7 +75,10 @@ func newSelfSignedCA(priv crypto.Signer) (*tlsca.CertAuthority, authclient.Trust
 }
 
 func newClientKeyRing(t *testing.T, modifiers ...func(*tlsca.Identity)) *client.KeyRing {
-	privateKey, err := testauthority.New().GeneratePrivateKey()
+	// Some formats only support RSA (certain DBs, PPK files).
+	key, err := cryptosuites.GenerateKeyWithAlgorithm(cryptosuites.RSA2048)
+	require.NoError(t, err)
+	privateKey, err := keys.NewSoftwarePrivateKey(key)
 	require.NoError(t, err)
 
 	ff, tc, err := newSelfSignedCA(privateKey)
@@ -115,7 +119,8 @@ func newClientKeyRing(t *testing.T, modifiers ...func(*tlsca.Identity)) *client.
 	})
 	require.NoError(t, err)
 
-	keyRing := client.NewKeyRing(privateKey)
+	// Identity files use a single key for SSH and TLS.
+	keyRing := client.NewKeyRing(privateKey, privateKey)
 	keyRing.KeyRingIndex = client.KeyRingIndex{
 		ProxyHost:   "localhost",
 		Username:    "testuser",
@@ -143,7 +148,7 @@ func TestWrite(t *testing.T) {
 	// key is OK:
 	out, err := os.ReadFile(cfg.OutputPath)
 	require.NoError(t, err)
-	require.Equal(t, string(out), string(keyRing.PrivateKey.PrivateKeyPEM()))
+	require.Equal(t, string(out), string(keyRing.SSHPrivateKey.PrivateKeyPEM()))
 
 	// cert is OK:
 	out, err = os.ReadFile(keypaths.IdentitySSHCertPath(cfg.OutputPath))
@@ -168,7 +173,7 @@ func TestWrite(t *testing.T) {
 	require.NoError(t, err)
 
 	wantArr := [][]byte{
-		keyRing.PrivateKey.PrivateKeyPEM(),
+		keyRing.TLSPrivateKey.PrivateKeyPEM(),
 		keyRing.Cert,
 		keyRing.TLSCert,
 		[]byte(knownHosts),

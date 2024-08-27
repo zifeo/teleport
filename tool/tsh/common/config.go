@@ -80,7 +80,7 @@ func onConfig(cf *CLIConf) error {
 
 	keysDir := profile.FullProfilePath(tc.Config.KeysDir)
 	knownHostsPath := keypaths.KnownHostsPath(keysDir)
-	identityFilePath := keypaths.UserKeyPath(keysDir, proxyHost, tc.Config.Username)
+	identityFilePath := keypaths.UserSSHKeyPath(keysDir, proxyHost, tc.Config.Username)
 
 	leafClustersNames := make([]string, 0, len(leafClusters))
 	for _, leafCluster := range leafClusters {
