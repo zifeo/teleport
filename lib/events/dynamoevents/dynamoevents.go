@@ -538,11 +538,11 @@ func isAWSValidationError(err error) bool {
 }
 
 func trimEventSize(event apievents.AuditEvent) (apievents.AuditEvent, bool) {
-	m, ok := event.(messageSizeTrimmer)
-	if !ok {
-		return nil, false
+	trimmedEvent := event.TrimToMaxSize(maxItemSize)
+	if trimmedEvent.Size() >= maxItemSize {
+		return trimmedEvent, false
 	}
-	return m.TrimToMaxSize(maxItemSize), true
+	return trimmedEvent, true
 }
 
 // putAuditEventContextKey represents context keys of putAuditEvent.
