@@ -3395,7 +3395,6 @@ func (g *GRPCServer) StreamSessionEvents(req *authpb.StreamSessionEventsRequest,
 	}
 
 	c, e := auth.ServerWithRoles.StreamSessionEvents(stream.Context(), session.ID(req.SessionID), int64(req.StartIndex))
-
 	for {
 		select {
 		case event, more := <-c:
@@ -5495,14 +5494,58 @@ func (g *GRPCServer) GetUnstructuredEvents(ctx context.Context, req *auditlogpb.
 	}, nil
 }
 
-// StreamUnstructuredSessionEvents streams all events from a given session recording as an unstructured format.
-func (g *GRPCServer) StreamUnstructuredSessionEvents(req *auditlogpb.StreamUnstructuredSessionEventsRequest, stream auditlogpb.AuditLogService_StreamUnstructuredSessionEventsServer) error {
+// ExportUnstructuredEvents returns all events that occurred within a coarse time range in an undefined order. May be
+// more performant for bulk event exports for certain implementations.
+func (g *GRPCServer) ExportUnstructuredEvents(req *auditlogpb.ExportUnstructuredEventsRequest, stream auditlogpb.AuditLogService_ExportUnstructuredEventsServer) error {
 	auth, err := g.authenticate(stream.Context())
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
+	events := auth.ServerWithRoles.ExportUnstructuredEvents(stream.Context(), req)
+
+	for events.Next() {
+		if err := stream.Send(events.Item()); err != nil {
+			events.Done()
+			return trace.Wrap(err)
+		}
+	}
+
+	return trace.Wrap(events.Done())
+}
+
+// StreamUnstructuredSessionEvents streams all events from a given session recording as an unstructured format.
+func (g *GRPCServer) StreamUnstructuredSessionEvents(req *auditlogpb.StreamUnstructuredSessionEventsRequest, stream auditlogpb.AuditLogService_StreamUnstructuredSessionEventsServer) (err error) {
+	auth, err := g.authenticate(stream.Context())
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	log.WithFields(logrus.Fields{
+		"tag":         "fspm-debug",
+		"session_id":  req.SessionId,
+		"start_index": req.StartIndex,
+	}).Info("StreamUnstructuredSessionEvents started.")
+
+	var eventsSent int
+
+	defer func() {
+		fields := logrus.Fields{
+			"tag":         "fspm-debug",
+			"session_id":  req.SessionId,
+			"start_index": req.StartIndex,
+			"error":       err,
+		}
+		if err != nil {
+			fields["debug_report"] = trace.DebugReport(err)
+		}
+		log.WithFields(fields).Info("StreamSessionEvents completed.")
+	}()
+
 	c, e := auth.ServerWithRoles.StreamSessionEvents(stream.Context(), session.ID(req.SessionId), int64(req.StartIndex))
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -5513,13 +5556,21 @@ func (g *GRPCServer) StreamUnstructuredSessionEvents(req *auditlogpb.StreamUnstr
 			// convert event to JSON
 			eventJson, err := apievents.ToUnstructured(event)
 			if err != nil {
-				return trail.ToGRPC(trace.Wrap(err))
+				return trace.Wrap(err)
 			}
 			if err := stream.Send(eventJson); err != nil {
-				return trail.ToGRPC(trace.Wrap(err))
+				return trace.Wrap(err)
 			}
+			eventsSent++
+		case <-ticker.C:
+			log.WithFields(logrus.Fields{
+				"tag":         "fspm-debug",
+				"session_id":  req.SessionId,
+				"start_index": req.StartIndex,
+				"events_sent": eventsSent,
+			}).Info("StreamSessionEvents tick.")
 		case err := <-e:
-			return trail.ToGRPC(trace.Wrap(err))
+			return trace.Wrap(err)
 		}
 	}
 }

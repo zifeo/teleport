@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,6 +43,8 @@ import (
 
 	"github.com/gravitational/teleport"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
+	auditlogpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/auditlog/v1"
+	"github.com/gravitational/teleport/api/internalutils/stream"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/observability/metrics"
@@ -954,6 +957,16 @@ func (l *AuditLog) SearchSessionEvents(ctx context.Context, req SearchSessionEve
 	return l.localLog.SearchSessionEvents(ctx, req)
 }
 
+// ExportUnstructuredEvents returns all events that occurred within a coarse time range in an undefined order. May be
+// more performant for bulk event exports for certain implementations.
+func (l *AuditLog) ExportUnstructuredEvents(ctx context.Context, req *auditlogpb.ExportUnstructuredEventsRequest) stream.Stream[*auditlogpb.ExportEventUnstructured] {
+	l.log.Debugf("ExportUnstructuredEvents(%v, %v)", req.StartDate, req.EndDate)
+	if l.ExternalLog != nil {
+		return l.ExternalLog.ExportUnstructuredEvents(ctx, req)
+	}
+	return l.localLog.ExportUnstructuredEvents(ctx, req)
+}
+
 // StreamSessionEvents implements [SessionStreamer].
 func (l *AuditLog) StreamSessionEvents(ctx context.Context, sessionID session.ID, startIndex int64) (chan apievents.AuditEvent, chan error) {
 	l.log.WithField("session_id", string(sessionID)).Debug("StreamSessionEvents()")
@@ -998,6 +1011,26 @@ func (l *AuditLog) StreamSessionEvents(ctx context.Context, sessionID session.ID
 
 	go func() {
 		defer rawSession.Close()
+
+		// start debug
+		if _, err := rawSession.Seek(0, io.SeekStart); err != nil {
+			e <- trace.Wrap(err)
+			return
+		}
+		// take sha256sum of file for logging purposes
+		hash := sha256.New()
+		n, err := io.Copy(hash, rawSession)
+		if err != nil {
+			e <- trace.Wrap(err)
+			return
+		}
+		l.log.WithFields(log.Fields{
+			"session_id": string(sessionID),
+			"sha256":     fmt.Sprintf("%x", hash.Sum(nil)),
+			"len":        n,
+			"tag":        "fspm-debug",
+		}).Debug("Streaming session.")
+		// end debug
 
 		// this shouldn't be necessary as the position should be already 0 (Download
 		// takes an io.WriterAt), but it's better to be safe than sorry

@@ -108,7 +108,7 @@ func newGzipWriter(writer io.WriteCloser) *gzipWriter {
 // gzipReader wraps file, on close close both gzip writer and file
 type gzipReader struct {
 	io.ReadCloser
-	inner io.Closer
+	inner io.ReadCloser
 }
 
 // Close closes file and gzip writer
@@ -130,6 +130,7 @@ func newGzipReader(reader io.ReadCloser) (*gzipReader, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+	gzReader.Multistream(false)
 	return &gzipReader{
 		ReadCloser: gzReader,
 		inner:      reader,

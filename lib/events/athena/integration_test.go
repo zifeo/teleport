@@ -21,6 +21,7 @@ package athena
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	auditlogpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/auditlog/v1"
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/utils/retryutils"
@@ -119,6 +122,47 @@ func testIntegrationAthenaEventPagination(t *testing.T, bypassSNS bool) {
 	}
 
 	eventsSuite.EventPagination(t)
+
+	eventStream := auditLogger.ExportUnstructuredEvents(ctx, &auditlogpb.ExportUnstructuredEventsRequest{
+		StartDate: timestamppb.New(time.Now()),
+	})
+
+	var n int
+	var cursor string
+	for eventStream.Next() {
+		n++
+		if n == 2 {
+			cursor = eventStream.Item().Cursor
+		}
+		fmt.Printf("---> %+v\n", eventStream.Item())
+	}
+
+	require.NoError(t, eventStream.Done())
+	require.Equal(t, 4, n)
+
+	eventStream = auditLogger.ExportUnstructuredEvents(ctx, &auditlogpb.ExportUnstructuredEventsRequest{
+		StartDate: timestamppb.New(time.Now()),
+		Cursor:    cursor,
+	})
+
+	n = 0
+	for eventStream.Next() {
+		n++
+		fmt.Printf("---> (resumed) %+v\n", eventStream.Item())
+	}
+
+	require.NoError(t, eventStream.Done())
+	require.Equal(t, 2, n)
+
+	eventStream = auditLogger.ExportUnstructuredEvents(ctx, &auditlogpb.ExportUnstructuredEventsRequest{
+		StartDate: timestamppb.New(time.Now().Add(48 * time.Hour)),
+	})
+
+	for eventStream.Next() {
+		require.FailNowf(t, "unexpected event from future date", "event: %+v", eventStream.Item())
+	}
+
+	require.NoError(t, eventStream.Done())
 }
 
 func TestIntegrationAthenaLargeEvents(t *testing.T) {

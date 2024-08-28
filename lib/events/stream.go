@@ -1073,11 +1073,28 @@ func (r *ProtoReader) Read(ctx context.Context) (apievents.AuditEvent, error) {
 				if !errors.Is(err, io.EOF) {
 					return nil, r.setError(trace.ConvertSystemError(err))
 				}
+
+				// due to a bug in older versions of teleport it was possible that padding
+				// bytes would end up inside of the gzip section of the archive. we should
+				// skip any dangling data in the gzip secion.
+				n, err := io.CopyBuffer(io.Discard, r.gzipReader.inner, r.messageBytes[:])
+				if err != nil {
+					return nil, r.setError(trace.ConvertSystemError(err))
+				}
+
+				if n != 0 {
+					// warn about the dangling data
+					log.WithFields(log.Fields{
+						"length": n,
+					}).Warn("skipped dangling data in session recording section")
+				}
+
 				// reached the end of the current part, but not necessarily
 				// the end of the stream
 				if err := r.gzipReader.Close(); err != nil {
 					return nil, r.setError(trace.ConvertSystemError(err))
 				}
+
 				if r.padding != 0 {
 					skipped, err := io.CopyBuffer(io.Discard, io.LimitReader(r.reader, r.padding), r.messageBytes[:])
 					if err != nil {
