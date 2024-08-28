@@ -24,7 +24,7 @@ import (
 
 	"github.com/gravitational/trace"
 
-	userprovisioningpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/userprovisioning/v1"
+	userprovisioningpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/userprovisioning/v2"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -59,6 +59,7 @@ func isValidUidOrGid(s string) bool {
 // ValidateStaticHostUser checks that required parameters are set for the
 // specified StaticHostUser.
 func ValidateStaticHostUser(u *userprovisioningpb.StaticHostUser) error {
+	// Check if required info exists.
 	if u == nil {
 		return trace.BadParameter("StaticHostUser is nil")
 	}
@@ -71,26 +72,33 @@ func ValidateStaticHostUser(u *userprovisioningpb.StaticHostUser) error {
 	if u.Spec == nil {
 		return trace.BadParameter("Spec is nil")
 	}
-	if u.Spec.Login == "" {
-		return trace.BadParameter("missing login")
+
+	if len(u.Spec.Matchers) == 0 {
+		return trace.BadParameter("missing matchers")
 	}
-	if u.Spec.NodeLabels != nil {
-		for key, value := range u.Spec.NodeLabels.Values {
-			if key == types.Wildcard && !(len(value.Values) == 1 && value.Values[0] == types.Wildcard) {
+	for _, matcher := range u.Spec.Matchers {
+		// Check if matcher can match any resources.
+		if len(matcher.NodeLabels) == 0 && len(matcher.NodeLabelsExpression) == 0 {
+			return trace.BadParameter("either NodeLabels or NodeLabelsExpression must be set")
+		}
+		for _, label := range matcher.NodeLabels {
+			if label.Name == types.Wildcard && !(len(label.Values) == 1 && label.Values[0] == types.Wildcard) {
 				return trace.BadParameter("selector *:<val> is not supported")
 			}
 		}
-	}
-	if len(u.Spec.NodeLabelsExpression) > 0 {
-		if _, err := parseLabelExpression(u.Spec.NodeLabelsExpression); err != nil {
-			return trace.BadParameter("parsing node labels expression: %v", err)
+		if len(matcher.NodeLabelsExpression) > 0 {
+			if _, err := parseLabelExpression(matcher.NodeLabelsExpression); err != nil {
+				return trace.BadParameter("parsing node labels expression: %v", err)
+			}
 		}
-	}
-	if !isValidUidOrGid(u.Spec.Uid) {
-		return trace.BadParameter("invalid uid: %q", u.Spec.Uid)
-	}
-	if !isValidUidOrGid(u.Spec.Gid) {
-		return trace.BadParameter("invalid gid: %q", u.Spec.Gid)
+
+		// Check uid and gid.
+		if !isValidUidOrGid(matcher.Uid) {
+			return trace.BadParameter("invalid uid: %q", matcher.Uid)
+		}
+		if !isValidUidOrGid(matcher.Gid) {
+			return trace.BadParameter("invalid gid: %q", matcher.Gid)
+		}
 	}
 	return nil
 }

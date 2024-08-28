@@ -20,7 +20,7 @@ package userprovisioning
 
 import (
 	headerv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/header/v1"
-	userprovisioningpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/userprovisioning/v1"
+	userprovisioningpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/userprovisioning/v2"
 	"github.com/gravitational/teleport/api/types"
 )
 
