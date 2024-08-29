@@ -14,8 +14,8 @@ payloads over a secure channel established via mutual TLS:
 
 ![Architecture of the setup shown in this guide](../../../../img/management/datadog-diagram.png)
 
-Since the Datadog Agent can only receive logs over a network as JSON-encoded
-bytes over a [TCP or UDP
+Since the Datadog Agent can only receive logs from remote sources as
+JSON-encoded bytes over a [TCP or UDP
 connection](https://docs.datadoghq.com/agent/logs/?tab=tailfiles#custom-log-collection),
 the Teleport Event Handler needs to send its HTTPS payloads without using the
 Datadog Agent. Fluentd handles authentication to the Datadog API.
@@ -55,6 +55,10 @@ from Teleport's events API, and forwards them to Fluentd.
 (!docs/pages/includes/plugins/event-handler-role-user.mdx!)
 
 ## Step 4/6. Create teleport-event-handler credentials
+
+The Teleport Event Handler needs credentials to authenticate to the Teleport
+Auth Service. In this section, you will give the Event Handler access to these
+credentials.
 
 ### Enable issuing of credentials for the Event Handler role
 
@@ -115,12 +119,10 @@ $ fluentd -c /fluentd/etc/fluent.conf
 
 ### Configure Fluentd
 
-1. Visit Datadog and generate an API key for Fluentd. From **Organization
-   Settings** -> Access -> **API Keys**, click on **+ New Key**:
+1. Visit Datadog and generate an API key for Fluentd by following the [Datadog
+   documentation](https://docs.datadoghq.com/account_management/api-app-keys).
 
-   ![Datadog API key generation](../../../../img/management/datadog-generate-api.png)
-
-1. Copy the API key, and use it to add a new `<match>` block to `fluent.conf`:
+1. Copy the API key and use it to add a new `<match>` block to `fluent.conf`:
 
    ```ini
    <match test.log>
@@ -140,7 +142,7 @@ $ fluentd -c /fluentd/etc/fluent.conf
 1. Edit your configuration as follows:
 
    - Add your API key to the `api_key` field.
-   - Adjust the `host` value to match your Datadog site. See their [Log
+   - Adjust the `host` value to match your Datadog site. See the Datadog [Log
      Collection and
      Integrations](https://docs.datadoghq.com/logs/log_collection/?tab=host)
      guide to determine the correct value.
@@ -154,6 +156,9 @@ $ fluentd -c /fluentd/etc/fluent.conf
 1. Restart Fluentd after saving the changes to `fluent.conf`.
 
 ## Step 6/6. Run the Teleport Event Handler plugin
+
+In this section, you will modify the Event Handler configuration you generated
+and run the Event Handler to test your configuration.
 
 ### Configure the Event Handler
 
