@@ -219,6 +219,13 @@ export function UnifiedResources(props: {
     ]
   );
 
+  const bulkAddResources = useCallback(
+    (resources: UnifiedResourceResponse[]) => {
+      accessRequestsService.addOrRemoveResource(resources);
+    },
+    [accessRequestsService]
+  );
+
   return (
     <Resources
       getAccessRequestButton={getAccessRequestButton}
@@ -232,9 +239,7 @@ export function UnifiedResources(props: {
       canUseConnectMyComputer={canUseConnectMyComputer}
       openConnectMyComputerDocument={openConnectMyComputerDocument}
       onResourcesRefreshRequest={onResourcesRefreshRequest}
-      bulkAddResources={accessRequestsService.addOrRemoveResource.bind(
-        accessRequestsService
-      )}
+      bulkAddResources={bulkAddResources}
       discoverUrl={discoverUrl}
       integratedAccessRequests={integratedAccessRequests}
       // Reset the component state when query params object change.
@@ -257,8 +262,8 @@ const Resources = memo(
     openConnectMyComputerDocument(): void;
     onResourcesRefreshRequest: ResourcesContext['onResourcesRefreshRequest'];
     discoverUrl: string;
-    getAccessRequestButton?: (resource: UnifiedResourceResponse) => JSX.Element;
-    bulkAddResources?: (resources: UnifiedResourceResponse[]) => void;
+    getAccessRequestButton: (resource: UnifiedResourceResponse) => JSX.Element;
+    bulkAddResources: (resources: UnifiedResourceResponse[]) => void;
     integratedAccessRequests: IntegratedAccessRequests;
   }) => {
     const appContext = useAppContext();
@@ -326,42 +331,42 @@ const Resources = memo(
     }, [onResourcesRefreshRequest, fetch]);
 
     const { getAccessRequestButton } = props;
+    // The action callback in the requestAccess action has access to
+    // `SharedUnifiedResource['resource']`, but `props.bulkAddResources` accepts
+    // `UnifiedResourceResponse`. Because of that, we need to to have the
+    // getUnifiedResourceFromSharedResource function.
+    const { sharedResources, getUnifiedResourceFromSharedResource } =
+      useMemo(() => {
+        const sharedResources: SharedUnifiedResource[] = [];
+        const sharedResourceToUnifiedResource = new Map<
+          SharedUnifiedResource['resource'],
+          UnifiedResourceResponse
+        >();
 
-    /**
-     * Keeps the list of `SharedUnifiedResource`, but also allows to return
-     * the original `UnifiedResourceResponse` object by the
-     * `SharedUnifiedResource['resource']`;
-     */
-    const mappedResources = useMemo(() => {
-      // It is unfortunate that in the bulk action callback we get only
-      // `SharedUnifiedResource['resource']`, not `SharedUnifiedResource`.
-      // Because of that, we need to store SharedUnifiedResource list separately.
-      const list: SharedUnifiedResource[] = [];
-      const reverseMap = new Map<
-        SharedUnifiedResource['resource'],
-        UnifiedResourceResponse
-      >();
+        resources.forEach(resource => {
+          let sharedResource = mapToSharedResource(resource);
+          const accessRequestButton = getAccessRequestButton(resource);
+          if (accessRequestButton) {
+            sharedResource.ui.ActionButton = accessRequestButton;
+          }
 
-      resources.forEach(originalResource => {
-        const { resource, ui } = mapToSharedResource(originalResource);
+          sharedResources.push(sharedResource);
+          sharedResourceToUnifiedResource.set(
+            sharedResource.resource,
+            resource
+          );
+        });
 
-        const sharedUnifiedResource: SharedUnifiedResource = {
-          resource,
-          ui: {
-            ActionButton:
-              getAccessRequestButton(originalResource) || ui.ActionButton,
-          },
+        const getUnifiedResourceFromSharedResource =
+          sharedResourceToUnifiedResource.get.bind(
+            sharedResourceToUnifiedResource
+          );
+
+        return {
+          sharedResources,
+          getUnifiedResourceFromSharedResource,
         };
-        list.push(sharedUnifiedResource);
-        reverseMap.set(sharedUnifiedResource.resource, originalResource);
-      });
-      return {
-        list,
-        getOriginalResource: (
-          r: SharedUnifiedResource['resource']
-        ): UnifiedResourceResponse => reverseMap.get(r),
-      };
-    }, [resources, getAccessRequestButton]);
+      }, [resources, getAccessRequestButton]);
 
     const resourceIds =
       props.userPreferences.clusterPreferences?.pinnedResources?.resourceIds;
@@ -390,10 +395,10 @@ const Resources = memo(
                   Icon: icons.AddCircle,
                   text: 'Request Access',
                   disabled: false,
-                  action: sharedResources =>
+                  action: selectedResources =>
                     props.bulkAddResources(
-                      sharedResources.map(sharedResource =>
-                        mappedResources.getOriginalResource(
+                      selectedResources.map(sharedResource =>
+                        getUnifiedResourceFromSharedResource(
                           sharedResource.resource
                         )
                       )
@@ -414,7 +419,7 @@ const Resources = memo(
             ? props.integratedAccessRequests.availabilityFilter
             : undefined
         }
-        resources={mappedResources.list}
+        resources={sharedResources}
         resourcesFetchAttempt={attempt}
         fetchResources={fetch}
         availableKinds={[
