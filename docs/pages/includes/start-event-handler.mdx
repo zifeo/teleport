@@ -72,7 +72,17 @@ Run the following command on your workstation:
 ```code
 $ helm install teleport-plugin-event-handler teleport/teleport-plugin-event-handler \
   --values teleport-plugin-event-handler-values.yaml \
-  --version (=teleport.plugin.version=)
+  --version (=teleport.version=)
+```
+
+</TabItem>
+<TabItem label="Local Docker container">
+
+Navigate to the directory where you ran the `configure` command earlier and
+execute the following command:
+
+```code
+$ docker run -v `pwd`:/opt/teleport-plugin -w /opt/teleport-plugin public.ecr.aws/gravitational/teleport-plugin-event-handler:(=teleport.version=) start --config=teleport-event-handler.toml
 ```
 
 </TabItem>
