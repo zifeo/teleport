@@ -144,7 +144,7 @@ func (c *UnifiedResourceCache) putLocked(resource resource) {
 		// from those trees before adding a new one. This can happen
 		// when a node's hostname changes
 		oldSortKey := makeResourceSortKey(oldResource)
-		if string(oldSortKey.byName) != string(sortKey.byName) {
+		if oldSortKey.byName.Compare(sortKey.byName) != 0 {
 			c.deleteSortKey(oldSortKey)
 		}
 	}
@@ -167,10 +167,10 @@ func putResources[T resource](cache *UnifiedResourceCache, resources []T) {
 
 func (c *UnifiedResourceCache) deleteSortKey(sortKey resourceSortKey) error {
 	if _, ok := c.nameTree.Delete(&item{Key: sortKey.byName}); !ok {
-		return trace.NotFound("key %q is not found in unified cache name sort tree", string(sortKey.byName))
+		return trace.NotFound("key %q is not found in unified cache name sort tree", sortKey.byName.String())
 	}
 	if _, ok := c.typeTree.Delete(&item{Key: sortKey.byType}); !ok {
-		return trace.NotFound("key %q is not found in unified cache type sort tree", string(sortKey.byType))
+		return trace.NotFound("key %q is not found in unified cache type sort tree", sortKey.byType.String())
 	}
 	return nil
 }
@@ -248,7 +248,7 @@ func (c *UnifiedResourceCache) getRange(ctx context.Context, startKey backend.Ke
 			// do we have all we need? set nextKey and stop iterating
 			// we do this after the matchFn to make sure they have access to the "next" node
 			if req.Limit > 0 && len(res) >= int(req.Limit) {
-				nextKey = string(item.Key)
+				nextKey = item.Key.String()
 				return false
 			}
 			res = append(res, resourceFromMap)

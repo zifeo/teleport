@@ -24,6 +24,21 @@ import (
 	"github.com/gravitational/teleport/lib/backend"
 )
 
+func TestKey(t *testing.T) {
+
+	k1 := backend.Key("test")
+	k2 := backend.NewKey("test")
+	k3 := backend.ExactKey("test")
+
+	assert.NotEqual(t, k1, k2)
+	assert.NotEqual(t, k2, k3)
+	assert.NotEqual(t, k1, k3)
+
+	assert.Equal(t, "test", k1.String())
+	assert.Equal(t, "/test", k2.String())
+	assert.Equal(t, "/test/", k3.String())
+}
+
 func TestKeyString(t *testing.T) {
 	tests := []struct {
 		name     string

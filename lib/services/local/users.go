@@ -151,7 +151,7 @@ func (s *IdentityService) ListUsers(ctx context.Context, req *userspb.ListUsersR
 // the next user in the list while still allowing listing to operate
 // without missing any users.
 func nextUserToken(user types.User) string {
-	return string(backend.RangeEnd(backend.ExactKey(user.GetName())))[utf8.RuneLen(backend.Separator):]
+	return backend.RangeEnd(backend.ExactKey(user.GetName())).String()[utf8.RuneLen(backend.Separator):]
 }
 
 // streamUsersWithSecrets is a helper that converts a stream of backend items over the user key range into a stream
@@ -165,7 +165,7 @@ func (s *IdentityService) streamUsersWithSecrets(itemStream stream.Stream[backen
 	var current collector
 
 	collectorStream := stream.FilterMap(itemStream, func(item backend.Item) (collector, bool) {
-		name, suffix, err := splitUsernameAndSuffix(string(item.Key))
+		name, suffix, err := splitUsernameAndSuffix(item.Key)
 		if err != nil {
 			s.log.Warnf("Failed to extract name/suffix for user item at %q: %v", item.Key, err)
 			return collector{}, false
@@ -585,7 +585,7 @@ func (s *IdentityService) getUserWithSecrets(ctx context.Context, user string) (
 	var items userItems
 	for _, item := range result.Items {
 		suffix := item.Key.TrimPrefix(startKey)
-		items.Set(string(suffix), item) // Result of Set i
+		items.Set(suffix.String(), item) // Result of Set i
 	}
 
 	u, err := userFromUserItems(user, items)

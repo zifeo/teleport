@@ -83,12 +83,8 @@ func (k Key) Components() [][]byte {
 		return nil
 	}
 
-	components := bytes.Split(k, []byte{Separator})
-	if len(components) > 0 && len(components[0]) == 0 {
-		return components[1:]
-	}
-
-	return components
+	sep := []byte{Separator}
+	return bytes.Split(bytes.TrimPrefix(k, sep), sep)
 }
 
 func (k Key) Compare(o Key) int {
