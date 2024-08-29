@@ -28,7 +28,7 @@ import (
 func NewStaticHostUser(name string, spec *userprovisioningpb.StaticHostUserSpec) *userprovisioningpb.StaticHostUser {
 	return &userprovisioningpb.StaticHostUser{
 		Kind:    types.KindStaticHostUser,
-		Version: types.V1,
+		Version: types.V2,
 		Metadata: &headerv1.Metadata{
 			Name: name,
 		},
