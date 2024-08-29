@@ -41,7 +41,7 @@ environments.
 
 ## Step 1/6. Install the Event Handler plugin
 
-The Teleport event handler runs alongside the Fluentd forwarder, receives events
+The Teleport Event Handler runs alongside the Fluentd forwarder, receives events
 from Teleport's events API, and forwards them to Fluentd.
 
 (!docs/pages/includes/install-event-handler.mdx!)
@@ -83,7 +83,7 @@ longer-lived identity files with `tctl`:
 </TabItem>
 </Tabs>
 
-## Step 5/6. Install Fluentd output plugin for Datadog
+## Step 5/6. Install the Fluentd output plugin for Datadog
 
 In order for Fluentd to communicate with Datadog, it requires the [Fluentd output
 plugin for Datadog](https://github.com/DataDog/fluent-plugin-datadog). Install
@@ -113,40 +113,45 @@ $ fluentd -c /fluentd/etc/fluent.conf
 
 </Admonition>
 
-### Configure Fluentd for Datadog
+### Configure Fluentd
 
-From the Datadog web UI, generate an API key for Fluentd. From **Organization Settings** -> Access -> **API Keys**, click on **+ New Key**:
+1. Visit Datadog and generate an API key for Fluentd. From **Organization
+   Settings** -> Access -> **API Keys**, click on **+ New Key**:
 
-![Datadog API key generation](../../../img/management/datadog-generate-api.png)
+   ![Datadog API key generation](../../../img/management/datadog-generate-api.png)
 
-Copy the API key, and use it to add a new `<match>` block to `fluent.conf`:
+1. Copy the API key, and use it to add a new `<match>` block to `fluent.conf`:
 
-```ini
-<match test.log>
+   ```ini
+   <match test.log>
+   
+     @type datadog
+     @id awesome_agent
+     api_key (=presets.tokens.first=)
+   
+     host http-intake.logs.us5.datadoghq.com
+   
+     # Optional parameters
+     dd_source teleport
+   
+   </match>
+   ```
 
-  @type datadog
-  @id awesome_agent
-  api_key (=presets.tokens.first=)
+1. Edit your configuration as follows:
 
-  host http-intake.logs.us5.datadoghq.com
+   - Add your API key to the `api_key` field.
+   - Adjust the `host` value to match your Datadog site. See their [Log
+     Collection and
+     Integrations](https://docs.datadoghq.com/logs/log_collection/?tab=host)
+     guide to determine the correct value.
+   - `dd_source` is an optional field you can use to filter these logs in the
+     Datadog UI.
+   - Adjust `ca_path`, `cert_path` and `private_key_path` to point to the
+     credential files generated earlier. If you're testing locally, the Docker
+     command above already mounted the current working directory to `keys/` in
+     the container.
 
-  # Optional parameters
-  dd_source teleport
-
-</match>
-```
-
-- Add your API key to the `api_key` field.
-- Adjust the `host` value to match your Datadog site. See their [Log Collection
-  and Integrations](https://docs.datadoghq.com/logs/log_collection/?tab=host) guide
-  to determine the correct value.
-- `dd_source` is an optional field you can use to filter these logs in the
-  Datadog UI.
-- Adjust `ca_path`, `cert_path` and `private_key_path` to point to the credential
-  files generated earlier. If you're testing locally, the Docker command above
-  already mounted the current working directory to `keys/` in the container.
-
-Restart Fluentd after saving the changes to `fluent.conf`.
+1. Restart Fluentd after saving the changes to `fluent.conf`.
 
 ## Step 6/6. Run the Teleport Event Handler plugin
 
