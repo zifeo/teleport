@@ -6,10 +6,19 @@ description: How to configure the Teleport Event Handler plugin and Fluentd to s
 Datadog is a SAAS monitoring and security platform. In this guide, we'll explain
 how to forward Teleport audit events to Datadog using Fluentd.
 
-The Teleport Event Handler is designed to communicate with Fluentd using mTLS
-to establish a secure channel. In this setup, the Event Handler sends events to Fluentd, which forwards them to Datadog using an API key to authenticate.
+## How it works
+
+The Teleport Event Handler authenticates to the Teleport Auth Service to receive
+audit events over a gRPC stream, then sends those events to Fluentd as JSON
+payloads over a secure channel established via mutual TLS:
 
 ![Architecture of the setup shown in this guide](../../../img/management/datadog-diagram.png)
+
+Since the Datadog Agent can only receive logs over a network as JSON-encoded
+bytes over a [TCP or UDP
+connection](https://docs.datadoghq.com/agent/logs/?tab=tailfiles#custom-log-collection),
+the Teleport Event Handler needs to send its HTTPS payloads without using the
+Datadog Agent. Fluentd handles authentication to the Datadog API.
 
 ## Prerequisites
 
