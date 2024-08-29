@@ -291,7 +291,7 @@ func (m *TrustBundleCache) watch(ctx context.Context) error {
 	}
 
 	if authSupportsSPIFFEFederation {
-		spiffeFederations, err := listAllSPIFFEFederations(
+		spiffeFederations, err := ListAllSPIFFEFederations(
 			ctx, m.federationClient,
 		)
 		if err != nil {
@@ -546,7 +546,7 @@ func (m *TrustBundleCache) processEvent(ctx context.Context, event types.Event) 
 	}
 }
 
-func listAllSPIFFEFederations(
+func ListAllSPIFFEFederations(
 	ctx context.Context,
 	client machineidv1pb.SPIFFEFederationServiceClient,
 ) ([]*machineidv1pb.SPIFFEFederation, error) {
@@ -558,6 +558,11 @@ func listAllSPIFFEFederations(
 			PageToken: token,
 		})
 		if err != nil {
+			// Support auth server being too old.
+			// TODO(noah): DELETE IN V17.0.0
+			if trace.IsNotImplemented(err) {
+				return []*machineidv1pb.SPIFFEFederation{}, nil
+			}
 			return nil, trace.Wrap(err, "listing SPIFFEFederations")
 		}
 		spiffeFeds = append(spiffeFeds, res.SpiffeFederations...)
