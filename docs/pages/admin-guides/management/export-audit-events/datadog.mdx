@@ -54,6 +54,19 @@ from Teleport's events API, and forwards them to Fluentd.
 
 (!docs/pages/includes/plugins/event-handler-role-user.mdx!)
 
+<Admonition title="Testing locally?">
+
+Create a local bridge network where you will run the Event Handler and Fluentd,
+then generate certificates for the Event Handler, signed for the hostname we'll
+provide the Fluentd container on the network:
+
+```code
+$ docker network create fluentd-test
+$ docker run --network fluentd-test -v `pwd`:/opt/teleport-plugin -w /opt/teleport-plugin public.ecr.aws/gravitational/teleport-plugin-event-handler:16.2.0 configure --dns-names=fluentd .
+```
+
+</Admonition>
+
 ## Step 4/6. Create teleport-event-handler credentials
 
 The Teleport Event Handler needs credentials to authenticate to the Teleport
@@ -101,19 +114,29 @@ $ gem install fluent-plugin-datadog
 $ /usr/sbin/td-agent-gem install fluent-plugin-datadog
 ```
 
-<Admonition type="tip" title="Testing Locally?">
+<Admonition type="tip" title="Testing locally?">
 
 If you're running Fluentd in a local Docker container for testing, you can adjust
 the entrypoint to an interactive shell as the root user, so you can install the
-plugin before starting Fluentd:
+plugin before starting Fluentd.
 
-```code
-$ docker run -u $(id -u root):$(id -g root) -p 8888:8888 -v $(pwd):/keys -v \
-$(pwd)/fluent.conf:/fluentd/etc/fluent.conf --entrypoint=/bin/sh -i --tty  fluent/fluentd:edge
-# From the container shell:
-$ gem install fluent-plugin-datadog
-$ fluentd -c /fluentd/etc/fluent.conf
-```
+1. Create a local Docker network and start a Fluentd container within it:
+
+   ```code
+   $ docker run -u $(id -u root):$(id -g root) --hostname fluentd --network fluentd-test -v $(pwd):/keys -v \
+   $(pwd)/fluent.conf:/fluentd/etc/fluent.conf --entrypoint=/bin/sh -i --tty  fluent/fluentd:edge
+   ```
+
+1. In the container shell, run the following to install the Datadog plugin and
+   start Fluentd:
+
+   ```code
+   $ gem install fluent-plugin-datadog
+   $ fluentd -c /fluentd/etc/fluent.conf
+   ```
+
+Later, you will create a local bridge network and connect the Event Handler to
+Fluentd.
 
 </Admonition>
 
@@ -180,6 +203,23 @@ Next, modify the configuration file as follows:
 The Logs view in Datadog should now report your Teleport cluster events:
 
 ![Datadog Logs](../../../../img/management/datadog-logs.png)
+
+<Admonition title="Testing locally?">
+
+1. In the Event Handler configuration file, `teleport-event-handler.toml`,
+   change the `florward.fluentd.url` and `forward.fluentd.session-url` values
+   to, respectively, `https://fluentd:8888/test.log` and
+   `https://fluentd:8888/session`.
+
+1. Navigate to the directory where you ran the `event-handler configure` command
+   earlier and execute the following command:
+
+   ```code
+   $ docker run --network fluentd-test -v `pwd`:/opt/teleport-plugin -w /opt/teleport-plugin public.ecr.aws/gravitational/teleport-plugin-event-handler:(=teleport.version=) start --config=teleport-event-handler.toml 
+   ```
+   
+</Admonition>
+
 
 ## Troubleshooting connection issues
 
