@@ -12,7 +12,7 @@ The Teleport Event Handler authenticates to the Teleport Auth Service to receive
 audit events over a gRPC stream, then sends those events to Fluentd as JSON
 payloads over a secure channel established via mutual TLS:
 
-![Architecture of the setup shown in this guide](../../../img/management/datadog-diagram.png)
+![Architecture of the setup shown in this guide](../../../../img/management/datadog-diagram.png)
 
 Since the Datadog Agent can only receive logs over a network as JSON-encoded
 bytes over a [TCP or UDP
@@ -118,7 +118,7 @@ $ fluentd -c /fluentd/etc/fluent.conf
 1. Visit Datadog and generate an API key for Fluentd. From **Organization
    Settings** -> Access -> **API Keys**, click on **+ New Key**:
 
-   ![Datadog API key generation](../../../img/management/datadog-generate-api.png)
+   ![Datadog API key generation](../../../../img/management/datadog-generate-api.png)
 
 1. Copy the API key, and use it to add a new `<match>` block to `fluent.conf`:
 
@@ -174,7 +174,7 @@ Next, modify the configuration file as follows:
 
 The Logs view in Datadog should now report your Teleport cluster events:
 
-![Datadog Logs](../../../img/management/datadog-logs.png)
+![Datadog Logs](../../../../img/management/datadog-logs.png)
 
 ## Troubleshooting connection issues
 
